@@ -1,0 +1,34 @@
+<?php
+//--------------------------------------------------------------------------------------
+//
+//	Nimrod Website
+//	Copyright (c) 2015 Flat Cat IT Ltd
+//	Author: Dave Clarke
+//
+//--------------------------------------------------------------------------------------
+
+// login names and passwords
+define( 'DB_HOST_NAME', '127.0.0.1' );
+define( 'DB_USER_NAME', 'nimrod_user' );
+define( 'DB_PASSWORD', 'passw0rd' );
+define( 'DB_DATABASE_NAME', 'nimrod' );
+
+// remote mysql host (defaults to nimrod user)
+define( 'REMOTE_MYSQL_HOST', '192.168.1.188' );
+
+// log file directory
+define( 'NIMROD_LOG_DIR', '/home/nimrod' );
+
+// logout timer in seconds
+define( 'AUTO_REFRESH_LOGOUT', 1800 );	// 1800
+
+
+// read config trigger file
+define( 'CONFIG_TRIGGER_FILE', '/tmp/readconfig.txt' );
+
+// modbus baud rate
+define( 'MODBUS_BAUD_RATE', '19200' );
+
+
+?>
+

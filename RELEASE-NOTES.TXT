@@ -1,0 +1,20 @@
+#-----------------------------------------------------------------------
+#	Nimrod Website
+#	Copyright (c) Dave Clarke
+#	Author: Dave Clarke
+#-----------------------------------------------------------------------
+
+Nimrod Release Notes and History
+
+
+
+Version 0.1.2		12/09/2019
+1.	Code changes to support Raspbian buster and PHP7
+
+
+Version 0.1.1		12/04/2015
+1.	Initial release - so too many changes to mention !
+
+
+....
+The Nimrod Development Team

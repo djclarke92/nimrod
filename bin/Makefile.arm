@@ -1,0 +1,46 @@
+CC=/home/djclarke/raspberrypi/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-gcc
+CPP=/home/djclarke/raspberrypi/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-g++
+CFLAGS=-Wall -g -I/home/djclarke/raspberrypi/rootfs/usr/include/modbus -I/home/djclarke/raspberrypi/rootfs/usr/include/mariadb \
+	-I/home/djclarke/raspberrypi/rootfs/usr/include/openssl \
+	-I/home/djclarke/raspberrypi/rootfs/usr/include -I/home/djclarke/raspberrypi/rootfs/usr/include/arm-linux-gnueabihf \
+	-fmessage-length=0 -grecord-gcc-switches -D_FORTIFY_SOURCE=2 -fstack-protector -funwind-tables -fasynchronous-unwind-tables \
+	-DOPENSSL_LOAD_CONF -DPIC -fPIC -fno-strict-aliasing -g -O -DNDEBUG -MMD -MP
+LDFLAGS=-L/home/djclarke/raspberrypi/rootfs/usr/lib -lz -lm -lssl -lcrypto -ldl -lmodbus -lmariadbclient -lrt -lpthread
+EXE=nimrod-arm7
+SAEXE=set-address-arm7
+SRCS=mb_main.cpp mb_utils.cpp mb_devices.cpp mb_mysql.cpp mb_thread.cpp
+SASRCS=set-address.cpp
+BUILD_NUMBER_FILE=build-number
+OBJS=$(SRCS:.cpp=.o) build-number.o
+SAOBJS=$(SASRCS:.cpp=.o)
+DEP=$(SRCS:.cpp=.d)
+SADEP=$(SASRCS:.cpp=.d)
+-include $(DEP)
+-include $(SADEP)
+
+
+all: clean $(SRCS) $(SASRCS) $(SAEXE) $(EXE)
+
+$(EXE): $(OBJS) $(BUILD_NUMBER_FILE).c
+	$(CPP) -Wl,-rpath-link=/home/djclarke/raspberrypi/rootfs/usr/lib --sysroot=/home/djclarke/raspberrypi/rootfs $(OBJS) -o $(EXE) $(LDFLAGS)
+#	scp $(EXE) pi@nimrod:~/nimrod
+
+$(SAEXE): $(SAOBJS)
+	$(CPP) -Wl,-rpath-link=/home/djclarke/raspberrypi/rootfs/usr/lib --sysroot=/home/djclarke/raspberrypi/rootfs $(SAOBJS) -o $(SAEXE) $(LDFLAGS) 
+
+.cpp.o: 
+	$(CPP) $(CFLAGS) -c $< -o $@
+	
+$(BUILD_NUMBER_FILE).o: $(BUILD_NUMBER_FILE).c
+	bash -c "../scripts/build-num.sh"
+	$(CC) $(CFLAGS) -c $(BUILD_NUMBER_FILE).c
+
+    
+clean:
+	rm -rf *.o
+	rm -rf $(DEP)
+	rm -rf $(EXE)
+	rm -rf $(SAEXE)
+
+	
+	

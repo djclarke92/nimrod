@@ -1,0 +1,11 @@
+.settings
+.project
+.cproject
+*.o
+*.d
+site_config.php
+nimrod
+nimrod-arm7
+set-address
+set-address-arm7
+nimrod-msg
