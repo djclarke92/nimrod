@@ -14,7 +14,7 @@ DEST=0
 COPY=0
 
 if [[ $1 == "" ]] ; then
-	echo "Usage: $0 <release_version> [dest_pi_hostname]";
+	echo "Usage: $0 <release_version> [dest_pi_hostname] [copy]";
 	exit;
 fi 
 
