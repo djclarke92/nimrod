@@ -14,43 +14,43 @@ Uses PHPGraphLib https://github.com/elliottb/phpgraphlib for displaying graphs.
 
 Wellpro modbus devices
 
-WP3066ADAM		8DS18B20 - 8x DS18B20 temperature inputs
-WP3082ADAM		8AI - 8x 0-20mA / 4-20mA analog inputs
-WP3084ADAM		8VI - 8x 0-10V DC analog inputs
-WP8025ADAM		8RO - 8x relay outputs
-WP8026ADAM		16DI - 16x digital inputs
-WP8027ADAM		16DO - 16x digital outputs
-WP8028ADAM		8DI/8DO - 8x digital outputs, 8x digital inputs
+* WP3066ADAM		8DS18B20 - 8x DS18B20 temperature inputs
+* WP3082ADAM		8AI - 8x 0-20mA / 4-20mA analog inputs
+* WP3084ADAM		8VI - 8x 0-10V DC analog inputs
+* WP8025ADAM		8RO - 8x relay outputs
+* WP8026ADAM		16DI - 16x digital inputs
+* WP8027ADAM		16DO - 16x digital outputs
+* WP8028ADAM		8DI/8DO - 8x digital outputs, 8x digital inputs
 
 
 # Nimrod package file structure
-./LICENSE						GNU v3 license
-./README.md						This file
-./RELEASE-NOTES.TXT				A history of changes to Nimrod
-./index.php						Nimrod web portal home page
-./favicon.ico					Favicon file
-./bin/nimrod					Nimrod server executable (amd64)
-./bin/nimrod-arm7				Nimrod server executable (arm7)
-./bin/set-address				Set the Modbus device index (amd64)
-./bin/set-address-arm7			Set the Modbus device index (arm7)
-./files/cameras.php				Shows CCTV camera snapshots on the Nimrod web console
-./files/class.email.php
-./files/common.php				Base configuration and some common functions
-./files/commonhtml.php			Common functions which include HTML output.
-./files/deviceinfo.php
-./files/devices.php
-./files/home.php
-./files/intro.php
-./files/iolinks.php
-./files/phpgraphlib.php			PHP graphing lib
-./files/site_config.php
-./files/site_config.php.sample	Example site config file
-./files/styles.css
-./images/*						Various image files to make Nimrod look good
-./scripts/tables.sql			MySQL table creation sql script
-./scripts/build-num.sh			update the build number automatically each time makerelease.sh is run
-./scripts/makerelease.sh		create a new nimrod package
-./scripts/nimrod.service		Exampe Nimrod service file of the Pi
+* ./LICENSE						GNU v3 license
+* ./README.md						This file
+* ./RELEASE-NOTES.TXT				A history of changes to Nimrod
+* ./index.php						Nimrod web portal home page
+* ./favicon.ico					Favicon file
+* ./bin/nimrod					Nimrod server executable (amd64)
+* ./bin/nimrod-arm7				Nimrod server executable (arm7)
+* ./bin/set-address				Set the Modbus device index (amd64)
+* ./bin/set-address-arm7			Set the Modbus device index (arm7)
+* ./files/cameras.php				Shows CCTV camera snapshots on the Nimrod web console
+* ./files/class.email.php
+* ./files/common.php				Base configuration and some common functions
+* ./files/commonhtml.php			Common functions which include HTML output.
+* ./files/deviceinfo.php
+* ./files/devices.php
+* ./files/home.php
+* ./files/intro.php
+* ./files/iolinks.php
+* ./files/phpgraphlib.php			PHP graphing lib
+* ./files/site_config.php
+* ./files/site_config.php.sample	Example site config file
+* ./files/styles.css
+* ./images/*						Various image files to make Nimrod look good
+* ./scripts/tables.sql			MySQL table creation sql script
+* ./scripts/build-num.sh			update the build number automatically each time makerelease.sh is run
+* ./scripts/makerelease.sh		create a new nimrod package
+* ./scripts/nimrod.service		Exampe Nimrod service file of the Pi
 
 
 # Raspberry Pi Model 2 B+
