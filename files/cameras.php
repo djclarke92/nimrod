@@ -1,4 +1,10 @@
 <?php
+//--------------------------------------------------------------------------------------
+//
+//	Nimrod Website
+//	Copyright (c) 2015 Dave Clarke
+//
+//--------------------------------------------------------------------------------------
 
 // ptz commands
 // cgi-bin/CGIProxy.fcgi?cmd=ptzMoveDown&usr=camuser&pwd=*****
@@ -15,13 +21,13 @@
 // ptzSetPTZSpeed&speed=x		where speed = 0 (v. slow) to 4 (v. fast)
 
 
-function func_get_ptz( $camera_no )
+function func_get_ptz( $camera_ip )
 {
 	$ptz = false;
 	
 	foreach ( $_SESSION['camera_list'] as $camera )
 	{
-		if ( $camera['addr'] == $camera_no )
+		if ( $camera['addr'] == $camera_ip )
 		{
 			$ptz = $camera['ptz'];
 			break;
@@ -31,19 +37,19 @@ function func_get_ptz( $camera_no )
 	return $ptz;
 }
 
-function func_display_camera( $camera_no, $width, $ptz )
+function func_display_camera( $camera_ip, $width, $ptz )
 {
 	$set_camera_mode = false;
 	
 	if ( $set_camera_mode )
 	{	// set MJpeg stream
-		$cmd = sprintf( "curl --silent \"http://192.168.1.%d:88/cgi-bin/CGIProxy.fcgi?cmd=setSubStreamFormat&format=1&usr=%s&pwd=%s\"", $camera_no, CAMERA_USER, CAMERA_PWD );
+		$cmd = sprintf( "curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=setSubStreamFormat&format=1&usr=%s&pwd=%s\"", $camera_ip, CAMERA_USER, CAMERA_PWD );
 		$res = exec( $cmd, $out, $ret );
 	}
 	
 	if ( func_is_external_connection() )
 	{	// external web connection
-		$cmd = sprintf( "curl --silent \"http://192.168.1.%d:88/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr=%s&pwd=%s\"", $camera_no, CAMERA_USER, CAMERA_PWD );
+		$cmd = sprintf( "curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr=%s&pwd=%s\"", $camera_ip, CAMERA_USER, CAMERA_PWD );
 	
 		if ( $ptz )
 			printf( "<a href='index.php?MoveCamera'><img src='data:image/jpeg;base64," );
@@ -63,7 +69,7 @@ function func_display_camera( $camera_no, $width, $ptz )
 	}
 	else
 	{
-		$dest = sprintf( "192.168.1.%d:88", $camera_no );
+		$dest = sprintf( "%s:88", $camera_ip );
 		if ( $ptz )
 		{
 			printf( "<a href='index.php?MoveCamera'><img src='http://%s/cgi-bin/CGIStream.cgi?cmd=GetMJStream&usr=%s&pwd=%s' alt='no mjpeg stream (%s)' width='%d' ismap></a>",
@@ -103,7 +109,7 @@ if ( isset($_SERVER['QUERY_STRING']) && strstr( $_SERVER['QUERY_STRING'], "MoveC
 
 if ( isset( $_POST['SelCamera']) )
 {
-	$camera_no = 0;
+	$camera_ip = "";
 	$name = $_POST['SelCamera'];
 
 	// find the camera
@@ -111,17 +117,17 @@ if ( isset( $_POST['SelCamera']) )
 	{
 		if ( $camera['name'] == $name )
 		{
-			$camera_no = $camera['addr'];
+			$camera_ip = $camera['addr'];
 			break;
 		}
 	}
 	
-	if ( $camera_no > 0 && isset($_POST['ca_reboot_camera']) )
+	if ( $camera_ip != "" && isset($_POST['ca_reboot_camera']) )
 	{
-	    $cmd = sprintf( "curl --silent \"http://192.168.1.%d:88/cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s\"", $camera_no, CAMERA_USER, CAMERA_PWD );
+	    $cmd = sprintf( "curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s\"", $camera_ip, CAMERA_USER, CAMERA_PWD );
 	    $res = exec( $cmd, $out, $ret );
 	}
-	else if ( $camera_no > 0 )
+	else if ( $camera_ip != "" )
 	{
 		$changed = true;
 		$found = false;
@@ -134,18 +140,18 @@ if ( isset( $_POST['SelCamera']) )
 					$_SESSION['show_camera_list'][$i] = $_SESSION['show_camera_list'][$i+1];
 				}
 			}
-			else if ( $_SESSION['show_camera_list'][$i] == $camera_no )
+			else if ( $_SESSION['show_camera_list'][$i] == $camera_ip )
 			{	// already in the list - remove it
 				$found = true;
-				$_SESSION['show_camera_list'][$i] = 0;
+				$_SESSION['show_camera_list'][$i] = "";
 				if ( $i+1 < MAX_CAMERAS )
 				{
 					$_SESSION['show_camera_list'][$i] = $_SESSION['show_camera_list'][$i+1];
 				}
 			}
-			else if ( $_SESSION['show_camera_list'][$i] == 0 )
+			else if ( $_SESSION['show_camera_list'][$i] == "" )
 			{	// empty slot - add the camera
-				$_SESSION['show_camera_list'][$i] = $camera_no;
+				$_SESSION['show_camera_list'][$i] = $camera_ip;
 				break;
 			}
 		}
@@ -156,17 +162,17 @@ else if ( isset($_GET['ClearCameras']) )
 	$changed = true;
 	for ( $i = 0; $i < MAX_CAMERAS; $i++ )
 	{
-		$_SESSION['show_camera_list'][$i] = 0;
+		$_SESSION['show_camera_list'][$i] = "";
 	}
 }
 if ( $ptz_x > 0 && $ptz_y > 0 )
 {	// move the camera
-	$camera_no = 0;
+	$camera_ip = "";
 	foreach ( $_SESSION['show_camera_list'] as $camera )
 	{
 		if ( $camera != 0 )
 		{
-			$camera_no = $camera;
+			$camera_ip = $camera;
 			break;
 		}
 	}
@@ -200,19 +206,19 @@ if ( $ptz_x > 0 && $ptz_y > 0 )
 		$move = "ptzMoveDown";
 	}
 	
-	if ( $camera_no > 0 )
+	if ( $camera_ip != "" )
 	{
 		$info_msg = $move;
 		if ( $move == "ptzReset" )
 		{
-			$cmd = sprintf( "curl --silent \"http://192.168.1.%d:88/cgi-bin/CGIProxy.fcgi?cmd=%s&usr=%s&pwd=%s\" &",
-			    $camera_no, $move, CAMERA_USER, CAMERA_PWD );
+			$cmd = sprintf( "curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=%s&usr=%s&pwd=%s\" &",
+			    $camera_ip, $move, CAMERA_USER, CAMERA_PWD );
 		}
 		else 
 		{
-			$cmd = sprintf( "(curl --silent \"http://192.168.1.%d:88/cgi-bin/CGIProxy.fcgi?cmd=%s&usr=%s&pwd=%s\" > /dev/null 2>&1;
-						sleep 1 > /dev/null 2>&1;	curl --silent \"http://192.168.1.%d:88/cgi-bin/CGIProxy.fcgi?cmd=ptzStopRun&usr=%s&pwd=%s\" > /dev/null 2>&1) > /dev/null 2>&1 &", 
-			    $camera_no, $move, CAMERA_USER, CAMERA_PWD, $camera_no, CAMERA_USER, CAMERA_PWD );
+			$cmd = sprintf( "(curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=%s&usr=%s&pwd=%s\" > /dev/null 2>&1;
+						sleep 1 > /dev/null 2>&1;	curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=ptzStopRun&usr=%s&pwd=%s\" > /dev/null 2>&1) > /dev/null 2>&1 &", 
+			    $camera_ip, $move, CAMERA_USER, CAMERA_PWD, $camera_ip, CAMERA_USER, CAMERA_PWD );
 		}
 		$res = system( $cmd, $ret );
 	}
@@ -258,22 +264,22 @@ printf( "<td colspan='3'>" );
 	
 // how many cameras to display
 $total = 0;
-$camera_no = 0;
+$camera_ip = "";
 $ptz = false;
 foreach ( $_SESSION['show_camera_list'] as $camera )
 {
 	if ( $camera != 0 )
 	{
 		$total += 1;
-		$camera_no = $camera;
+		$camera_ip = $camera;
 	}
 }
 
 
 if ( $total == 1 )
 {	// single camera view
-	$ptz = func_get_ptz( $camera_no );
-	func_display_camera( $camera_no, 900, $ptz );
+	$ptz = func_get_ptz( $camera_ip );
+	func_display_camera( $camera_ip, 900, $ptz );
 }
 else if ( $total > 1 )
 {
@@ -288,16 +294,16 @@ else if ( $total > 1 )
 	
 	printf( "<tr>" );
 
-	foreach ( $_SESSION['show_camera_list'] as $camera_no )
+	foreach ( $_SESSION['show_camera_list'] as $camera_ip )
 	{
-		if ( $camera_no > 0 )
+		if ( $camera_ip != "" )
 		{
 			$count += 1;
 		
 			printf( "<td>" );
 		
-			$ptz = func_get_ptz( $camera_no );
-			func_display_camera( $camera_no, $width, false );
+			$ptz = func_get_ptz( $camera_ip );
+			func_display_camera( $camera_ip, $width, false );
 		
 			printf( "</td>" );
 		}

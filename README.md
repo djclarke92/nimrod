@@ -17,11 +17,21 @@ What can you do with it ?
 * Input switch events can be a click, double click or long click, each can trigger different output actions
 * Input events can be chained together, e.g. if time is 6:30am and temperature sensor #2 is < 15 deg then turn on output #7 for 30 minutes
 
-Communication with each modbus device is polled.  All digital inputs are active low, i.e. connect to 0V / Gnd to activate.  All digital outputs are active low  open collector outputs. 
+Communication with each modbus device is polled.  All digital inputs are active low, i.e. connect to 0V / Gnd to activate.  All digital outputs are active low  open collector outputs.
+
+The Nimrod web page also supports displaying CCTV camera images and video streams, to do this you need the mount the CCTV image storage filesystem onto the Pi (edit /etc/fstab and 
+create /etc/.smbpwd).  The camera definitions are in the file/site_config.conf file.
+> /etc/fstab example
+> //<SERVER_IP_ADDRESS>/cctv  /cctv   cifs    auto,gid=users,file_mode=0660,dir_mode=0660,iocharset=utf8,domain=YOURDOMAIN,credentials=/etc/.smbpwd  0 0
+> /etc/.smbpwd example, mode must be 0600
+> username=<some_user_name>
+> password=<some_password>
 
 ## Supported Modbus devices
 
 Wellpro modbus devices
+
+![WP8028ADAM device](/images/WP8028ADAM.jpg)
 
 * WP3066ADAM		8DS18B20 - 8x DS18B20 temperature inputs
 * WP3082ADAM		8AI - 8x 0-20mA / 4-20mA analog inputs
@@ -33,14 +43,14 @@ Wellpro modbus devices
 
 
 # Nimrod package file structure
-* ./LICENSE						GNU v3 license
+* ./LICENSE							GNU v3 license
 * ./README.md						This file
 * ./RELEASE-NOTES.TXT				A history of changes to Nimrod
 * ./index.php						Nimrod web portal home page
-* ./favicon.ico					Favicon file
-* ./bin/nimrod					Nimrod server executable (amd64)
-* ./bin/nimrod-arm7				Nimrod server executable (arm7)
-* ./bin/set-address				Set the Modbus device index (amd64)
+* ./favicon.ico						Favicon file
+* ./bin/nimrod						Nimrod server executable (amd64)
+* ./bin/nimrod-arm7					Nimrod server executable (arm7)
+* ./bin/set-address					Set the Modbus device index (amd64)
 * ./bin/set-address-arm7			Set the Modbus device index (arm7)
 * ./files/cameras.php				Shows CCTV camera snapshots on the Nimrod web console
 * ./files/class.email.php
@@ -56,10 +66,10 @@ Wellpro modbus devices
 * ./files/site_config.php.sample	Example site config file
 * ./files/styles.css
 * ./images/*						Various image files to make Nimrod look good
-* ./scripts/tables.sql			MySQL table creation sql script
-* ./scripts/build-num.sh			update the build number automatically each time makerelease.sh is run
-* ./scripts/makerelease.sh		create a new nimrod package
-* ./scripts/nimrod.service		Exampe Nimrod service file of the Pi
+* ./scripts/tables.sql				MySQL table creation sql script
+* ./scripts/build-num.sh			Update the build number automatically each time makerelease.sh is run
+* ./scripts/makerelease.sh			Create a new nimrod package
+* ./scripts/nimrod.service			Exampe Nimrod service file of the Pi
 
 
 # Raspberry Pi Model 2 B+

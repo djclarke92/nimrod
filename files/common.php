@@ -2,8 +2,7 @@
 //--------------------------------------------------------------------------------------
 //
 //	Nimrod Website
-//	Copyright (c) 2015 Flat Cat IT Ltd
-//	Author: Dave Clarke
+//	Copyright (c) 2015 Dave Clarke
 //
 // 	Nimrod - Neanderthal butler in the Doctor Who tale Ghost Light
 //--------------------------------------------------------------------------------------
@@ -21,8 +20,6 @@ define( "SECURITY_LEVEL_GUEST", 1 );
 define( "SECURITY_LEVEL_ADMIN", 9 );
 
 define( "MAX_CAMERAS", 9 );
-define( "CAMERA_USER", "camuser" );
-define( "CAMERA_PWD", "passw0rd.39" );
 
 
 define( "E_DT_UNUSED", 0 );
@@ -130,20 +127,22 @@ function func_session_init()
 	if ( !isset($_SESSION['camera_list']) )
 	{
 		$_SESSION['camera_list'] = array();
-        $_SESSION['camera_list'][] = array( 'addr'=>120, 'name'=>"Test", 'ptz'=>true, 'directory'=>"test/FI9821EP_00626E562835" );
-        $_SESSION['camera_list'][] = array( 'addr'=>121, 'name'=>"Garage", 'ptz'=>false, 'directory'=>"garage/FI9853EP_00626E570130" );
-        $_SESSION['camera_list'][] = array( 'addr'=>122, 'name'=>"Front Door", 'ptz'=>false, 'directory'=>"frontdoor/FI9853EP_00626E588A36" );
-        $_SESSION['camera_list'][] = array( 'addr'=>123, 'name'=>"Car Port", 'ptz'=>false, 'directory'=>"carport/FI9853EP_00626E588A46" );
-        $_SESSION['camera_list'][] = array( 'addr'=>124, 'name'=>"Back Yard", 'ptz'=>false, 'directory'=>"backyard/FI9853EP_00626E6174E5" );
-        $_SESSION['camera_list'][] = array( 'addr'=>125, 'name'=>"Back Shed", 'ptz'=>false, 'directory'=>"backshed/FI9853EP_00626E617511" );
-        $_SESSION['camera_list'][] = array( 'addr'=>126, 'name'=>"Front Yard", 'ptz'=>false, 'directory'=>"frontyard/FI9853EP_00626E588A1C" );
+		for ( $i = 1; $i <= MAX_CAMERAS; $i++ )
+		{
+		    $key = sprintf( "CAMERA_%02d", $i );
+		    if ( defined($key) )
+		    {
+		        $expl = explode( ":", constant($key) );
+                $_SESSION['camera_list'][] = array( 'addr'=>$expl[0], 'name'=>$expl[1], 'ptz'=>($expl[2] == "true" ? true : false), 'directory'=>$expl[3] );
+		    }
+		}
 	}
 	if ( !isset($_SESSION['show_camera_list']) )
 	{
 		$_SESSION['show_camera_list'] = array();
 		for ( $i = 0; $i < MAX_CAMERAS; $i++ )
 		{
-			$_SESSION['show_camera_list'][] = 0;
+			$_SESSION['show_camera_list'][] = "";
 		}	
 	}
 	if ( !isset($_SESSION['ShowCameraFile']) )
@@ -1455,7 +1454,7 @@ function func_read_camera_files( $camera_dir, $year, $month, $day )
 {
 	$info = array();
 	
-	$dir = sprintf( "/cctv/%s/record", $camera_dir );
+	$dir = sprintf( "%s/record", $camera_dir );
 	if ( $handle = opendir( $dir ) ) 
 	{
 		$mask = sprintf( "MDalarm_%4d%02d%02d", $year, $month, $day );

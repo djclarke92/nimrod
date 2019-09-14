@@ -2,8 +2,7 @@
 //--------------------------------------------------------------------------------------
 //
 //	Nimrod Website
-//	Copyright (c) 2015 Flat Cat IT Ltd
-//	Author: Dave Clarke
+//	Copyright (c) 2015 Dave Clarke
 //
 //--------------------------------------------------------------------------------------
 
@@ -127,7 +126,7 @@ if ( !isset($_SESSION['GStartDate']) )
 if ( !isset($_SESSION['GStartTime']) )
 	$_SESSION['GStartTime'] = "";
 if ( !isset($_SESSION['ShowCameraNo']) )
-	$_SESSION['ShowCameraNo'] = 0;
+	$_SESSION['ShowCameraNo'] = "";
 if ( !isset($_SESSION['ShowCameraFile']) )
 	$_SESSION['ShowCameraFile'] = "";
 
@@ -142,7 +141,7 @@ if ( isset($_GET['Hours']) )
 if ( isset($_GET['GraphDeviceNo']) )
 {
 	$gdevice_no = $_GET['GraphDeviceNo'];
-	$_SESSION['ShowCameraNo'] = 0;
+	$_SESSION['ShowCameraNo'] = "";
 	$_SESSION['ShowCameraFile'] = "";
 }
 if ( isset($_GET['GraphIOChannel']) )
@@ -165,7 +164,7 @@ if ( isset($_GET['CameraNo']) )
 	}
 	else if ( !isset($_GET['CameraFile']) )
 	{	// remove camera display
-		$_SESSION['ShowCameraNo'] = 0;
+		$_SESSION['ShowCameraNo'] = "";
 	}
 	$gdevice_no = 0;
 	$gio_channel = 0;
@@ -425,7 +424,7 @@ printf( "<tr><th>Camera</th><th></th></tr>" );
 foreach ( $_SESSION['camera_list'] as $camera )
 {
 	printf( "<tr>" );
-	printf( "<td><a href='index.php?CameraNo=%d'>%s</a></td>", $camera['addr'], $camera['name'] );
+	printf( "<td><a href='index.php?CameraNo=%s'>%s</a></td>", $camera['addr'], $camera['name'] );
 	$img = "&nbsp;&nbsp;&nbsp;";
 	if ( $_SESSION['ShowCameraNo'] == $camera['addr'] )
 	{
@@ -444,7 +443,7 @@ printf( "<tr><th>Files</th><th></th></tr>" );
 
 foreach ( $camera_files as $file )
 {
-	printf( "<tr><td><a href='index.php?CameraNo=%d&CameraFile=%s'>%s</a></td>", $_SESSION['ShowCameraNo'], $file, substr($file,8,strlen($file)-4-8) );
+	printf( "<tr><td><a href='index.php?CameraNo=%s&CameraFile=%s'>%s</a></td>", $_SESSION['ShowCameraNo'], $file, $file );
 	$img = "&nbsp;&nbsp;&nbsp;";
 	if ( $_SESSION['ShowCameraFile'] == $file )
 	{
@@ -465,11 +464,11 @@ printf( "</td>" );
 printf( "<td colspan='2' width='44%%'>" );
 
 
-if ( $_SESSION['ShowCameraNo'] != 0 )
+if ( $_SESSION['ShowCameraNo'] != "" )
 {	// display camera stream
 	if ( $set_camera_mode )
 	{	// set MJpeg stream
-		$cmd = sprintf( "curl --silent \"http://192.168.1.%d:88/cgi-bin/CGIProxy.fcgi?cmd=setSubStreamFormat&format=1&usr=%s&pwd=%s\"", $_SESSION['ShowCameraNo'], CAMERA_USER, CAMERA_PWD );
+		$cmd = sprintf( "curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=setSubStreamFormat&format=1&usr=%s&pwd=%s\"", $_SESSION['ShowCameraNo'], CAMERA_USER, CAMERA_PWD );
 		$res = exec( $cmd, $out, $ret );
 	}
 	
@@ -480,7 +479,7 @@ if ( $_SESSION['ShowCameraNo'] != 0 )
 		{
 			if ( $_SESSION['ShowCameraNo'] == $camera['addr'] )
 			{
-				$file = sprintf( "/cctv/%s/record/%s", $camera['directory'], $_SESSION['ShowCameraFile'] );
+				$file = sprintf( "%s/record/%s", $camera['directory'], $_SESSION['ShowCameraFile'] );
 				break;
 			}
 		}
@@ -501,7 +500,7 @@ if ( $_SESSION['ShowCameraNo'] != 0 )
 	}
 	else if ( func_is_external_connection() )
 	{	// external web connection
-		$cmd = sprintf( "curl --silent \"http://192.168.1.%d:88/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr=%s&pwd=%s\"", $_SESSION['ShowCameraNo'], CAMERA_USER, CAMERA_PWD );
+		$cmd = sprintf( "curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr=%s&pwd=%s\"", $_SESSION['ShowCameraNo'], CAMERA_USER, CAMERA_PWD );
 
 		echo "<img src='data:image/jpeg;base64,";
 		
@@ -516,7 +515,7 @@ if ( $_SESSION['ShowCameraNo'] != 0 )
 	}
 	else 
 	{
-		$dest = sprintf( "192.168.1.%d:88", $_SESSION['ShowCameraNo'] );
+		$dest = sprintf( "%s:88", $_SESSION['ShowCameraNo'] );
 		printf( "<img src='http://%s/cgi-bin/CGIStream.cgi?cmd=GetMJStream&usr=%s&pwd=%s' alt='no mjpeg stream (%s)' width='400'>", 
 			$dest, CAMERA_USER, CAMERA_PWD, $dest );
 		printf( "Camera Stream" );

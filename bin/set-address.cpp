@@ -1,5 +1,5 @@
 /*
- * Nimrod set-address utility
+ * Nimrod set-address utility: set the modbus address and baud rate on Wellpro modbus devices
  *
  */
 
