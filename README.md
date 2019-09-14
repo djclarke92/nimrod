@@ -12,9 +12,12 @@ do away with the cross compiler step.
 Uses PHPGraphLib https://github.com/elliottb/phpgraphlib for displaying graphs.
 
 What can you do with it ?
-* Input events can be switches, temperature value or voltage level
+* Input events can be switches, temperature values, voltage levels or time of day
 * Turn on one or more output ports when an input event occurs
-* Input switch events can be a click, double click or long click
+* Input switch events can be a click, double click or long click, each can trigger different output actions
+* Input events can be chained together, e.g. if time is 6:30am and temperature sensor #2 is < 15 deg then turn on output #7 for 30 minutes
+
+Communication with each modbus device is polled.  All digital inputs are active low, i.e. connect to 0V / Gnd to activate.  All digital outputs are active low  open collector outputs. 
 
 ## Supported Modbus devices
 
@@ -185,31 +188,33 @@ the ssh keys for all nimrod hosts
 # Installing Nimrod on the Pi into /var/www/html for the first time
 
 1.	Copy the install tar file from your PC to the Pi
-	> scp nimrod-x.y.z.tgz pi@nimrod:/var/www/html/.
+> scp nimrod-x.y.z.tgz pi@nimrod:/var/www/html/.
 		
 2.	Set permissions and untar the package as the nimrod user
-	# ssh nimrod@nimrod 
-	> sudo chown -R nimrod:nimrod /var/www/html
-	> cd /var/www/html/files
-	> tar xvzf nimrod.x.y.z.tgz
-	> cp files/site_config.php.sample files/site_config.php
-	> vi site_config.php
-		- set REMOTE_MYSQL_HOST and DB_PASSWORD
+> ssh nimrod@nimrod 
+> sudo chown -R nimrod:nimrod /var/www/html
+> cd /var/www/html
+> tar xvzf nimrod.x.y.z.tgz
+> cp files/site_config.php.sample files/site_config.php
+> vi site_config.php
+	- set REMOTE_MYSQL_HOST and DB_PASSWORD
 	
 3.	Establish the SSH tennel to the database host to accept the host key as the nimrod user
-	> ssh nimrod@REMOTE_DB_HOST
-	> yes
-	# ctrl-d		
+> ssh nimrod@REMOTE_DB_HOST
+> yes
+> ctrl-d		
 			
 4.	Set nimrod to start automatically as the pi user
-	# ssh pi@nimrod
-	> cd /var/www/html
-	> sudo cp scripts/nimrod.service /lib/systemd/system/.
-	> sudo chown root:root /lib/systemd/system/nimrod.service
-	> sudo systemctl enable nimrod.service
-	> sudo systemctl start nimrod
+> ssh pi@nimrod
+> cd /var/www/html
+> sudo cp scripts/nimrod.service /lib/systemd/system/.
+> sudo chown root:root /lib/systemd/system/nimrod.service
+> sudo systemctl enable nimrod.service
+> sudo systemctl start nimrod
 
-Nimrod should now be running, see the log in /home/nimrod/nimrod.log.  Point your browser to https://nimrod/index.php
+5.	Nimrod should now be running
+
+See the log in /home/nimrod/nimrod.log.  Point your browser to https://nimrod/index.php
 	
 	
 # Setting up a new Pi
@@ -235,5 +240,9 @@ Nimrod should now be running, see the log in /home/nimrod/nimrod.log.  Point you
 5.	Each modbus device must be set with a unique address (1-254) using the set-address (or set-addres-arm7) tool. 
 	A maximum of 254 devices are currently supported across any number of Pi's.  
 	The baud rate for each modbus device should be set to 19200, the default is 9600, using the set-address tool.
-	
+6.	To build the software run the following command
+	> ./scripts/makerelease.sh x.y.z ["nimrod_host1 [nimrod_host2]"] [copy]
+	where "x.y.z" is the version number you are building,
+	 	"nimrod_host1 nimrod_host2" is an optional space separated list of hosts to scp the successful package file onto,
+	 	"copy" will just scp the existing package file, skipping the compile step
 
