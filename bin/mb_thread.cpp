@@ -22,6 +22,8 @@
 #include <arpa/inet.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/tls1.h>
+#include <openssl/ssl.h>
 
 #include <modbus/modbus.h>
 #include "mb_devices.h"
@@ -89,6 +91,8 @@ SSL_CTX* CThread::InitServerCTX(void)
     {
     	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);
 
+    	//SSL_CTX_set_max_proto_version( ctx, TLS1_1_VERSION );
+
     	//SSL_CTX_set_max_send_fragment( ctx, 1024 );
 
     	LogMessage( E_MSG_INFO, "Server SSL ctx initialised %p", ctx );
@@ -111,6 +115,8 @@ SSL_CTX* CThread::InitClientCTX(void)
     else
     {
     	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);
+
+    	//SSL_CTX_set_max_proto_version( ctx, TLS1_1_VERSION );
 
     	//SSL_CTX_set_max_send_fragment( ctx, 1024 );
 

@@ -21,11 +21,11 @@ Communication with each modbus device is polled.  All digital inputs are active 
 
 The Nimrod web page also supports displaying CCTV camera images and video streams, to do this you need the mount the CCTV image storage filesystem onto the Pi (edit /etc/fstab and 
 create /etc/.smbpwd).  The camera definitions are in the file/site_config.conf file.
-> /etc/fstab example
-> //<SERVER_IP_ADDRESS>/cctv  /cctv   cifs    auto,gid=users,file_mode=0660,dir_mode=0660,iocharset=utf8,domain=YOURDOMAIN,credentials=/etc/.smbpwd  0 0
-> /etc/.smbpwd example, mode must be 0600
-> username=<some_user_name>
-> password=<some_password>
+1.	/etc/fstab example
+	//<SERVER_IP_ADDRESS>/cctv  /cctv   cifs    auto,gid=users,file_mode=0660,dir_mode=0660,iocharset=utf8,domain=YOURDOMAIN,credentials=/etc/.smbpwd  0 0
+2.	/etc/.smbpwd example, mode must be 0600
+	username=<some_user_name>
+	password=<some_password>
 
 ## Supported Modbus devices
 
@@ -40,6 +40,11 @@ Wellpro modbus devices
 * WP8026ADAM		16DI - 16x digital inputs
 * WP8027ADAM		16DO - 16x digital outputs
 * WP8028ADAM		8DI/8DO - 8x digital outputs, 8x digital inputs
+
+## Supported WiFi devices
+
+* NodeMCU (ESP8266)
+	modules - adc crypto enduser_setup file gpio http net node pwm tmr uart websocket wifi + TLS
 
 
 # Nimrod package file structure
@@ -155,6 +160,11 @@ You also need to create the 'nimrod' email account on your mail server.
 
 Note: On Jessie 4.4.38-v7+ logging in with ssh will send a "Security" email. Something to do with having
 set a password for the nimrod user. See Google.
+
+## Create a certificate so NodeMCU (ESP8266) WiFi devices can connect
+
+> ssh nimrod@nimrod
+> openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout nimrod-cert.pem -out nimrod-cert.pem
 
 
 # Setup the cross compiler environment on your linux desktop PC
