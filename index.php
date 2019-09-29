@@ -41,7 +41,10 @@ if ( isset($_GET['PageMode']) )
 	$_SESSION['page_mode'] = $_GET['PageMode'];
 }
 
-	
+// TODO: move this into the database
+// only one login in this version
+$login_email = "nimrod@nimrod.co.nz";
+$login_pwd = "passw0rd.23";
 	
 	
 if ( isset($_POST['my_logout']) || isset($_GET['Logout']) )
@@ -58,7 +61,7 @@ else if ( isset($_POST['my_login']) )
 	if ( $my_email != "" && $my_password != "" )
 	{
 		// TODO: login
-		if ( $my_email == "djclarke@flatcatit.co.nz" && $my_password == "passw0rd" )
+		if ( $my_email == $login_email && $my_password == $login_pwd )
 		{	// success
 			$_SESSION['user_email'] = $my_email;
 			$_SESSION['auth_level'] = SECURITY_LEVEL_ADMIN;
@@ -74,7 +77,7 @@ else if ( isset($_POST['my_login']) )
 		$my_login_msg = sprintf( "You must enter your email address and password to login." );
 	}
 }
-else if ( $_SERVER['HTTPS'] != "" && $_SERVER['PHP_AUTH_USER'] == "djclarke@flatcatit.co.nz" )
+else if ( $_SERVER['HTTPS'] != "" && $_SERVER['PHP_AUTH_USER'] == $login_email )
 {
     $_SESSION['user_email'] = $_SERVER['PHP_AUTH_USER'];
 	if ( strncmp( $_SERVER['REMOTE_ADDR'], "192.168.1", 9 ) != 0 )

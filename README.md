@@ -27,6 +27,17 @@ create /etc/.smbpwd).  The camera definitions are in the file/site_config.conf f
 	username=<some_user_name>
 	password=<some_password>
 
+## Devices, Device Info and IO Links
+
+Each Modbus interface device is called a "Device" in Nimrod speak.  So a "Device" could be a 16 digital input unit, 8 relay output unit, 8 analog voltage input unit, etc.
+
+Once you have define a device you need to tell Nimrod what each of it's ports is connected to, this is called the "Device Info".  So for a 16DI unit you would setup input channel 1 is 
+"Kitchen switch 1", input channel 2 is "Lounge switch 1", etc. The actual connections are determined by the physical cabling between the switch and the Modbus device.  Output devices 
+are similarly defined, e.g. 8RO device channel #4 is "Car Port Lights".
+
+Now that you have defined the inputs and outputs you need to tell Nimrod how to connect them together.  This is called "IO Links".  E.g. "Kitchen switch 1" links to 
+"Car Port Lights", and you can also specify if the output is on until the switch is pressed again or automatically turns off after a set time.
+
 ## Supported Modbus devices
 
 Wellpro modbus devices
@@ -206,7 +217,23 @@ File:	./scripts/tables.sql			grant select,insert,update,delete on .......
 Nimrod sets up a tunnel to a remote mysql server as per the IP address in the site_config.php file. On the remote mysql host you need to add nimrod as a user and add 
 the ssh keys for all nimrod hosts
 
-	
+## Setup basic auth for apache on the nimrod host
+
+> ssh pi@nimrod
+> sudo htpasswd -c /etc/apache2/.htpasswd nimrod@nimrod.co.nz
+	Replace nimrod@nimrod.co.nz with your own email
+> sudo htpasswd /etc/apache2/.htpasswd another_user
+
+> sudo vi /etc/apache2/apache2.conf
+	<Directory "/var/www/html">
+        Options +FollowSymLinks +Multiviews +Indexes
+        AllowOverride None
+        AuthType basic
+        AuthName "Nimrod - restricted site"
+        AuthUserFile /etc/apache2/.htpasswd
+        Require valid-user
+	</Directory>
+
 
 # Installing Nimrod on the Pi into /var/www/html for the first time
 
