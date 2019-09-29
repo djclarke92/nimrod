@@ -135,6 +135,9 @@ Raspbian buster
 > sudo a2ensite default-ssl
 > sudo systemctl restart apache2
 
+- Remove the default index.html file
+> sudo rm /var/www/html/index.html
+
 ## Create the nimrod user on the Pi
 
 1.	> adduser nimrod
