@@ -88,7 +88,13 @@ function func_unauthorisedaccess()
 <title>HomeAuto</title>
 </head>
 <body>
+	<p>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;</p>
+	<p>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;</p>
+	<p>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;</p>
 	<h1>Unauthorised access is denied !</h1>
+	<p>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;</p>
+	<p>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;</p>
+	<p>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;</p>
 </body>
 </html>
 <?php

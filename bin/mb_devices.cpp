@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include <math.h>
 #include <sys/stat.h>
 #include <modbus/modbus.h>
 #include "mb_mysql.h"
@@ -75,13 +76,64 @@ void CMyDevice::Init()
 		SetAnalogType( j, 'V' );
 		SetCalcFactor( j, 0.0 );
 		SetOffset( j, 0.0 );
+		SetMonitorPos( j, "  " );
 		GetAlarmTriggered( j ) = 0;
 		GetHysteresis( j ) = 0;
-		GetTriggerTemperature( j ) = 0.0;
+		GetTemperature( j ) = 0.0;
+		GetVoltage( j ) = 0.0;
+		GetMonitorValueLo( j ) = 0.0;
+		GetMonitorValueHi( j ) = 0.0;
 		GetLastRecorded( j ) = 0;
-		GetTriggerVoltage( j ) = 0.0;
+		ClearDataBuffer( j );
 	}
 
+}
+
+// keep the last 10 data values in order, 0 = newest
+void CMyDevice::SaveDataValue( const int idx )
+{
+	for ( int i = MAX_DATA_BUFFER-1; i > 0; i-- )
+	{
+		m_uDataBuffer[idx][i] = m_uDataBuffer[idx][i-1];
+	}
+	m_uDataBuffer[idx][0] = m_uNewData[idx];
+}
+
+// currently only used for temperature values
+bool CMyDevice::DataBufferIsStable( const int idx )
+{
+	bool bRet = true;
+	int iMaxCheck = 4;
+
+	for ( int i = 0; i < iMaxCheck; i++ )
+	{
+		if ( m_eDeviceType == E_DT_TEMPERATURE_DS )
+		{
+			if ( m_uDataBuffer[idx][i] == (uint16_t)-1 )
+			{	// no data
+				break;
+			}
+			else if ( fabs(CalculateTemperature(m_uDataBuffer[idx][i])) - fabs(CalculateTemperature(m_uDataBuffer[idx][i+1])) >= MAX_TEMPERATURE_DIFF )
+			{	// last 4 readings are not within 5.0 deg C
+				bRet = false;
+				break;
+			}
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	return bRet;
+}
+
+void CMyDevice::ClearDataBuffer( const int idx )
+{
+	for ( int i = 0; i < MAX_DATA_BUFFER; i++ )
+	{
+		m_uDataBuffer[idx][i] = (uint16_t)-1;
+	}
 }
 
 void CMyDevice::SetInIOName( const int i, const char* pszName )
@@ -175,6 +227,14 @@ void CMyDevice::SetOffset( const int i, const double dOffset )
 	}
 }
 
+void CMyDevice::SetMonitorPos( const int i, const char* szMonPos )
+{
+	if ( i >= 0 && i < MAX_IO_PORTS )
+	{
+		snprintf( m_szMonitorPos[i], sizeof(m_szMonitorPos[i]), "%s", szMonPos );;
+	}
+}
+
 void CMyDevice::SetEventTime( const int i, const struct timespec ts )
 {
 	if ( i >= 0 && i < MAX_IO_PORTS )
@@ -255,18 +315,31 @@ const double CMyDevice::CalcTemperature( const int iChannel, const bool bNew )
 		else
 			uVal = m_uLastData[iChannel];
 
-		if ( uVal == -1 )
-		{	// sensor is not connected
+		dVal = CalculateTemperature( uVal );
+	}
 
-		}
-		else if ( uVal < 10000 )
-		{	// temperature is > 0
-			dVal = (double)uVal / 10;
-		}
-		else
-		{	// temperature is < 0
-			dVal = -(double)(uVal - 10000) / 10;
-		}
+	return dVal;
+}
+
+const double CMyDevice::CalculateTemperature( const uint16_t uVal )
+{
+	double dVal = 0.0;
+
+	if ( m_eDeviceType == E_DT_TEMPERATURE_DS && uVal == -1 )
+	{	// sensor is not connected
+
+	}
+	else if ( m_eDeviceType == E_DT_TEMPERATURE_K1 && uVal == 64536 )
+	{	// sensor is not connected
+
+	}
+	else if ( uVal < 10000 )
+	{	// temperature is > 0
+		dVal = (double)uVal / 10;
+	}
+	else
+	{	// temperature is < 0
+		dVal = -(double)(uVal - 10000) / 10;
 	}
 
 	return dVal;
@@ -323,7 +396,11 @@ const bool CMyDevice::IsSensorConnected( const int iChannel )
 
 	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
 	{
-		if ( m_uNewData[iChannel] != (uint16_t)-1 )
+		if ( m_eDeviceType == E_DT_TEMPERATURE_DS && m_uNewData[iChannel] != (uint16_t)-1 )
+		{
+			bRc = true;
+		}
+		else if ( m_eDeviceType == E_DT_TEMPERATURE_K1 && m_uNewData[iChannel] != 64536 )
 		{
 			bRc = true;
 		}
@@ -338,7 +415,11 @@ const bool CMyDevice::WasSensorConnected( const int iChannel )
 
 	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
 	{
-		if ( m_uLastData[iChannel] != (uint16_t)-1 )
+		if ( m_eDeviceType == E_DT_TEMPERATURE_DS && m_uLastData[iChannel] != (uint16_t)-1 )
+		{
+			bRc = true;
+		}
+		else if ( m_eDeviceType == E_DT_TEMPERATURE_K1 && m_uLastData[iChannel] != 64536 )
 		{
 			bRc = true;
 		}
@@ -431,8 +512,9 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 		switch ( m_eDeviceType )
 		{
 		default:
+			LogMessage( E_MSG_ERROR, "LinkTestPassed: unsupported m_eDeviceType" );
 			break;
-		case E_DT_TEMPERATURE:
+		case E_DT_TEMPERATURE_DS:
 			dVal = CalcTemperature( iLinkChannel, true );
 			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
 			break;
@@ -450,6 +532,11 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 		case E_DT_TIMER:
 			// TODO
 			LogMessage( E_MSG_WARN, "LinkTestPassed: E_DT_TIMER not implemeneted" );
+			break;
+
+		case E_DT_TEMPERATURE_K1:
+			dVal = CalcTemperature( iLinkChannel, true );
+			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
 			break;
 		}
 	}
@@ -990,14 +1077,44 @@ int& CDeviceList::GetHysteresis( const int idx, const int j )
 	return m_Device[0].GetHysteresis(j);
 }
 
-double& CDeviceList::GetTriggerTemperature( const int idx, const int j )
+double& CDeviceList::GetTemperature( const int idx, const int j )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
 	{
-		return m_Device[idx].GetTriggerTemperature(j);
+		return m_Device[idx].GetTemperature(j);
 	}
 
-	return m_Device[0].GetTriggerTemperature(j);
+	return m_Device[0].GetTemperature(j);
+}
+
+double& CDeviceList::GetVoltage( const int idx, const int j )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetVoltage(j);
+	}
+
+	return m_Device[0].GetVoltage(j);
+}
+
+double& CDeviceList::GetMonitorValueLo( const int idx, const int j )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetMonitorValueLo(j);
+	}
+
+	return m_Device[0].GetMonitorValueLo(j);
+}
+
+double& CDeviceList::GetMonitorValueHi( const int idx, const int j )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetMonitorValueHi(j);
+	}
+
+	return m_Device[0].GetMonitorValueLo(j);
 }
 
 time_t& CDeviceList::GetLastRecorded( const int idx, const int j )
@@ -1048,6 +1165,24 @@ uint16_t& CDeviceList::GetLastLogData( const int idx, const int j )
 	}
 
 	return m_Device[0].GetLastLogData(j);
+}
+
+bool CDeviceList::DataBufferIsStable( const int idx, const int j )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].DataBufferIsStable(j);
+	}
+
+	return m_Device[idx].DataBufferIsStable(0);
+}
+
+void CDeviceList::SaveDataValue( const int idx, const int j )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].SaveDataValue(j);
+	}
 }
 
 uint16_t& CDeviceList::GetNewData( const int idx, const int j )
@@ -1200,6 +1335,16 @@ const double CDeviceList::GetOffset( const int idx, const int j )
 	return 0.0;
 }
 
+const char* CDeviceList::GetMonitorPos( const int idx, const int j )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetMonitorPos(j);
+	}
+
+	return "  ";
+}
+
 void CDeviceList::GetEventTime( const int idx, const int j, struct timespec& tspec )
 {
 	tspec.tv_nsec = 0;
@@ -1294,16 +1439,6 @@ const double CDeviceList::GetDayNightVoltage( const enum E_DAY_NIGHT_STATE eStat
 	//LogMessage( E_MSG_INFO, "GetDayNightVoltage() %d %.1fV", eDNState, dVal );
 
 	return dVal;
-}
-
-double& CDeviceList::GetTriggerVoltage( const int idx, const int j )
-{
-	if ( idx >= 0 && idx < MAX_DEVICES )
-	{
-		return m_Device[idx].GetTriggerVoltage(j);
-	}
-
-	return m_Device[0].GetTriggerVoltage(j);
 }
 
 const double CDeviceList::CalcTemperature( const int idx, const int iChannel, const bool bNew )
@@ -1554,6 +1689,14 @@ void CDeviceList::SetOffset( const int idx, const int j, const double dOffset )
 	}
 }
 
+void CDeviceList::SetMonitorPos( const int idx, const int j, const char* szMonPos )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		m_Device[idx].SetMonitorPos( j, szMonPos );
+	}
+}
+
 void CDeviceList::SetEventTime( const int idx, const int j, const struct timespec ts )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
@@ -1725,7 +1868,7 @@ const bool CDeviceList::WriteOutputBit( const int idx, const int iOutChannel, co
 
 	ctx = GetContext(idx);
 
-	LogMessage( E_MSG_DEBUG, "modbus_write_bit(%p) %d %d", ctx, idx, iOutChannel+1 );
+	LogMessage( E_MSG_INFO, "modbus_write_bit(%p) %d %d %u", ctx, idx, iOutChannel+1, uState );
 	if ( modbus_write_bit( ctx, iOutChannel, (bool)uState ) == -1 )
 	{	// failed
 		bRc = false;
@@ -1826,7 +1969,8 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 		if ( m_Device[i].GetAddress() >= 0 )
 		{
 			if ( myDB.RunQuery( "SELECT di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,di_Temperature,"
-					"di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset FROM deviceinfo WHERE di_DeviceNo=%d order by di_IOChannel",
+					"di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset,di_MonitorPos,"
+					"di_MonitorHi,di_MonitorLo FROM deviceinfo WHERE di_DeviceNo=%d order by di_IOChannel",
 					m_Device[i].GetDeviceNo() ) != 0 )
 			{
 				bRet = false;
@@ -1855,10 +1999,14 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 						// row[11]
 						// row[12]
 						// row[13]
+						SetMonitorPos( i, j, row[14] );
+						// row[15]
+						// row[16]
 
-						LogMessage( E_MSG_INFO, "DeviceInfo OUT(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, OnPeriod:%d, Days:%s", i, j,
+						LogMessage( E_MSG_INFO, "DeviceInfo OUT(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, OnPeriod:%d, Days:%s, MonPos:'%s'", i, j,
 								GetOutIOName(i,j), GetOutChannelType(i,j), GetOutOnPeriod(i,j),
-								GetOutOnStartTime(i,j), GetOutOnPeriod(i,j), GetOutWeekdays(i,j) );
+								GetOutOnStartTime(i,j), GetOutOnPeriod(i,j), GetOutWeekdays(i,j),
+								GetMonitorPos(i,j) );
 					}
 					else
 					{
@@ -1867,19 +2015,22 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 						SetInOnPeriod( i, j, atoi( row[3] ) );
 						SetStartTime( i, j, atoi( row[4] ) );
 						GetHysteresis( i, j ) = atoi( row[5] );
-						GetTriggerTemperature( i, j ) = atof( row[6] );
+						GetTemperature( i, j ) = atof( row[6] );
 						// row[7]
 						// row[8]
 						SetInWeekdays( i, j, row[9] );
 						SetAnalogType( i, j, row[10][0] );
 						SetCalcFactor( i, j, atof( row[11] ) );
-						GetTriggerVoltage( i, j ) = atoi( row[12] );
+						GetVoltage( i, j ) = atof( row[12] );
 						SetOffset( i, j, atof( row[13] ) );
+						SetMonitorPos( i, j, row[14] );
+						GetMonitorValueHi( i, j ) = atof( row[15] );
+						GetMonitorValueLo( i, j ) = atof( row[16] );
 
-						LogMessage( E_MSG_INFO, "DeviceInfo  IN(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, Hyst:%d, Temp:%.1f, Days:%s AType:'%c', CFactor:%.3f, Volt:%.1f, Offset:%.2f",
+						LogMessage( E_MSG_INFO, "DeviceInfo  IN(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, Hyst:%d, Temp:%.1f, Days:%s AType:'%c', CFactor:%.3f, Volt:%.1f, Offset:%.2f, MonPos:'%s', MonHi:%.1f, MonLo:%.1f",
 								i, j, GetInIOName(i,j), GetInChannelType(i,j), GetInOnPeriod(i,j),
-								GetStartTime(i,j), GetHysteresis(i,j), GetTriggerTemperature(i,j), GetInWeekdays(i,j), GetAnalogType(i,j), GetCalcFactor(i,j), GetTriggerVoltage(i,j),
-								GetOffset(i,j) );
+								GetStartTime(i,j), GetHysteresis(i,j), GetMonitorValueLo(i,j), GetInWeekdays(i,j), GetAnalogType(i,j), GetCalcFactor(i,j), GetVoltage(i,j),
+								GetOffset(i,j), GetMonitorPos(i,j), GetMonitorValueHi(i,j), GetMonitorValueLo(i,j) );
 					}
 				}
 

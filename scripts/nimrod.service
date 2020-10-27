@@ -2,8 +2,8 @@
 Description=Nimrod home automation service
 
 [Service]
-WorkingDirectory=/var/www/html
-ExecStart=/var/www/html/bin/nimrod-arm7
+WorkingDirectory=/var/www/html/nimrod
+ExecStart=/var/www/html/nimrod/bin/nimrod
 Restart=always
 RestartSec=5
 StandardOutput=null

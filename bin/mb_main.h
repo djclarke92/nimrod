@@ -23,6 +23,7 @@ extern char gszHostname[HOST_NAME_MAX+1];
 
 void SetMyHostname();
 bool IsMyHostname( const char* szHost );
+const char* GetMyHostname();
 
 
 

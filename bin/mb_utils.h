@@ -5,6 +5,7 @@
 #define MAX_LOG_FILE_SIZE			5000000
 #define MAX_LOG_BACKUPS				4
 #define UPGRADE_SCRIPT				"./nimrod-upgrade.sh"
+#define PACKAGE_VER_FILE			"./package.txt"
 
 
 enum E_MSG_CLASS {
@@ -30,6 +31,7 @@ bool ReadSiteConfig( const char* szName, char* szValue, size_t uLen );
 pid_t CreateSSHTunnel();
 void CheckForUpgrade();
 bool CreateRestartScript( const char* szTar );
+bool CreatePackageVerFile( const char* szTar );
 
 
 

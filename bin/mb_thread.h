@@ -63,14 +63,14 @@ public:
 	void ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t iState, const enum E_EVENT_TYPE eEvent );
 	void ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel, const uint8_t uState,
 			const enum E_IO_TYPE eSwType, int iOutOnPeriod );
-	const bool ClickFileExists( const int iDeviceNo, const int iChannel );
+	const bool ClickFileExists( CMysql& myDB, const int iDeviceNo, const int iChannel );
 	const bool IsComPortThread();
 	const bool IsTimerThread();
 	const bool IsTcpipThread();
 	const bool IsMyComPort( const char* szPort );
 	SSL_CTX* InitServerCTX(void);
 	SSL_CTX* InitClientCTX(void);
-	void LoadCertificates( SSL_CTX* ctx, const char* CertFile, const char* KeyFile );
+	void LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char* szKeyFile );
 	void ShowCerts( SSL* ssl );
 	void LogSSLError();
 	void CreateListenerSocket();

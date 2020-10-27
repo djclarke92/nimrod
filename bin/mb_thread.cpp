@@ -126,22 +126,24 @@ SSL_CTX* CThread::InitClientCTX(void)
     return ctx;
 }
 
-void CThread::LoadCertificates( SSL_CTX* ctx, const char* CertFile, const char* KeyFile )
+void CThread::LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char* szKeyFile )
 {
 	bool bRc = true;
 
     // set the local certificate from CertFile
-    if ( SSL_CTX_use_certificate_file(ctx, CertFile, SSL_FILETYPE_PEM) <= 0 )
+    if ( SSL_CTX_use_certificate_file(ctx, szCertFile, SSL_FILETYPE_PEM) <= 0 )
     {
     	bRc = false;
     	LogMessage( E_MSG_ERROR, "SSL_CTX_use_certificate_file failed: %s", ERR_reason_error_string(ERR_get_error()) );
+    	LogMessage( E_MSG_ERROR, "Check certificate file '%s' exists and is readable", szCertFile );
     }
 
     // set the private key from KeyFile (may be the same as CertFile)
-    if ( SSL_CTX_use_PrivateKey_file(ctx, KeyFile, SSL_FILETYPE_PEM) <= 0 )
+    if ( SSL_CTX_use_PrivateKey_file(ctx, szKeyFile, SSL_FILETYPE_PEM) <= 0 )
     {
     	bRc = false;
     	LogMessage( E_MSG_ERROR, "SSL_CTX_use_PrivateKey_file failed: %s", ERR_reason_error_string(ERR_get_error()) );
+    	LogMessage( E_MSG_ERROR, "Check key file '%s' exists and is readable", szKeyFile );
     }
 
     // verify private key
@@ -363,7 +365,8 @@ void CThread::Worker()
 						//LogMessage( E_MSG_INFO, "Response timeout ctx %p is %u.%06u usec", ctx, uSec, uUsec );
 					}
 
-					if ( m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE )
+					if ( m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_DS ||
+							m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_K1 )
 					{	// temperature sensor
 						if ( tLastTemperatureCheck + TEMPERATURE_CHECK_PERIOD <= time(NULL) )
 						{	// only check temperature devices every 5 seconds
@@ -389,6 +392,11 @@ void CThread::Worker()
 						}
 						if ( m_pmyDevices->GetNumOutputs(idx) > 0 )
 						{	// output only device
+							// sleep if this device has inputs and outputs otherwise we get a timeout in modbus_read_bits()
+							if ( m_pmyDevices->GetNumInputs(idx) > 0 )
+							{
+								usleep( 10000 );
+							}
 							HandleOutputDevice( myDB, ctx, idx, bAllDead );
 
 							CheckForTimerOffTime( myDB, idx );
@@ -401,11 +409,6 @@ void CThread::Worker()
 					{
 						usleep( 30000 );	// was 30000
 					}
-				}
-
-				if ( m_pmyDevices->GetAddress(idx) == 2 || m_pmyDevices->GetAddress(idx) == 8 )
-				{
-//					LogMessage( E_MSG_INFO, "Reading data %d, '%s'", m_pmyDevices->GetAddress(idx), szTemp );
 				}
 			}	// end of for
 
@@ -1355,6 +1358,7 @@ bool CThread::SendTcpipChangeOutputToHost( const char* szHostname, const int iIn
 
 void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
+	int i;
 	int iLoop;
 	int iRetry = 3;
 	unsigned char cData[MAX_IO_PORTS];
@@ -1415,6 +1419,46 @@ void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
 			}
 
+			// check each output bit
+			for ( i = 0; i < m_pmyDevices->GetNumOutputs(idx); i++ )
+			{
+				int iState = 0;
+				if ( m_pmyDevices->GetOutOnStartTime(idx,i) != 0 )
+				{
+					iState = 1;
+				}
+				if ( cData[i] != iState )
+				{	// state mismatch !
+					if ( !IsMyHostname( m_pmyDevices->GetDeviceHostname(idx) ) )
+					{	// not my device - but this should never happen
+						static time_t gtLastHostnameErrorTime = 0;
+						if ( gtLastHostnameErrorTime + 60 < time(NULL) )
+						{
+							LogMessage( E_MSG_ERROR, "Configuration error for '%s', hostname '%s' should be '%s'", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetDeviceHostname(idx), GetMyHostname() );
+							gtLastHostnameErrorTime = time(NULL);
+						}
+					}
+					else if ( cData[i] != 0 )
+					{	// device bit is on but nimrod thinks it is off
+						LogMessage( E_MSG_INFO, "DIO device '%s' bit %d '%s' is on, nimrod state is %d", m_pmyDevices->GetDeviceName(idx), i, m_pmyDevices->GetOutIOName(idx,i) , iState );
+
+						if ( m_pmyDevices->WriteOutputBit( idx, i, iState ) )
+						{	// success
+							LogMessage( E_MSG_INFO, "DIO device '%s' channel '%s' state restored to OFF", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetOutIOName(idx,i) );
+						}
+					}
+					else
+					{	// device bit is off but nimrod thinks it should be on
+						// device has been power cycled
+						LogMessage( E_MSG_INFO, "DIO device '%s' bit %d '%s' is off, nimrod state is %d", m_pmyDevices->GetDeviceName(idx), i, m_pmyDevices->GetOutIOName(idx,i), iState );
+
+						if ( m_pmyDevices->WriteOutputBit( idx, i, iState ) )
+						{	// success
+							LogMessage( E_MSG_INFO, "DIO device '%s' channel '%s' state restored to ON", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetOutIOName(idx,i) );
+						}
+					}
+				}
+			}
 			break;
 		}
 	}
@@ -1489,7 +1533,7 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
 			{
 				// check for click file from web gui
-				if ( ClickFileExists( m_pmyDevices->GetDeviceNo(idx), i ) )
+				if ( ClickFileExists( myDB, m_pmyDevices->GetDeviceNo(idx), i ) )
 				{
 					m_pmyDevices->GetNewInput( idx, i ) = true;
 				}
@@ -1646,13 +1690,13 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 					if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_VOLT_HIGH )
 					{
 						if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) >= m_pmyDevices->GetTriggerVoltage(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) < m_pmyDevices->GetTriggerVoltage(idx,i) )
+								m_pmyDevices->CalcVoltage(idx,i,true) >= m_pmyDevices->GetVoltage(idx,i) &&
+								m_pmyDevices->CalcVoltage(idx,i,false) < m_pmyDevices->GetVoltage(idx,i) )
 						{	// voltage increasing and high voltage trigger reached
 							if ( !m_pmyDevices->GetAlarmTriggered(idx,i) )
 							{	// trigger voltage reached
 								LogMessage( E_MSG_INFO, "Channel %d '%s' High Voltage %.2f V on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetTriggerVoltage(idx,i), m_pmyDevices->GetAddress(idx) );
+									m_pmyDevices->GetVoltage(idx,i), m_pmyDevices->GetAddress(idx) );
 
 								m_pmyDevices->GetAlarmTriggered(idx,i) = true;
 
@@ -1661,16 +1705,16 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 							else
 							{
 								LogMessage( E_MSG_INFO, "Channel %d '%s' High Voltage %.2f V on device %d already reached", i+1, m_pmyDevices->GetInIOName(idx,i),
-																	m_pmyDevices->GetTriggerVoltage(idx,i), m_pmyDevices->GetAddress(idx) );
+																	m_pmyDevices->GetVoltage(idx,i), m_pmyDevices->GetAddress(idx) );
 							}
 						}
 						else if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) <= m_pmyDevices->GetTriggerVoltage(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) > m_pmyDevices->GetTriggerVoltage(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
+								m_pmyDevices->CalcVoltage(idx,i,true) <= m_pmyDevices->GetVoltage(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
+								m_pmyDevices->CalcVoltage(idx,i,false) > m_pmyDevices->GetVoltage(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
 								m_pmyDevices->GetAlarmTriggered(idx,i) )
 						{	// voltage decreasing and hysteresis reached
 							LogMessage( E_MSG_INFO, "Channel %d '%s' High Voltage Hysteresis %.2f V on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetTriggerVoltage(idx,i) - m_pmyDevices->GetHysteresis(idx,i), m_pmyDevices->GetAddress(idx) );
+									m_pmyDevices->GetVoltage(idx,i) - m_pmyDevices->GetHysteresis(idx,i), m_pmyDevices->GetAddress(idx) );
 
 							m_pmyDevices->GetAlarmTriggered(idx,i) = false;
 
@@ -1680,13 +1724,13 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 					else if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_VOLT_LOW )
 					{
 						if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) <= m_pmyDevices->GetTriggerVoltage(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) > m_pmyDevices->GetTriggerVoltage(idx,i) )
+								m_pmyDevices->CalcVoltage(idx,i,true) <= m_pmyDevices->GetVoltage(idx,i) &&
+								m_pmyDevices->CalcVoltage(idx,i,false) > m_pmyDevices->GetVoltage(idx,i) )
 						{	// voltage decreasing and low voltage trigger reached
 							if ( !m_pmyDevices->GetAlarmTriggered(idx,i) )
 							{	// low voltage trigger reached
 								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Voltage %.2f V on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetTriggerVoltage(idx,i), m_pmyDevices->GetAddress(idx) );
+									m_pmyDevices->GetVoltage(idx,i), m_pmyDevices->GetAddress(idx) );
 
 								m_pmyDevices->GetAlarmTriggered(idx,i) = true;
 
@@ -1695,16 +1739,16 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 							else
 							{
 								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Voltage %.2f V on device %d already reached", i+1, m_pmyDevices->GetInIOName(idx,i),
-																	m_pmyDevices->GetTriggerVoltage(idx,i), m_pmyDevices->GetAddress(idx) );
+																	m_pmyDevices->GetVoltage(idx,i), m_pmyDevices->GetAddress(idx) );
 							}
 						}
 						else if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) >= m_pmyDevices->GetTriggerVoltage(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) < m_pmyDevices->GetTriggerVoltage(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
+								m_pmyDevices->CalcVoltage(idx,i,true) >= m_pmyDevices->GetVoltage(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
+								m_pmyDevices->CalcVoltage(idx,i,false) < m_pmyDevices->GetVoltage(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
 								m_pmyDevices->GetAlarmTriggered(idx,i) )
 						{	// voltage increasing and hysteresis reached
 							LogMessage( E_MSG_INFO, "Channel %d '%s' Low Voltage Hysteresis %.2f V on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetTriggerVoltage(idx,i) + m_pmyDevices->GetHysteresis(idx,i), m_pmyDevices->GetAddress(idx) );
+									m_pmyDevices->GetVoltage(idx,i) + m_pmyDevices->GetHysteresis(idx,i), m_pmyDevices->GetAddress(idx) );
 
 							m_pmyDevices->GetAlarmTriggered(idx,i) = false;
 
@@ -1777,6 +1821,10 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 	int iRetry = 3;
 
 	addr = 0;
+	if ( m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_K1 )
+	{
+		addr = 0x20;
+	}
 	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
 	{
 		rc = modbus_read_registers( ctx, addr, m_pmyDevices->GetNumInputs(idx), m_pmyDevices->GetNewData(idx) );
@@ -1836,17 +1884,34 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
 			{
 				// check for bad data
-				if ( m_pmyDevices->CalcTemperature(idx,i,true) < -20.0 || m_pmyDevices->CalcTemperature(idx,i,true) > 110.0 || m_pmyDevices->CalcTemperature(idx,i,true) == 0.0 ||
-						(fabs(m_pmyDevices->CalcTemperature(idx,i,true) - m_pmyDevices->CalcTemperature(idx,i,false)) >= 5.0 && m_pmyDevices->GetLastData( idx, i ) != (uint16_t)-1) )
-				{	// out of range
-					if ( m_pmyDevices->GetNewData(idx,i) != (uint16_t)-1 )
-					{
-						LogMessage( E_MSG_WARN, "Invalid temperature channel %d '%s' %u %.1f degC, %.1f degC, %u", i+1, m_pmyDevices->GetInIOName(idx,i), m_pmyDevices->GetNewData( idx, i ), m_pmyDevices->CalcTemperature(idx,i,true), m_pmyDevices->CalcTemperature(idx,i,false), m_pmyDevices->GetLastData( idx, i ) );
-					}
+				if ( m_pmyDevices->GetNewData( idx, i ) != m_pmyDevices->GetLastData( idx, i ) && m_pmyDevices->IsSensorConnected(idx,i) )
+				{	// data has changed
+					m_pmyDevices->SaveDataValue( idx, i );
 
-					// leave the data unchanged
-					m_pmyDevices->GetNewData( idx, i ) = m_pmyDevices->GetLastData( idx, i );
+					if ( m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_DS &&
+						(m_pmyDevices->CalcTemperature(idx,i,true) < -24.0 || m_pmyDevices->CalcTemperature(idx,i,true) > 110.0 ||
+						(fabs(m_pmyDevices->CalcTemperature(idx,i,true) - m_pmyDevices->CalcTemperature(idx,i,false)) >= MAX_TEMPERATURE_DIFF &&
+						m_pmyDevices->GetLastData( idx, i ) != (uint16_t)-1)) )
+					{	// out of range - DS18B20 devices are susceptable to noise
+						if ( m_pmyDevices->DataBufferIsStable(idx,i) )
+						{
+							LogMessage( E_MSG_WARN, "Unstable temperature channel %d '%s' %u %.1f degC, %.1f degC, %u", i+1, m_pmyDevices->GetInIOName(idx,i), m_pmyDevices->GetNewData( idx, i ),
+									m_pmyDevices->CalcTemperature(idx,i,true), m_pmyDevices->CalcTemperature(idx,i,false), m_pmyDevices->GetLastData( idx, i ) );
+						}
+						else
+						{
+							if ( m_pmyDevices->GetNewData(idx,i) != (uint16_t)-1 )
+							{
+								LogMessage( E_MSG_WARN, "Invalid temperature channel %d '%s' %u %.1f degC, %.1f degC, %u", i+1, m_pmyDevices->GetInIOName(idx,i), m_pmyDevices->GetNewData( idx, i ),
+										m_pmyDevices->CalcTemperature(idx,i,true), m_pmyDevices->CalcTemperature(idx,i,false), m_pmyDevices->GetLastData( idx, i ) );
+							}
+
+							// leave the data unchanged
+							m_pmyDevices->GetNewData( idx, i ) = m_pmyDevices->GetLastData( idx, i );
+						}
+					}
 				}
+
 
 				if ( !m_pmyDevices->IsSensorConnected(idx,i) )
 				{
@@ -1883,13 +1948,13 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 					if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_TEMP_HIGH )
 					{
 						if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,true) >= m_pmyDevices->GetTriggerTemperature(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,false) < m_pmyDevices->GetTriggerTemperature(idx,i) )
+								m_pmyDevices->CalcTemperature(idx,i,true) >= m_pmyDevices->GetTemperature(idx,i) &&
+								m_pmyDevices->CalcTemperature(idx,i,false) < m_pmyDevices->GetTemperature(idx,i) )
 						{	// temperature increasing and high temp trigger reached
 							if ( !m_pmyDevices->GetAlarmTriggered(idx,i) )
 							{	// trigger temp reached
 								LogMessage( E_MSG_INFO, "Channel %d '%s' High Temp %.1f degC on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetTriggerTemperature(idx,i), m_pmyDevices->GetAddress(idx) );
+									m_pmyDevices->GetTemperature(idx,i), m_pmyDevices->GetAddress(idx) );
 
 								m_pmyDevices->GetAlarmTriggered(idx,i) = true;
 
@@ -1898,16 +1963,16 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 							else
 							{	// high temp alarm already active
 								LogMessage( E_MSG_INFO, "Channel %d '%s' High Temp %.1f degC on device %d already active", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetTriggerTemperature(idx,i), m_pmyDevices->GetAddress(idx) );
+									m_pmyDevices->GetTemperature(idx,i), m_pmyDevices->GetAddress(idx) );
 							}
 						}
 						else if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,true) <= m_pmyDevices->GetTriggerTemperature(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,false) > m_pmyDevices->GetTriggerTemperature(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
+								m_pmyDevices->CalcTemperature(idx,i,true) <= m_pmyDevices->GetTemperature(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
+								m_pmyDevices->CalcTemperature(idx,i,false) > m_pmyDevices->GetTemperature(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
 								m_pmyDevices->GetAlarmTriggered(idx,i) )
 						{	// temperature decreasing and hysteresis reached
 							LogMessage( E_MSG_INFO, "Channel %d '%s' High Temp Hysteresis %.1f degC on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									(double)(m_pmyDevices->GetTriggerTemperature(idx,i) - m_pmyDevices->GetHysteresis(idx,i)), m_pmyDevices->GetAddress(idx) );
+									(double)(m_pmyDevices->GetTemperature(idx,i) - m_pmyDevices->GetHysteresis(idx,i)), m_pmyDevices->GetAddress(idx) );
 
 							m_pmyDevices->GetAlarmTriggered(idx,i) = false;
 
@@ -1917,13 +1982,13 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 					else if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_TEMP_LOW )
 					{
 						if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,true) <= m_pmyDevices->GetTriggerTemperature(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,false) > m_pmyDevices->GetTriggerTemperature(idx,i) )
+								m_pmyDevices->CalcTemperature(idx,i,true) <= m_pmyDevices->GetTemperature(idx,i) &&
+								m_pmyDevices->CalcTemperature(idx,i,false) > m_pmyDevices->GetTemperature(idx,i) )
 						{	// temperature decreasing and low temp trigger reached
 							if ( !m_pmyDevices->GetAlarmTriggered(idx,i) )
 							{	// low temp trigger reached
 								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Temp %.1f degC on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetTriggerTemperature(idx,i), m_pmyDevices->GetAddress(idx) );
+									m_pmyDevices->GetTemperature(idx,i), m_pmyDevices->GetAddress(idx) );
 
 								m_pmyDevices->GetAlarmTriggered(idx,i) = true;
 
@@ -1932,16 +1997,16 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 							else
 							{	// low temp alarm already triggered
 								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Temp %.1f degC on device %d already reached", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetTriggerTemperature(idx,i), m_pmyDevices->GetAddress(idx) );
+									m_pmyDevices->GetTemperature(idx,i), m_pmyDevices->GetAddress(idx) );
 							}
 						}
 						else if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,true) >= m_pmyDevices->GetTriggerTemperature(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,false) < m_pmyDevices->GetTriggerTemperature(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
+								m_pmyDevices->CalcTemperature(idx,i,true) >= m_pmyDevices->GetTemperature(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
+								m_pmyDevices->CalcTemperature(idx,i,false) < m_pmyDevices->GetTemperature(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
 								m_pmyDevices->GetAlarmTriggered(idx,i) )
 						{	// temperature increasing and hysteresis reached
 							LogMessage( E_MSG_INFO, "Channel %d '%s' Low Temp Hysteresis %.1f degC on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									(double)(m_pmyDevices->GetTriggerTemperature(idx,i) + m_pmyDevices->GetHysteresis(idx,i)), m_pmyDevices->GetAddress(idx) );
+									(double)(m_pmyDevices->GetTemperature(idx,i) + m_pmyDevices->GetHysteresis(idx,i)), m_pmyDevices->GetAddress(idx) );
 
 							m_pmyDevices->GetAlarmTriggered(idx,i) = false;
 
@@ -2345,24 +2410,13 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 }
 
-const bool CThread::ClickFileExists( const int iDeviceNo, const int iChannel )
+const bool CThread::ClickFileExists( CMysql& myDB, const int iDeviceNo, const int iChannel )
 {
 	bool bRc = false;
-	char szBuf[256];
-	struct stat statbuf;
 
-	snprintf( szBuf, sizeof(szBuf), "/tmp/NimrodClick-%d-%d", iDeviceNo, iChannel );
-	if ( stat( szBuf, &statbuf ) == 0 )
-	{	// file exists
+	if ( myDB.WebClickEvent(iDeviceNo, iChannel ) )
+	{
 		bRc = true;
-		if ( unlink( szBuf ) != 0 )
-		{
-			snprintf( szBuf, sizeof(szBuf), "sudo rm /tmp/NimrodClick-%d-%d", iDeviceNo, iChannel );
-			if ( system( szBuf ) < 0 )
-			{
-				LogMessage( E_MSG_ERROR, "failed ro rm click file" );
-			}
-		}
 	}
 
 	return bRc;

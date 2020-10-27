@@ -529,3 +529,8 @@ bool IsMyHostname( const char* szHost )
 	return bRc;
 }
 
+const char* GetMyHostname()
+{
+	return gszHostname;
+}
+

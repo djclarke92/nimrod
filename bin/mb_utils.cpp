@@ -181,55 +181,64 @@ pid_t CreateSSHTunnel()
 	char szBuf[256];
 	struct stat statbuf;
 
-	if ( stat( "./no.tunnel", &statbuf ) == 0 )
+	if ( ReadSiteConfig( "REMOTE_MYSQL_HOST", szHost, sizeof(szHost) ) )
 	{
-	}
-	else if ( ReadSiteConfig( "REMOTE_MYSQL_HOST", szHost, sizeof(szHost) ) )
-	{	// create our mysql tunnel
-		pidChild = fork();
-
-		if ( pidChild == -1 )
-		{	// error, failed to fork()
-			LogMessage( E_MSG_ERROR, "CreateSSHTunnel() fork() failed with errno %d", errno );
-		}
-		else if ( pidChild > 0 )
-		{	// this is the parent
-			LogMessage( E_MSG_INFO, "CreateSSHTunnel() child pid is %d", pidChild );
-
-			LogMessage( E_MSG_INFO, "Sleeping %d sec to allow tunnel to setup", iSleep );
-			sleep( iSleep );
+		if ( stat( "./no.tunnel", &statbuf ) == 0 || strcasecmp( szHost, "localhost" ) == 0 || strcasecmp( szHost, "127.0.0.1" ) == 0 )
+		{
+			LogMessage( E_MSG_INFO, "Skipping ssh tunnel for host %s", szHost );
 		}
 		else
-		{   // this is the child
-			snprintf( szBuf, sizeof(szBuf), "ssh -N -L 3306:127.0.0.1:3306 nimrod@%s", szHost );
-//			snprintf( szBuf, sizeof(szBuf), "ssh -N -L 3306:%s:3306 nimrod@%s", szHost, szHost );
+		{	// create our mysql tunnel
+			pidChild = fork();
 
-		    execlp( "/bin/bash", "/bin/bash", "-c", szBuf, NULL );
+			if ( pidChild == -1 )
+			{	// error, failed to fork()
+				LogMessage( E_MSG_ERROR, "CreateSSHTunnel() fork() failed with errno %d", errno );
+			}
+			else if ( pidChild > 0 )
+			{	// this is the parent
+				LogMessage( E_MSG_INFO, "CreateSSHTunnel() child pid is %d", pidChild );
 
-		    _exit(EXIT_FAILURE);   // exec never returns
+				LogMessage( E_MSG_INFO, "Sleeping %d sec to allow tunnel to setup", iSleep );
+				sleep( iSleep );
+			}
+			else
+			{   // this is the child
+				snprintf( szBuf, sizeof(szBuf), "ssh -N -L 3306:127.0.0.1:3306 nimrod@%s", szHost );
+	//			snprintf( szBuf, sizeof(szBuf), "ssh -N -L 3306:%s:3306 nimrod@%s", szHost, szHost );
+
+				execlp( "/bin/bash", "/bin/bash", "-c", szBuf, NULL );
+
+				_exit(EXIT_FAILURE);   // exec never returns
+			}
 		}
 	}
 
 	return pidChild;
 }
 
+#define MAX_DIR_LIST	4
 void CheckForUpgrade()
 {
+	int i;
+	int idx;
 	DIR *d;
 	struct stat statbuf;
 	struct dirent *dir;
+	char szDirList[MAX_DIR_LIST][100];
 
-	if ( stat( "./no.upgrade", &statbuf ) == 0 )
+	if ( stat( "./no.upgrade", &statbuf ) == 0 || gbTerminateNow )
 	{
 		return;
 	}
 
+	// check /var/www/html dir first
 	d = opendir( "." );
 	if ( d != NULL )
 	{
 		while ( (dir = readdir(d) ) != NULL)
 	    {
-			if ( strstr( dir->d_name, ".tgz" ) != NULL && strncmp( dir->d_name, "nimrod", 6 ) == 0 )
+			if ( dir->d_type == DT_REG && strstr( dir->d_name, ".tgz" ) != NULL && strncmp( dir->d_name, "nimrod", 6 ) == 0 )
 			{
 				snprintf( gszTarFileName, sizeof(gszTarFileName), "%s", dir->d_name );
 				break;
@@ -239,9 +248,77 @@ void CheckForUpgrade()
 	    closedir(d);
 	}
 
+	if ( strlen( gszTarFileName ) == 0 )
+	{	// check for usb stick at /media/nimrod/*
+		for ( i = 0; i < MAX_DIR_LIST; i++ )
+		{
+			szDirList[i][0] = '\0';
+		}
+		d = opendir( "/media/nimrod" );
+		if ( d != NULL )
+		{
+			idx = 0;
+			while ( (dir = readdir(d) ) != NULL)
+		    {
+				if ( dir->d_type == DT_DIR && dir->d_name[0] != '.' )
+				{
+					snprintf( szDirList[idx], sizeof(szDirList[idx]), "/media/nimrod/%s", dir->d_name );
+					LogMessage( E_MSG_INFO, "Found usb dir '%s'", szDirList[idx] );
+					if ( idx+1 < MAX_DIR_LIST )
+					{
+						idx += 1;
+					}
+					else
+					{
+						LogMessage( E_MSG_WARN, "Too many usb dirs" );
+						break;
+					}
+				}
+		    }
+
+		    closedir(d);
+
+		    // now check each dir for a tgz file
+		    for ( idx = 0; idx < MAX_DIR_LIST; idx++ )
+			{
+				if ( szDirList[idx][0] != '\0' )
+				{
+					d = opendir( szDirList[idx] );
+					if ( d != NULL )
+					{
+						while ( (dir = readdir(d) ) != NULL)
+					    {
+							if ( dir->d_type == DT_REG && strstr( dir->d_name, ".tgz" ) != NULL && strncmp( dir->d_name, "nimrod", 6 ) == 0 )
+							{
+								snprintf( gszTarFileName, sizeof(gszTarFileName), "%s", dir->d_name );
+								break;
+							}
+					    }
+
+					    closedir(d);
+					}
+
+					if ( strlen( gszTarFileName ) != 0 )
+					{	// found a tar file
+						// move the tar file to our local directory
+						int rc;
+						char szCmd[512];
+
+						snprintf( szCmd, sizeof(szCmd), "cp %s/%s .; rm %s/%s; sync; umount %s", szDirList[idx], gszTarFileName, szDirList[idx], gszTarFileName, szDirList[idx] );
+						rc = system( szCmd );
+
+						LogMessage( E_MSG_INFO, "system(%s) returned %d", szCmd, rc );
+						gszTarFileName[0] = '\0';
+						break;
+					}
+				}
+			}
+		}
+	}
+
 	if ( strlen( gszTarFileName ) != 0 )
 	{
-		LogMessage( E_MSG_INFO, "Found upgrade tar file '%s", gszTarFileName );
+		LogMessage( E_MSG_INFO, "Found upgrade tar file '%s'", gszTarFileName );
 
 		if ( stat( gszTarFileName, &statbuf ) == 0 )
 		{
@@ -249,6 +326,7 @@ void CheckForUpgrade()
 			{
 				if ( CreateRestartScript( gszTarFileName ) )
 				{
+					CreatePackageVerFile( gszTarFileName );
 					gbUpgradeNow = true;
 					gbTerminateNow = true;
 				}
@@ -312,6 +390,33 @@ bool CreateRestartScript( const char* szTar )
 	{
 		bRc = false;
 		LogMessage( E_MSG_ERROR, "fopen(%s) failed with errno %d", UPGRADE_SCRIPT, errno );
+	}
+
+	return bRc;
+}
+
+bool CreatePackageVerFile( const char* szTar )
+{
+	bool bRc = true;
+	char szBuf[256];
+	FILE* pFile = NULL;
+
+	LogMessage( E_MSG_INFO, "Creating package file for %s", szTar );
+
+	// create package.txt file
+	pFile = fopen( PACKAGE_VER_FILE, "wt" );
+	if ( pFile != NULL )
+	{
+		snprintf( szBuf, sizeof(szBuf), "%s", szTar );
+		fputs( basename(szBuf), pFile );
+		fputs( "\n", pFile );
+
+		fclose( pFile );
+	}
+	else
+	{
+		bRc = false;
+		LogMessage( E_MSG_ERROR, "fopen(%s) failed with errno %d", PACKAGE_VER_FILE, errno );
 	}
 
 	return bRc;

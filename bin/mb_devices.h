@@ -14,15 +14,17 @@
 #define MAX_IO_LINKS				100		// across all pi's
 #define MCU_MSG_SIZE				20
 #define MAX_MCU_QUEUE				4
-
+#define MAX_DATA_BUFFER				10
+#define MAX_TEMPERATURE_DIFF		5.0		// max temperature value change between readings
 
 
 enum E_DEVICE_TYPE {
 	E_DT_UNUSED = 0,
 	E_DT_DIGITAL_IO,		// 1: digital input and/or output
-	E_DT_TEMPERATURE,		// 2: temperature
+	E_DT_TEMPERATURE_DS,	// 2: temperature DS18B20 devices
 	E_DT_TIMER,				// 3: timer
-	E_DT_VOLTAGE			// 4: analogue voltage
+	E_DT_VOLTAGE,			// 4: analogue voltage
+	E_DT_TEMPERATURE_K1		// 5: temperature, PD3064 K thermocouple
 };
 
 enum E_IO_TYPE {
@@ -137,12 +139,15 @@ private:
 	bool m_bAlarmTriggered[MAX_IO_PORTS];
 	int m_iHysteresis[MAX_IO_PORTS];
 	double m_dTemperature[MAX_IO_PORTS];
+	double m_dMonitorHi[MAX_IO_PORTS];
+	double m_dMonitorLo[MAX_IO_PORTS];
 	time_t m_tLastRecorded[MAX_IO_PORTS];
 	uint8_t m_uLastInput[MAX_IO_PORTS];
 	uint8_t m_uNewInput[MAX_IO_PORTS];
 	uint16_t m_uLastData[MAX_IO_PORTS];
 	uint16_t m_uLastLogData[MAX_IO_PORTS];
 	uint16_t m_uNewData[MAX_IO_PORTS];
+	uint16_t m_uDataBuffer[MAX_IO_PORTS][MAX_DATA_BUFFER];
 	int m_iNumOutputs;
 	uint8_t m_uOutput[MAX_IO_PORTS];
 	time_t m_tOutOnStartTime[MAX_IO_PORTS];
@@ -159,6 +164,7 @@ private:
 	double m_dCalcFactor[MAX_IO_PORTS];
 	double m_dVoltage[MAX_IO_PORTS];
 	double m_dOffset[MAX_IO_PORTS];
+	char m_szMonitorPos[MAX_IO_PORTS][3];
 	struct timespec m_tEventTime[MAX_IO_PORTS];
 
 public:
@@ -167,6 +173,7 @@ public:
 
 	void Init();
 	const bool IsOffTime( const int j );
+	const double CalculateTemperature( const uint16_t uVal );
 	const double CalcTemperature( const int iChannel, const bool bNew );
 	const double CalcVoltage( const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int iChannel );
@@ -190,7 +197,10 @@ public:
 	uint16_t* GetNewData(){ return m_uNewData; };
 	bool& GetAlarmTriggered( const int i ){ return m_bAlarmTriggered[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	int& GetHysteresis( const int i ){ return m_iHysteresis[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
-	double& GetTriggerTemperature( const int i ){ return m_dTemperature[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
+	double& GetTemperature( const int i ){ return m_dTemperature[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
+	double& GetVoltage( const int i ){ return m_dVoltage[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
+	double& GetMonitorValueLo( const int i ){ return m_dMonitorLo[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
+	double& GetMonitorValueHi( const int i ){ return m_dMonitorHi[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	time_t& GetLastRecorded( const int i ){ return m_tLastRecorded[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	uint8_t& GetLastInput( const int i ){ return m_uLastInput[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	uint8_t& GetNewInput( const int i ){ return m_uNewInput[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
@@ -198,6 +208,9 @@ public:
 	uint16_t& GetLastLogData( const int i ){ return m_uLastLogData[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	uint16_t& GetNewData( const int i ){ return m_uNewData[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	uint8_t& GetOutput( const int i ){ return m_uOutput[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
+	void SaveDataValue( const int i );
+	void ClearDataBuffer( const int i );
+	bool DataBufferIsStable( const int j );
 	enum E_IO_TYPE& GetInChannelType( const int i ){ return m_eInChannelType[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	enum E_IO_TYPE& GetOutChannelType( const int i ){ return m_eOutChannelType[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	const char* GetInIOName( const int i ){ return m_szInIOName[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
@@ -211,7 +224,7 @@ public:
 	const char GetAnalogType( const int i){ return m_cAnalogType[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	const double GetCalcFactor( const int i){ return m_dCalcFactor[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	const double GetOffset( const int i ){ return m_dOffset[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
-	double& GetTriggerVoltage( const int i ){ return m_dVoltage[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
+	const char* GetMonitorPos( const int i ){ return m_szMonitorPos[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	void GetEventTime( const int i, struct timespec& ts ){ ts = m_tEventTime[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 
 	void SetContext( modbus_t* pCtx ){ m_pCtx = pCtx; };
@@ -236,6 +249,7 @@ public:
 	void SetAnalogType( const int i, const char cType );
 	void SetCalcFactor( const int i, const double dFactor );
 	void SetOffset( const int i, const double dOffset );
+	void SetMonitorPos( const int i, const char* szMonPos );
 	void SetEventTime( const int i, const struct timespec ts );
 };
 
@@ -294,13 +308,18 @@ public:
 	uint16_t* GetNewData( const int idx );
 	bool& GetAlarmTriggered( const int idx, const int j );
 	int& GetHysteresis( const int idx, const int j );
-	double& GetTriggerTemperature( const int idx, const int j );
+	double& GetVoltage( const int idx, const int j );
+	double& GetTemperature( const int idx, const int j );
+	double& GetMonitorValueLo( const int idx, const int j );
+	double& GetMonitorValueHi( const int idx, const int j );
 	time_t& GetLastRecorded( const int idx, const int j );
 	uint8_t& GetLastInput( const int idx, const int j );
 	uint8_t& GetNewInput( const int idx, const int j );
 	uint16_t& GetLastData( const int idx, const int j );
 	uint16_t& GetLastLogData( const int idx, const int j );
 	uint16_t& GetNewData( const int idx, const int j );
+	void SaveDataValue( const int idx, const int j );
+	bool DataBufferIsStable( const int idx, const int j );
 	uint8_t& GetOutput( const int idx, const int j );
 	enum E_IO_TYPE& GetInChannelType( const int idx, const int j );
 	enum E_IO_TYPE& GetOutChannelType( const int idx, const int j );
@@ -315,7 +334,7 @@ public:
 	const char GetAnalogType( const int idx, const int j );
 	const double GetCalcFactor( const int idx, const int j );
 	const double GetOffset( const int idx, const int j );
-	double& GetTriggerVoltage( const int idx, const int j );
+	const char* GetMonitorPos( const int idx, const int j );
 	void GetEventTime( const int idx, const int j, struct timespec& ts );
 	void GetEventTimeNow( struct timespec& tNow );
 	int GetTotalDevices();
@@ -346,6 +365,7 @@ public:
 	void SetAnalogType( const int idx, const int j, const char cType );
 	void SetCalcFactor( const int idx, const int j, const double dFactor );
 	void SetOffset( const int idx, const int j, const double dOffset );
+	void SetMonitorPos( const int idx, const int j, const char* szMonPos );
 	void SetEventTime( const int idx, const int j, const struct timespec ts );
 	void SetDayNightState( const double dVoltage );
 	const long GetEventTimeDiff( const int idx, const int i, const struct timespec tNow );

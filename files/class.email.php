@@ -124,7 +124,7 @@ function func_email_category_form( $db, $title, $msg )
 	
 		$message .= sprintf( "Hi %s,<br><br>", $user['us_Name'] );
 		$message .= sprintf( "User '%s' with email address <a href=\"mailto:%s\">%s</a> has asked a question.<br><br>", 
-				$_SESSION['user_name'], $_SESSION['user_email'], $_SESSION['user_email'] );
+				$_SESSION['user_name'], $_SESSION['us_Username'], $_SESSION['us_Username'] );
 		$message .= sprintf( "%s<br>", $msg );
 		$message .= sprintf( "Have a great day !<br>%s", $_SESSION['website_admin'] );
 		

@@ -36,16 +36,21 @@ CREATE TABLE IF NOT EXISTS `deviceinfo` (
 	`di_OnPeriod` int(10) NOT NULL default '0',					# output is on for this many seconds
 	`di_StartTime` int(10) NOT NULL default '0',				# start time of day in minutes 0-1439
 	`di_Hysteresis` int(10) NOT NULL default '0',				# hysteresis value for temperature changes
-	`di_Temperature` decimal(4,1) NOT NULL default '0',			# temperature trigger value
+	`di_Temperature` decimal(4,1) NOT NULL default 0.0,			# temperature trigger value
 	`di_OutOnStartTime` int(10) NOT NULL default '0',			# output on start time (time_t)
 	`di_OutOnPeriod` int(10) NOT NULL default '0',				# output on period in seconds
 	`di_Weekdays` char(7) NOT NULL default 'YYYYYYY',			# days of the week, sunday to saturday
 	`di_AnalogType` char(1) NOT NULL default ' ',				# type of analog sensor: Voltage or Amps
 	`di_CalcFactor` decimal(7,3) NOT NULL default 0.0,			# analog conversion factor
 	`di_Voltage` decimal(4,1) NOT NULL default 0.0,				# voltage trigger value
-	`di_Offset` decimal(7,3) NOT NULL default 0.0				# analog offset factor for current measurement
+	`di_Offset` decimal(7,3) NOT NULL default 0.0,				# analog offset factor for current measurement
+	`di_MonitorPos` char(15) NOT NULL default '   ',			# display this device on the monitor page, 5 sets of 3 chars: 1F1, [12][FLR][1-4]
+	`di_MonitorHi` decimal(4,1) NOT NULL default 0.0,			# upper value for range monitoring
+	`di_MonitorLo` decimal(4,1) NOT NULL default 0.0,			# lower value for range monitoring
+	`di_ValueRangeHi` char(10) NOT NULL default '',				# y axis high value, or null
+	`di_ValueRangeLo` char(10) NOT NULL default '',				# y axis low value, or null  
 	PRIMARY KEY (`di_DeviceInfoNo`),
-	KEY (`di_DeviceNo`,`di_IOClass`,`di_IOChannel`),
+	KEY (`di_DeviceNo`,`di_IOChannel`),
 	UNIQUE KEY `di_name_index` (`di_IOName`)
 ) ;
 
@@ -67,6 +72,9 @@ create TABLE IF NOT EXISTS `iolinks` (
 ) ;
 
 # table of events
+# ev_DeviceNo=-1: trigger file
+# ev_DeviceNo=-2: database structure version
+# ev_DeviceNo=-10xx: device channel click event
 create TABLE IF NOT EXISTS `events` (
 	`ev_EventNo` int(10) unsigned NOT NULL auto_increment,		# unique record number
 	`ev_Timestamp` timestamp NOT NULL default '0000-00-00',		# event timestamp
@@ -79,10 +87,20 @@ create TABLE IF NOT EXISTS `events` (
 	KEY `ev_device_index` (`ev_DeviceNo`,`ev_Timestamp`)
 ) ;
 
+# table of users
+create table IF NOT EXISTS `users` (
+	`us_Username` varchar(50) NOT NULL default '',				# user name / email address
+	`us_Name` varchar(100) NOT NULL default '',					# name
+	`us_Password` text(256) NOT NULL default '',				# SHA-256 hash
+	`us_AuthLevel` INT(10) NOT NULL default 0,					# security auth level
+	`us_Features` char(10) NOT NULL default 'NNNNNNNNNN',		# optional features for each user
+	PRIMARY KEY (`us_Username`),
+	KEY `us_name_index` (`us_Name`)
+);
 
 # add default table records:
 # 
-
+insert into users (us_Username,us_Name,us_Password,us_AuthLevel) values ('nimrod@nimrod.co.nz','Nimrod Admin User','258497f62679c89a7ac952b27c2d2c6040cf8da412b8dd044d11156db0986b55',9);
 
 # nimrod and nimrod_user are changed to 
 GRANT insert,select,update,delete,create,drop,alter,lock tables on nimrod.* to nimrod_user@'localhost' identified by 'passw0rd.23';

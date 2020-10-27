@@ -21,16 +21,16 @@ define( 'NIMROD_LOG_DIR', '/home/nimrod' );
 // logout timer in seconds
 define( 'AUTO_REFRESH_LOGOUT', 1800 );	// 1800
 
-
-// read config trigger file
-define( 'CONFIG_TRIGGER_FILE', '/tmp/readconfig.txt' );
-
 // modbus baud rate
 define( 'MODBUS_BAUD_RATE', '19200' );
 
 // CCTV cameras
 define( "CAMERA_USER", "camuser" );
 define( "CAMERA_PWD", "passw0rd.39" );
+
+// camera files web root
+define( "CAMERA_WEB_ROOT", "/var/www/html" );
+define( "CAMERA_FS_ROOT", "/home" );
 
 // format is "ip_address:Camera_Name:PTZ_Capable:FTP_server_directory"
 define( "CAMERA_01", "192.168.1.121:Garage:false:/cctv/garage/FI9853EP_00626E570130" );

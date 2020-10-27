@@ -6,6 +6,43 @@
 
 Nimrod Release Notes and History
 
+Version 0.1.6		October 2020
+1.	Check the state of output device channels match the nimrod state and reset the state if necessary
+2.	The files/site_config.php file has 2 new camera defines CAMERA_WEB_ROOT and CAMERA_FS_ROOT, see site_config.php.sample
+3.	Database schema/data updates are now automatic, THIS_DATABASE_VERSION is defined in common.php
+4.	Add control of PTZ cameras via image maps
+5.	A number of minor layout changes to better support mobile devices
+6.	Add camera refresh and cycle options
+
+
+Version 0.1.5		September 2020
+1.	Update set-address utility to handle PD30xx series devices (address and baud rate are in register 0x10)
+2.	Fix SQL bug in deleting devices due to always finding deviceinfo and events records
+3.	Brand new web interface based on bootstrap 4
+4.	Add User Management page for authentication
+
+
+Version 0.1.4		August 2020
+1.	Do not use the ssh tunnel if the database is on localhost
+2.	Database changes
+2.1	Add 'users' table for login authentication - see tables.sql
+	insert default admin record
+2.2	Add columns to 'deviceinfo' table - see tables.sql
+	di_MonitorPos
+	di_MonitorHi
+	di_MonitorLo
+	di_ValueRangeHi
+	di_ValueRangeLo
+3.	Change graphing package to dygraph.js from dygraphs.com
+4.	Add 2 Monitor pages to show multiple full screen graphs
+5.	Handle PD3064 modbus devices supporting 8 K thermocouple inputs
+6.	Automatically upgrade the nimrod software via usb stick, as /media/nimrod/<USB_STICK_LABEL>/nimrod-*.tgz
+7.	Add better filtering of invalid temperatures values for DS18B20 devices
+
+
+Version 0.1.3		July 2020
+1.	Fix read timeout bug in processing output channels for devices with both inputs and outputs
+2.	Display the package version on the nimrod home page 
 
 
 Version 0.1.2		12/09/2019

@@ -32,6 +32,7 @@ public:
 	const char* GetQuery();
 	void AddSlashes( const char* szIn, char* szOut );
 	time_t ReadConfigUpdateTime();
+	bool WebClickEvent( const int iDeviceNo, const int iIOChannel );
 	void CleanupEventsTable();
 };
 

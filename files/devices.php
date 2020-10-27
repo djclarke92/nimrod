@@ -6,6 +6,13 @@
 //
 //--------------------------------------------------------------------------------------
 
+include_once( "common.php" );
+
+if ( !isset($_SESSION['us_AuthLevel']) )
+{	// access not via main page - access denied
+    func_unauthorisedaccess();
+    return;
+}
 
 function func_clear_de_array( &$de_array )
 {
@@ -70,6 +77,7 @@ function func_check_de_array( &$de_array )
 $de_array = array();
 func_clear_de_array( $de_array );
 
+$new_device = false;
 
 
 
@@ -96,7 +104,11 @@ if ( isset( $_POST['de_Hostname']) )
 
 if ( isset($_GET['DeviceNo']) )
 {
-	if ( ($line=$db->GetFields( 'devices', 'de_DeviceNo', $de_array['de_DeviceNo'], "de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname" )) !== false )
+    if ( $_GET['DeviceNo'] == 0 )
+    {
+        $new_device = true;
+    }
+	else if ( ($line=$db->GetFields( 'devices', 'de_DeviceNo', $de_array['de_DeviceNo'], "de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname" )) !== false )
 	{	// success
 		$de_array['de_ComPort'] = $line[0];
 		$de_array['de_Address'] = $line[1];
@@ -111,22 +123,25 @@ if ( isset($_GET['DeviceNo']) )
 		$de_array['error_msg'] = sprintf( "Failed to read devices table for DeviceNo=%d", $de_array['de_DeviceNo'] );
 	}
 }
-else if ( isset($_GET['DeleteDeviceNo']) )
+else if ( isset($_POST['DeleteDevice']) )
 {
-	$de_array['de_DeviceNo'] = $_GET['DeleteDeviceNo']; 
-	if ( $db->DeleteDevice( $de_array['de_DeviceNo'] ) )
+    $msg = "";
+	$de_array['de_DeviceNo'] = $_POST['de_DeviceNo']; 
+	if ( $db->DeleteDevice( $de_array['de_DeviceNo'], $msg ) )
 	{
 		$de_array['info_msg'] = sprintf( "Device deleted" );
+		$de_array['de_DeviceNo'] = 0;
 	}
 	else 
 	{
-		$de_array['error_msg'] = sprintf( "Failed to delete device with DeviceNo=%d", $de_array['de_DeviceNo'] );
+		$de_array['error_msg'] = sprintf( "Failed to delete device with DeviceNo=%d (%s)", $de_array['de_DeviceNo'], $msg );
 	}
 }
 else if ( isset($_POST['NewDevice']) || isset($_POST['UpdateDevice']) )
 {
 	if ( isset($_POST['NewDevice']) )
 	{
+	    $new_device = true;
 		$de_array['de_DeviceNo'] = 0;
 	}
 	
@@ -143,6 +158,7 @@ else if ( isset($_POST['NewDevice']) || isset($_POST['UpdateDevice']) )
 		if ( $db->UpdateDevicesTable( $de_array['de_DeviceNo'], $de_array['de_ComPort'], $de_array['de_Address'],
 			$de_array['de_NumInputs'], $de_array['de_NumOutputs'], $de_array['de_Type'], $de_array['de_Name'], $de_array['de_Hostname'] ) )
 		{	// success
+		    $new_device = false;
 			func_clear_de_array( $de_array );
 			
 			$de_array['info_msg'] = "New device saved successfully.";
@@ -158,143 +174,185 @@ else if ( isset($_POST['ClearDevice']) )
 	func_clear_de_array( $de_array );
 }
 
-
-printf( "<tr>" );
-printf( "<td>" );
-printf( "<b>Devices</b>" );
-printf( "</td>" );
-printf( "<td colspan='3' align='right'>" );
-if ( $de_array['error_msg'] != "" )
-	printf( "<div class='style-error'>%s</div>", $de_array['error_msg'] );
-else if ( $de_array['info_msg'] != "" )
-	printf( "<div class='style-info'>%s</div>", $de_array['info_msg'] );
-printf( "</td>" );
-printf( "</tr>" );
-
-
-printf( "<tr valign='top'>" );
-printf( "<td colspan='2'>" );
-	
 $devices_list = $db->ReadDevicesTable();
+
+?>
+<div class="container" style="margin-top:30px">
+
+    <!-- *************************************************************************** -->
+	<div class="row">
+
+		<div class="col-sm-4">
+			<h3>Device List</h3>
+        </div>
+		<div class="col-sm-1">
+			<a href='#devicelist' data-toggle='collapse' class='small'><i>Hide/Show</i></a>
+        </div>
+    </div>
+
+	<div id="devicelist" class="collapse <?php ($new_device || $de_array['de_DeviceNo'] != 0 ? printf("") : printf("show"))?>">
+
+    <!-- *************************************************************************** -->
+	<div class="row">
+
+		<div class="col-sm-5">
+			<?php
+			if ( $de_array['error_msg'] != "" )
+			    printf( "<p class='text-danger'>%s</p>", $de_array['error_msg'] );
+		    else if ( $de_array['info_msg'] != "" )
+		        printf( "<p class='text-info'>%s</p>", $de_array['info_msg'] );
+            ?>
+
+    		<table class='table table-striped'>
+    		<thead class="thead-light">
+              <tr>
+              <th>Type</th>
+              <th>Name</th>
+              <th>Hostname</th>
+            </thead>
+ 
+			<?php            
+            foreach ( $devices_list as $info )
+            {
+	           printf( "<tr>" );
+	           
+	           $l2 = sprintf( "<div class='small'>@%d (In %d / Out %d)</div>", $info['de_Address'], $info['de_NumInputs'], $info['de_NumOutputs'] );
+	           printf( "<td align='left'><a href='?DeviceNo=%d'>%s<br>%s</a></td>", $info['de_DeviceNo'], func_get_device_type_desc($info['de_Type']), $l2 );
+	           printf( "<td align='left'><a href='?DeviceNo=%d'>%s</a></td>", $info['de_DeviceNo'], $info['de_Name'] );
+	           $l2 = sprintf( "<div class='small'>%s</div>", $info['de_ComPort'] );
+	           printf( "<td align='left'><a href='?DeviceNo=%d'>%s<br>%s</a></td>", $info['de_DeviceNo'], $info['de_Hostname'], $l2 );
+
+	           printf( "</tr>" );
+            }            
+            ?>
+            
+			</table>
+			
+            <?php 
+            if ( $_SESSION['us_AuthLevel'] == SECURITY_LEVEL_ADMIN )
+                printf( "<p><a href='?DeviceNo=0'>Add New Device</a></p>" );
+            ?>
+		</div>
+	</div>	<!-- end of row -->
+	</div>
 	
-$table_info = array();
-$table_info[] = array( 120, "Com Port" );
-$table_info[] = array( 60, "Address" );
-$table_info[] = array( 50, "Inputs" );
-$table_info[] = array( 60, "Outputs" );
-$table_info[] = array( 80, "Type" );
-$table_info[] = array( 80, "Name" );
-$table_info[] = array( 80, "Hostname" );
-$table_info[] = array( 44, "&nbsp;" );
-func_html_header_table( $table_info );
+    <?php
+	if ( $de_array['de_Address'] != "" || $new_device )
+	{
+    ?>
 
-printf( "<table cellspacing='0' cellpadding='2' class='style-table' border='0' width='%d' height='310'>",
-func_html_get_table_width( $table_info ) );
-func_html_set_col_widths( $table_info );
-printf( "<tbody class='style-tbody'>" );
-$count = 0;
-foreach ( $devices_list as $info )
-{
-	$style = "alternateRow";
-	if ( $info['de_DeviceNo'] == $de_array['de_DeviceNo'] )
-		$style = "selectedRow";
-	else if ( ($count % 2) == 0 )
-		$style = "normalRow";
-	printf( "<tr class='%s'>", $style );
-	printf( "<td><a href='index.php?DeviceNo=%d' class='style-tablelink'>%s</a></td>",
-		$info['de_DeviceNo'], $info['de_ComPort'] );
-	printf( "<td align='center'><a href='index.php?DeviceNo=%d' class='style-tablelink'>%s</a></td>",
-		$info['de_DeviceNo'], $info['de_Address'] );
-	printf( "<td align='center'><a href='index.php?DeviceNo=%d' class='style-tablelink'>%s</a></td>",
-		$info['de_DeviceNo'], $info['de_NumInputs'] );
-	printf( "<td align='center'><a href='index.php?DeviceNo=%d' class='style-tablelink'>%s</a></td>",
-		$info['de_DeviceNo'], $info['de_NumOutputs'] );
-	printf( "<td align='center'><a href='index.php?DeviceNo=%d' class='style-tablelink'>%s</a></td>",
-		$info['de_DeviceNo'], func_get_device_type_desc($info['de_Type']) );
-	printf( "<td align='center'><a href='index.php?DeviceNo=%d' class='style-tablelink'>%s</a></td>",
-		$info['de_DeviceNo'], $info['de_Name'] );
-	printf( "<td align='center'><a href='index.php?DeviceNo=%d' class='style-tablelink'>%s</a></td>",
-		$info['de_DeviceNo'], $info['de_Hostname'] );
-	
-	$onclick = sprintf( "return confirm(\"Are you sure you want to delete device with address %s ?\")", $info['de_Address'] );
-	printf( "<td><a href='index.php?DeleteDeviceNo=%d' onclick='%s;'>delete</a></td>", $info['de_DeviceNo'], $onclick );
-	printf( "</tr>" );
-	$count += 1;
-}
+    <!-- *************************************************************************** -->
+	<div class="row">
 
-func_html_extend_table( $table_info, $count, 16 );
-printf( "</tbody>" );
-printf( "</table>" );
+		<div class="col-sm-5">
+			<h3>Device Detail</h3>
 
-printf( "<p><i>COM port is 'MCU' plus chip id for NodeMCU devices</i></p>" );
+			<?php
+			if ( $de_array['error_msg'] != "" )
+			    printf( "<p class='text-danger'>%s</p>", $de_array['error_msg'] );
+		    else if ( $de_array['info_msg'] != "" )
+		        printf( "<p class='text-info'>%s</p>", $de_array['info_msg'] );
+			
+			printf( "<div class='form-row'>" ); 
+			printf( "<div class='col'>" );
+    		printf( "<label for='de_ComPort'>COM Port: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='de_ComPort' id='de_ComPort' size='12' value='%s'> ", $de_array['de_ComPort'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
 
-printf( "<br><input type='submit' name='Refresh' value='Refresh'>" );
-printf( "</td>" );
-	
-printf( "<td colspan='2'>" );
-	
-printf( "<table>" );
-	
-printf( "<tr>" );
-printf( "<td><b>Com Port</b></td>" );
-printf( "<td><input type='text' size='12' name='de_ComPort' value='%s'></td>", $de_array['de_ComPort'] );
-printf( "</tr>" );
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col'>" );
+    		printf( "<label for='de_Name'>Name: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='de_Name' id='de_Name' size='15' value='%s'> ", $de_array['de_Name'] );
+  			printf( "</div>" );
+  			printf( "</div>" );
+  			
+  			printf( "<div class='form-row'>" );
+  			printf( "<div class='col'>" );
+  			printf( "<label for='de_Hostname'>Hostname: </label>" );
+  			printf( "</div>" );
+  			printf( "<div class='col'>" );
+  			printf( "<input type='text' class='form-control' name='de_Hostname' id='de_Hostname' size='15' value='%s'> ", $de_array['de_Hostname'] );
+  			printf( "</div>" );
+  			printf( "</div>" );
+  			
+  			printf( "<div class='form-row'>" );
+  			printf( "<div class='col'>" );
+  			printf( "<label for='de_ComPort'>Address: </label>" );
+  			printf( "</div>" );
+  			printf( "<div class='col'>" );
+  			printf( "<input type='text' class='form-control' name='de_Address' id='de_Address' size='4' value='%s'> ", $de_array['de_Address'] );
+  			printf( "</div>" );
+  			printf( "</div>" );
+  			
+  			printf( "<div class='form-row'>" );
+  			printf( "<div class='col'>" );
+  			printf( "<label for='de_NumInputs'>Num Inputs: </label>" );
+  			printf( "</div>" );
+  			printf( "<div class='col'>" );
+  			printf( "<input type='text' class='form-control' name='de_NumInputs' id='de_NumInputs' size='3' value='%s'> ", $de_array['de_NumInputs'] );
+  			printf( "</div>" );
+  			printf( "</div>" );
+  			
+  			printf( "<div class='form-row'>" );
+  			printf( "<div class='col'>" );
+  			printf( "<label for='de_NumOutputs'>Num Outputs: </label>" );
+  			printf( "</div>" );
+  			printf( "<div class='col'>" );
+  			printf( "<input type='text' class='form-control' name='de_NumOutputs' id='de_NumOutputs' size='3' value='%s'> ", $de_array['de_NumOutputs'] );
+  			printf( "</div>" );
+  			printf( "</div>" );
+  			
+  			printf( "<div class='form-row'>" );
+  			printf( "<div class='col'>" );
+  			printf( "<label for='de_Type'>Device Type: </label>" );
+  			printf( "</div>" );
+  			printf( "<div class='col'>" );
+  			printf( "<select size='1' class='form-control custom-select' name='de_Type' id='de_Type'>" );
+  			printf( "<option></option>" );
+  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_DIGITAL_IO ? "selected" : ""), E_DTD_DIGITAL_IO );
+  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_TEMPERATURE_DS ? "selected" : ""), E_DTD_TEMPERATURE_DS );
+  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_TIMER ? "selected" : ""), E_DTD_TIMER );
+  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_VOLTAGE ? "selected" : ""), E_DTD_VOLTAGE );
+  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_TEMPERATURE_K1 ? "selected" : ""), E_DTD_TEMPERATURE_K1 );
+  			printf( "</select>" );
+  			printf( "</div>" );
+  			printf( "</div>" );
+  			
+  			
+  			printf( "<div class='form-row'>" );
+  			printf( "<p class='small'><i>COM port is 'MCU' plus chip id for NodeMCU devices</i></p>" );
+  			printf( "</div>" );
+  			
+  			printf( "<div class='form-row mb-2 mt-2'>" );
+  			printf( "<p>" );
+  			printf( "<input type='hidden' class='form-control' name='de_DeviceNo' value='%d'> ", $de_array['de_DeviceNo'] );
+  			printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateDevice' id='UpdateDevice' %s>Update</button> ", ($de_array['de_DeviceNo'] == 0 || func_disabled_non_user() != "" ? "disabled" : "") );
+  			printf( "&nbsp;&nbsp;" );
+  			printf( "<button type='submit' class='btn btn-outline-dark' name='NewDevice' id='NewDevice' %s>New</button> ", func_disabled_non_user() );
+  			printf( "&nbsp;&nbsp;" );
+  			$onclick = sprintf( "return confirm(\"Are you sure you want to delete device with address %s ?\")", $de_array['de_Address'] );
+  			printf( "<button type='submit' class='btn btn-outline-dark' name='DeleteDevice' id='DeleteDevice' onclick='%s' %s>Delete</button> ", $onclick, ($de_array['de_DeviceNo'] == 0 || func_disabled_non_user() != "" ? "disabled" : "") );
+  			printf( "&nbsp;&nbsp;" );
+  			printf( "<button type='submit' class='btn btn-outline-dark' name='ClearDevice' id='ClearDevice'>Clear</button>" );
+  			printf( "</p>" );
+  			printf( "</div>" );
+  			
+            ?>
 
-printf( "<tr>" );
-printf( "<td><b>Name</b></td>" );
-printf( "<td><input type='text' size='12' name='de_Name' value='%s'></td>", $de_array['de_Name'] );
-printf( "</tr>" );
+		</div>
+	</div>	<!-- end or row -->
 
-printf( "<tr>" );
-printf( "<td><b>Hostname</b></td>" );
-printf( "<td><input type='text' size='15' name='de_Hostname' value='%s'></td>", $de_array['de_Hostname'] );
-printf( "</tr>" );
+    <?php
+	}
+    ?>
 
-printf( "<tr>" );
-printf( "<td><b>Address</b></td>" );
-printf( "<td><input type='text' size='4' name='de_Address' value='%s'></td>", $de_array['de_Address'] );
-printf( "</tr>" );
+</div>
 
-printf( "<tr>" );
-printf( "<td><b>Num Inputs</b></td>" );
-printf( "<td><input type='text' size='3' name='de_NumInputs' value='%s'></td>", $de_array['de_NumInputs'] );
-printf( "</tr>" );
-
-printf( "<tr>" );
-printf( "<td><b>Num Outputs</b></td>" );
-printf( "<td><input type='text' size='3' name='de_NumOutputs' value='%s'></td>", $de_array['de_NumOutputs'] );
-printf( "</tr>" );
-
-printf( "<tr>" );
-printf( "<td><b>Device Type</b></td>" );
-printf( "<td>" );
-printf( "<select size='1' name='de_Type'>" );
-printf( "<option>" );
-printf( "<option %s>%s", ($de_array['de_Type'] == E_DT_DIGITAL_IO ? "selected" : ""), E_DTD_DIGITAL_IO );
-printf( "<option %s>%s", ($de_array['de_Type'] == E_DT_TEMPERATURE ? "selected" : ""), E_DTD_TEMPERATURE );
-printf( "<option %s>%s", ($de_array['de_Type'] == E_DT_TIMER ? "selected" : ""), E_DTD_TIMER );
-printf( "<option %s>%s", ($de_array['de_Type'] == E_DT_VOLTAGE ? "selected" : ""), E_DTD_VOLTAGE );
-printf( "</select>" );
-printf( "</td>" );
-printf( "</tr>" );
-
-printf( "<tr>" );
-printf( "<td colspan='2'>" );
-printf( "<input type='hidden' name='de_DeviceNo' value='%d'>", $de_array['de_DeviceNo'] );
-printf( "<input type='submit' name='UpdateDevice' value='Update'>" );
-printf( "&nbsp;&nbsp;&nbsp;" );
-printf( "<input type='submit' name='NewDevice' value='New'>" );
-printf( "&nbsp;&nbsp;&nbsp;" );
-printf( "<input type='submit' name='ClearDevice' value='Clear'>" );
-printf( "</td>" );
-printf( "</tr>" );
-
-printf( "</table>" );
-
-printf( "</td>" );
-printf( "</tr>" );
-
-
-
+<?php 
 
 ?>

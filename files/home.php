@@ -8,7 +8,7 @@
 
 include_once( "common.php" );
 
-if ( !isset($_SESSION['auth_level']) )
+if ( !isset($_SESSION['us_AuthLevel']) )
 {	// access not via main page - access denied
 	func_unauthorisedaccess();
 	return;
@@ -92,6 +92,45 @@ function func_get_graph_datetime()
 	}
 }
 
+function func_get_graph_devices( $temperatures, $voltages )
+{
+    $g_devices = array();
+    foreach ( $_SESSION['GraphDevices'] as $gg )
+    {
+        $gname = "?";
+        
+        $found = false;
+        foreach ( $temperatures as $tt )
+        {
+            if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+            {
+                $found = true;
+                $gname = $tt['di_IOName'];
+                break;
+            }
+        }
+        if ( $found == false )
+        {
+            foreach ( $voltages as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
+        
+        if ( $found )
+        {
+            $g_devices[] = array( 'di_DeviceNo'=>$gg['GraphDeviceNo'], 'di_IOChannel'=>$gg['GraphIOChannel'], 'di_IOName'=>$gname );
+        }
+    }
+    
+    return $g_devices;
+}
+
 function func_is_temp( $io_type )
 {
     $rc = false;
@@ -158,13 +197,10 @@ if ( isset($_GET['CameraNo']) )
 		$_SESSION['ShowCameraFile'] = "";
 		$set_camera_mode = true;
 	}
-	else if ( $_SESSION['ShowCameraFile'] != "" )
-	{	// go back to real time view
-		$_SESSION['ShowCameraFile'] = "";
-	}
 	else if ( !isset($_GET['CameraFile']) )
 	{	// remove camera display
 		$_SESSION['ShowCameraNo'] = "";
+		$_SESSION['ShowCameraFile'] = "";
 	}
 	$gdevice_no = 0;
 	$gio_channel = 0;
@@ -172,10 +208,10 @@ if ( isset($_GET['CameraNo']) )
 }
 if ( isset($_GET['CameraFile']) )
 {
-	$_SESSION['ShowCameraFile'] = $_GET['CameraFile'];
+   	$_SESSION['ShowCameraFile'] = $_GET['CameraFile'];
 }
 
-
+// reset the list of graph devices
 if ( $gdevice_no != 0 )
 {
     $di = $db->ReadDeviceInfoDC( $gdevice_no, $gio_channel );
@@ -227,30 +263,37 @@ else if ( $delete_all_event_no != 0 )
 {
 	$db->DeleteAllEventNo( $delete_all_event_no );
 }
-else if ( isset($_POST['CurrentGraph']) )
+else if ( isset($_GET['ClearGraph']) )
+{
+    $_SESSION['GraphDevices'] = array();
+}
+else if ( isset($_GET['CurrentGraph']) )
 {
 	$_SESSION['GStartDate'] = "";
 	$_SESSION['GStartTime'] = "";
 }
-else if ( isset($_POST['GraphPlusHour']) )
+else if ( isset($_GET['GraphPlusHour']) )
 {
 	func_set_graph_datetime( $_SESSION['GStartDate'], $_SESSION['GStartTime'], 1 );
 }
-else if ( isset($_POST['GraphMinusHour']) )
+else if ( isset($_GET['GraphMinusHour']) )
 {
 	func_set_graph_datetime( $_SESSION['GStartDate'], $_SESSION['GStartTime'], -1 );
 }
-else if ( isset($_POST['GraphPlusDay']) )
+else if ( isset($_GET['GraphPlusDay']) )
 {
 	func_set_graph_datetime( $_SESSION['GStartDate'], $_SESSION['GStartTime'], 24 );
 }
-else if ( isset($_POST['GraphMinusDay']) )
+else if ( isset($_GET['GraphMinusDay']) )
 {
 	func_set_graph_datetime( $_SESSION['GStartDate'], $_SESSION['GStartTime'], -24 );
 }
 
+$records = $db->GetTableRecordCount();
 
 $devices = $db->ReadDevicesTable();
+$deviceinfo_list = $db->ReadDeviceInfoTable();
+$iolinks_list = $db->ReadIOLinksTable();
 
 $datetime = func_get_graph_datetime();
 
@@ -258,6 +301,34 @@ $temperatures = $db->GetLatestTemperatures( $_SESSION['GraphHours'], $datetime )
 $voltages = $db->GetLatestVoltages( $_SESSION['GraphHours'], $datetime );
 
 $db_size = $db->GetDatabaseSize();
+
+// check for WebClick
+$done = false;
+foreach ( $devices as $device )
+{
+    $dno = $device['de_DeviceNo'];
+    for ( $cno = 1; $cno <=16; $cno++ )
+    {
+        $wc = sprintf( "WebClick%02d%02d", $dno, $cno );
+        if ( isset($_GET[$wc]) )
+        {
+            $done = true;
+            func_create_click_file( $db, $dno, $cno );
+            
+            // sleep for 2 seconds
+            sleep(1);
+            // read the new status
+            $deviceinfo_list = $db->ReadDeviceInfoTable();
+            $iolinks_list = $db->ReadIOLinksTable();
+            break;
+        }
+    }
+    if ( $done )
+    {
+        break;
+    }
+}
+
 
 $now = getdate();
 $camera_files = array();
@@ -271,442 +342,496 @@ foreach ( $_SESSION['camera_list'] as $camera )
 }
 
 
-printf( "<tr>" );
-printf( "<td colspan='4'>" );
-
-printf( "<table width='100%%'>" );
-printf( "<tr valign='top'>" );
-printf( "<td>" );
-
-// display devices list
-printf( "<table class='style-small-table'>" );
-printf( "<tr><th>Name</th><th>Status</th></tr>" );
-foreach ( $devices as $dd )
-{
-	$failures = $db->GetDeviceFailures( $dd['de_DeviceNo'] );
-	
-	printf( "<tr>" );
-	printf( "<td><b>%s (%d)</b></td>", $dd['de_Name'], $dd['de_Address'] );
-	printf( "<td><img src='%s' height='25px'> <img src='%s' height='25px'></td>", func_get_device_status_img( $dd['de_Status'] ),
-			func_get_device_failures_img( $failures ) );
-	printf( "</tr>" );
-}
-printf( "</table>" );
-
-printf( "<br>" );
-
-// display last device failure
-$printed = false;
-printf( "<table class='style-small-table'>" );
-printf( "<tr><th>Name</th><th>Last Failure</th></tr>" );
-foreach ( $devices as $dd )
-{
-	$failures = $db->GetDeviceFailures( $dd['de_DeviceNo'] );
-	
-	if ( count($failures) > 0 )
-	{
-		$printed = true;
-		printf( "<tr>" );
-		
-		printf( "<td><b>%s</b></td>", $dd['de_Name'] );
-		
-		$onclick = sprintf( "return confirm(\"Are you sure you want to delete this event ?\")" );
-		printf( "<td>" );
-		printf( "<a href='index.php?DeleteEventNo=%d' onclick='%s;'>%s</a>", $failures[0]['ev_EventNo'], $onclick, $failures[0]['ev_Timestamp'] );
-		
-		printf( "&nbsp;&nbsp;" );
-		
-		$onclick = sprintf( "return confirm(\"Are you sure you want to delete all failure event ?\")" );
-		printf( "<a href='index.php?DeleteAllEventNo=%d' onclick='%s;'>All</a>", $failures[0]['ev_EventNo'], $onclick );
-		printf( "</td>" );
-		
-		printf( "</tr>" );
-	}
-}
-if ( !$printed )
-{
-	printf( "<tr>" );
-	printf( "<td colspan='2'>No recent failures</td>" );
-	printf( "</tr>" );
-}
-printf( "</table>" );
-
-printf( "<br>" );
-
-// display table record counts
-$records = $db->GetTableRecordCount();
-
-printf( "<table class='style-small-table'>" );
-
-printf( "<tr><td colspan=2>" );
-printf( "<table class='style-small-table'>" );
-printf( "<tr><td><b>Nimrod</b></td><td>%.1f MBytes</td></tr>", $db_size );
-printf( "</table>" );
-printf( "</td></tr>" );
-
-printf( "<tr><th>Table</th><th>Records</th></tr>" );
-
-foreach( $records as $record )
-{
-    printf( "<tr>" );
-    
-    printf( "<td>%s</td><td>%d</td>", $record['table'], $record['count'] );
-    
-    printf( "</tr>" );
-}
-
-printf( "</table>" );
-
-
-printf( "</td>" );
-printf( "<td>" );
-
-// display temperatures
-printf( "<table class='style-small-table'>" );
-printf( "<tr><th>Name</th><th>Temperature</th><th>Graph</th></tr>" );
-foreach ( $temperatures as $tt )
-{
-	printf( "<tr>" );
-	
-	if ( isset($tt['data'][0]) )
-	{
-		printf( "<td><a href='index.php?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-		printf( "<td>%s deg C</td>", func_calc_temperature( $tt['data'][0]['ev_Value'] ) );
-		printf( "<td>%s</td>", func_convert_timestamp( $tt['data'][0]['ev_Timestamp'] ) );
-	}
-	else
-	{
-		printf( "<td>%s</td>", $tt['di_IOName'] );
-		printf( "<td>? deg C</td>" );
-		printf( "<td></td>" );
-	}
-	
-	$img = "&nbsp;&nbsp;&nbsp;";
-	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
-	{
-		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
-	}
-	printf( "<td>%s</td>", $img );
-	
-	printf( "</tr>" );
-}
-printf( "</table>" );
-
-// display voltages
-printf( "<table class='style-small-table'>" );
-printf( "<tr><th>Name</th><th>Voltage</th><th>Graph</th></tr>" );
-foreach ( $voltages as $tt )
-{
-	printf( "<tr>" );
-	printf( "<td><a href='index.php?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-	printf( "<td>%s %s</td>", func_calc_voltage( $tt['data'][0]['ev_Value'], $tt['di_AnalogType'] ), $tt['di_AnalogType'] );
-	printf( "<td>%s</td>", func_convert_timestamp( $tt['data'][0]['ev_Timestamp'] ) );
-	
-	$img = "&nbsp;&nbsp;&nbsp;";
-	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
-	{
-		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
-	}
-	printf( "<td>%s</td>", $img );
-	
-	printf( "</tr>" );
-}
-printf( "</table>" );
-
-// display cameras
-printf( "<table class='style-small-table'>" );
-printf( "<tr>" );
-
-printf( "<td valign='top'>" );
-printf( "<table class='style-small-table'>" );
-printf( "<tr><th>Camera</th><th></th></tr>" );
-
-foreach ( $_SESSION['camera_list'] as $camera )
-{
-	printf( "<tr>" );
-	printf( "<td><a href='index.php?CameraNo=%s'>%s</a></td>", $camera['addr'], $camera['name'] );
-	$img = "&nbsp;&nbsp;&nbsp;";
-	if ( $_SESSION['ShowCameraNo'] == $camera['addr'] )
-	{
-		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
-	}
-	printf( "<td>%s</td>", $img );
-	printf( "</tr>" );
-}
-
-printf( "</table>" );
-printf( "</td>" );
-
-printf( "<td valign='top'>" );
-printf( "<table class='style-small-table'>" );
-printf( "<tr><th>Files</th><th></th></tr>" );
-
-foreach ( $camera_files as $file )
-{
-	printf( "<tr><td><a href='index.php?CameraNo=%s&CameraFile=%s'>%s</a></td>", $_SESSION['ShowCameraNo'], $file, $file );
-	$img = "&nbsp;&nbsp;&nbsp;";
-	if ( $_SESSION['ShowCameraFile'] == $file )
-	{
-		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
-	}
-	printf( "<td>%s</td>", $img );
-	printf( "</tr>" );
-}
-
-printf( "</table>" );
-printf( "</td>" );
-
-printf( "</tr>" );
-printf( "</table>" );
-
-
-printf( "</td>" );
-printf( "<td colspan='2' width='44%%'>" );
-
-
-if ( $_SESSION['ShowCameraNo'] != "" )
-{	// display camera stream
-	if ( $set_camera_mode )
-	{	// set MJpeg stream
-		$cmd = sprintf( "curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=setSubStreamFormat&format=1&usr=%s&pwd=%s\"", $_SESSION['ShowCameraNo'], CAMERA_USER, CAMERA_PWD );
-		$res = exec( $cmd, $out, $ret );
-	}
-	
-	if ( $_SESSION['ShowCameraFile'] != "" )
-	{
-		$file = $_SESSION['ShowCameraFile'];
-		foreach ( $_SESSION['camera_list'] as $camera )
-		{
-			if ( $_SESSION['ShowCameraNo'] == $camera['addr'] )
-			{
-				$file = sprintf( "%s/record/%s", $camera['directory'], $_SESSION['ShowCameraFile'] );
-				break;
-			}
-		}
-		printf( "%s", $file );
-
-		printf( "<video id='nimrod-player' class='video-js' controls preload='auto' poster='' data-setup='{}'>" );
-		printf( "<source src='file://%s' type='video/webm'></source>", $file );
-		printf( "<p class='vjs-no-js'>" );
-		printf( "To view this video please enable JavaScript, and consider upgrading to a web browser that supports HTML5 video</p>" );
-		printf( "</video>" );
-		                
-		printf( "<video width='400' height='225' controls>" );
-		//printf( "<source src='file://%s' type='video/webm'>", $file );	
-		printf( "<source src='file://%s' controls>", $file );
-		printf( "Your browser does not support the video tag." );
-		printf( "</video>" );
-		printf( "Camera File" );
-	}
-	else if ( func_is_external_connection() )
-	{	// external web connection
-		$cmd = sprintf( "curl --silent \"http://%s:88/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr=%s&pwd=%s\"", $_SESSION['ShowCameraNo'], CAMERA_USER, CAMERA_PWD );
-
-		echo "<img src='data:image/jpeg;base64,";
-		
-		ob_start();
-		passthru( $cmd, $out );
-		$var = ob_get_contents();
-		ob_end_clean();
-		echo base64_encode($var);
-		
-		echo "' alt='no snap shot' width='400'>";
-		printf( "Camera Snapshot" );
-	}
-	else 
-	{
-		$dest = sprintf( "%s:88", $_SESSION['ShowCameraNo'] );
-		printf( "<img src='http://%s/cgi-bin/CGIStream.cgi?cmd=GetMJStream&usr=%s&pwd=%s' alt='no mjpeg stream (%s)' width='400'>", 
-			$dest, CAMERA_USER, CAMERA_PWD, $dest );
-		printf( "Camera Stream" );
-	}
-}
-else 
-{	// display graph
-	$factor = 0;
-	$max = 100;
-	$max_points = 0;
-	$min_points = 1000;
-	$_SESSION['graph_data'] = array();
-	foreach ( $_SESSION['GraphDevices'] as $gg )
-	{
-		$atype = "V";
-		$gname = "?";
-		$gformat = "?";
-		$gvoltage = false;
-	
-		$found = false;
-		foreach ( $temperatures as $tt )
-		{
-			if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
-			{
-				$found = true;
-				$myarray = $tt;
-				$gname = $tt['di_IOName'];
-				$gformat = "degrees";
-				break;
-			}
-		}
-		if ( $found == false )
-		{
-			$gvoltage = true;
-			foreach ( $voltages as $tt )
-			{
-				if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
-				{
-					$found = true;
-					$myarray = $tt;
-					$gname = $tt['di_IOName'];
-					$gformat = "V";
-					$atype = $tt['di_AnalogType'];
-					if ( $atype == "A" )
-					{
-						$gformat = "A";
-					}
-					break;
-				}
-			}
-		}
-		
-		if ( $found )
-		{
-			$ff = intval(floor(count($myarray['data']) / $max));
-			if ( $ff > $factor )
-			{	// get the biggest factor value
-				$factor = $ff;
-			}
-			$mp = 1 + count($myarray['data']) / ($factor + 1);
-			if ( $mp > $max_points )
-			{
-				$max_points = $mp;
-			}
-			if ( count($myarray['data']) < $min_points )
-			{
-				$min_points = count($myarray['data']);
-			}
-			
-			$_SESSION['graph_data'][] = array( 'data'=>array(), 'name'=>$gname, 'myarray'=>$myarray, 'factor'=>0, 'voltage'=>$gvoltage, 'atype'=>$atype );
-		}
-	}
-
-	$removed = 0;
-	if ( $min_points < $max )
-	{
-		$max_points = $min_points;
-		foreach ( $_SESSION['graph_data'] as &$graph )
-		{
-			$remove = count($graph['myarray']['data']) - $max_points;
-			if ( $remove > 0 )
-			{
-			    $removed = $remove;
-				$data = array();
-				foreach ( array_reverse($graph['myarray']['data']) as $dd )
-				{
-					if ( $remove <= 0 )
-					{
-						$data[] = $dd;
-					}
-					$remove -= 1;
-				}
-				
-				$graph['myarray']['data'] = array_reverse($data);
-			}
-		}
-	}
-
-	foreach ( $_SESSION['graph_data'] as &$graph )
-	{
-		$graph['factor'] = $factor;
-	
-		$i = 0;
-		$data = array();
-
-		// limit data 
-		$pcount = 0;
-		$total = count($graph['myarray']['data']);
-		foreach ( array_reverse($graph['myarray']['data']) as $dd )
-		{
-			$pcount += 1;
-			$expl = explode( " ", $dd['ev_Timestamp'] );
-			if ( $gvoltage )
-				$temp = func_calc_voltage( $dd['ev_Value'], $graph['atype'] );
-			else
-				$temp = func_calc_temperature( $dd['ev_Value'] );
-
-			if ( $i == 0 )
-			{
-				$val = $temp;
-				$data[substr($expl[1],0,5)] = $temp;
-			}
-			$i += 1;
-			if ( $i > $factor )
-			{
-				$i = 0;
-			}
-			$numleft = $total - $pcount;
-			if ( $numleft < $max_points - count($data) )
-			{	// show all points from now on
-				$i = 0;
-			}
-		}
-
-		$graph['data'] = $data;
-//		printf( "(%s) data out %d", $graph['name'], count($data) ); 
-	}
-
-	$xinterval = 0;
-	if ( count($_SESSION['GraphDevices']) != 0 )
-	{
-		$xinterval = intval( $max_points / 20 );
-		printf( "<img src='./files/create_graph.php?XInterval=%d&Format=%s'>", $xinterval, $gformat );
-
-		printf( "<br>" );
-		printf( "<a href='index.php?Hours=1'><input type='button' name='Hours1' value='1 Hour' style='%s'></a>", ($_SESSION['GraphHours'] == 1 ? "font-weight: bold;" : "") );
-		printf( "<a href='index.php?Hours=3'><input type='button' name='Hours3' value='3 Hours' style='%s'></a>", ($_SESSION['GraphHours'] == 3 ? "font-weight: bold;" : "") );
-		printf( "<a href='index.php?Hours=6'><input type='button' name='Hours6' value='6 Hours' style='%s'></a>", ($_SESSION['GraphHours'] == 6 ? "font-weight: bold;" : "") );
-		printf( "<a href='index.php?Hours=12'><input type='button' name='Hours12' value='12 Hours' style='%s'></a>", ($_SESSION['GraphHours'] == 12 ? "font-weight: bold;" : "") );
-		printf( "<a href='index.php?Hours=24'><input type='button' name='Hours24' value='24 Hours' style='%s'></a>", ($_SESSION['GraphHours'] == 24 ? "font-weight: bold;" : "") );
-		printf( "<a href='index.php?Hours=48'><input type='button' name='Hours48' value='48 Hours' style='%s'></a>", ($_SESSION['GraphHours'] == 48 ? "font-weight: bold;" : "") );
-	
-		printf( "<br>" );
-		printf( "Historic: Date <input type='text' name='GStartDate' value='%s' size='8'>", $_SESSION['GStartDate'] );
-		printf( "Time <input type='text' name='GStartTime' value='%s' size='5'>", $_SESSION['GStartTime'] );
-		printf( "<input type='submit' name='GraphGo' value='Go'>" );
-		printf( "&nbsp;&nbsp;&nbsp;<input type='submit' name='CurrentGraph' value='Graph Now'>" );
-	
-		printf( "<br>" );
-		printf( "<input type='submit' name='GraphMinusHour' value='-1 hrs'>" );
-		printf( "<input type='submit' name='GraphMinusDay' value='-24 hrs'>" );
-		printf( "<input type='submit' name='GraphPlusDay' value='+24 hrs'>" );
-		printf( "<input type='submit' name='GraphPlusHour' value='+1 hrs'>" );
-	
-		printf( "<br><div id='info'>interval %d, %d, %d</div>", $xinterval, $max_points, $removed );
-
-		foreach ( $_SESSION['GraphDevices'] as $gg )
-		{
-			printf( "(%d,%d,%d)<br>", $gg['GraphDeviceNo'], $gg['GraphIOChannel'], $gg['GraphIOType'] );
-		}
-		foreach ( $_SESSION['graph_data'] as $dd )
-		{
-			printf( "%s: %d,%d,%d<br>", $dd['name'], count($dd['myarray']['data']), count($dd['data']), $dd['factor'] );
-		}
-	}
-}
-
-printf( "</td>" );
-printf( "</tr>" );
-printf( "</table>" );
-
-printf( "</td>" );
-printf( "</tr>" );
-
-printf( "<tr><td><a href='index.php?Refresh=1'><input type='button' name='Refresh' id='Refresh' value='Refresh'></a>" );
-printf( "</td>" );
-printf( "</tr>" );
-
-printf( "<tr><td>&nbsp;</td></tr>" );
-
-
 
 ?>
+
+
+<div class="container" style="margin-top:30px">
+	<!-- *************************************************************************** -->
+	<div class="row">
+		<div class="col">
+			<div class="progress">
+  				<div class="progress-bar bg-info" id='refresh-progress-bar' style="width:0%;height:10px">Refresh</div>
+  			</div>
+		</div>
+		<div class="col">
+			<div>
+				<input type='checkbox' class='form-control' style='margin: -10px 0px 0px 0px;' id='RefreshEnabled'>
+			</div>
+		</div>
+	</div>
+
+    <?php
+    $show_row_dvt = "";
+    if ( $_SESSION['ShowCameraFile'] == "" && $_SESSION['ShowCameraNo'] == "" && count($_SESSION['GraphDevices']) == 0 )
+    {
+        $show_row_dvt = "show";
+    }
+    ?>	
+			
+	<!-- *************************************************************************** -->
+	<div class="row">
+        
+		<!-- *************************************************************************** -->
+		<div class="col-sm-4">
+			<div class='row'>
+				<div class='col'>
+    				<h3>Status</h3>
+    			</div>
+    			<div class='col'>
+					<a href='#row_dvt' data-toggle='collapse' class='small'><i>Hide/Show</i></a>
+				</div>
+			</div>
+
+			<div id="row_dvt" class="collapse  <?php echo $show_row_dvt; ?>">
+            
+    		<table class='table table-striped'>
+    		<thead class="thead-light">
+              <tr>
+              <th>Name</th>
+              <th>Status</th>
+              </tr>
+            </thead>
+            <?php 
+            foreach ( $devices as $dd )
+            {
+                $failures = $db->GetDeviceFailures( $dd['de_DeviceNo'] );
+                
+                printf( "<tr>" );
+                printf( "<td><b>%s (%d)</b></td>", $dd['de_Name'], $dd['de_Address'] );
+                printf( "<td><img src='%s' height='25px'> <img src='%s' height='25px'></td>", func_get_device_status_img( $dd['de_Status'] ),
+                    func_get_device_failures_img( $failures ) );
+                printf( "</tr>" );
+            }
+            ?>
+            </table>
+            
+    		</div>
+		</div>
+
+
+		<!-- *************************************************************************** -->
+        <div class="col-sm-4">
+		<div id="row_dvt" class="collapse  <?php echo $show_row_dvt; ?>">
+            <h3>Voltages</h3>
+            
+            <table class='table table-striped'>
+            <thead class="thead-light">
+              <tr>
+              <th>Name</th>
+              <th>Value</th>
+              <th>Date</th>
+              <th>Graph</th>
+              </tr>
+            </thead>
+    
+    		<?php         
+            foreach ( $voltages as $tt )
+            {
+                $val = func_calc_voltage( $tt['data'][count($tt['data'])-1]['ev_Value'], $tt['di_AnalogType'] );
+                $class = "";
+                if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
+                    $class = "table-danger";
+                printf( "<tr class='%s'>", $class );
+            	printf( "<td><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
+            	printf( "<td>%s%s</td>", $val, $tt['di_AnalogType'] );
+            	printf( "<td>%s</td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+            	
+            	$img = "&nbsp;&nbsp;&nbsp;";
+            	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
+            	{
+            		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
+            	}
+            	printf( "<td>%s</td>", $img );
+            	
+            	printf( "</tr>" );
+            }
+            ?>
+            
+            </table>
+        </div>
+        </div>
+
+
+		<!-- *************************************************************************** -->
+        <div class="col-sm-4">
+		<div id="row_dvt" class="collapse  <?php echo $show_row_dvt; ?>">
+            <h3>Temperatures</h3>
+            
+            <table class='table table-striped'>
+            <thead class="thead-light">
+              <tr>
+              <th>Name</th>
+              <th>Value</th>
+              <th>Date</th>
+              <th>Graph</th>
+              </tr>
+            </thead>
+
+            <?php   
+            foreach ( $temperatures as $tt )
+            {
+                $val = func_calc_temperature( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                $class = "";
+                if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
+                    $class = "table-danger";
+                    
+                printf( "<tr class='%s'>", $class );
+            	
+            	if ( isset($tt['data'][count($tt['data'])-1]) )
+            	{
+            		printf( "<td><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
+            		printf( "<td>%s&#8451</td>", $val );
+            		printf( "<td>%s</td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+            	}
+            	else
+            	{
+            		printf( "<td>%s</td>", $tt['di_IOName'] );
+            		printf( "<td>? C</td>" );
+            		printf( "<td></td>" );
+            	}
+            	
+            	$img = "&nbsp;&nbsp;&nbsp;";
+            	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
+            	{
+            		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
+            	}
+            	printf( "<td>%s</td>", $img );
+            	
+            	printf( "</tr>" );
+            }
+            ?>
+                
+            </table>
+        </div>
+        </div>
+
+	</div> <!-- row -->
+	
+	
+	<?php 
+	if ( $_SESSION['ShowCameraNo'] == "" )
+	{	// show graph
+	    
+	    if ( count($_SESSION['GraphDevices']) != 0 )
+	    {
+	   ?>
+
+
+        <?php 
+        
+        // graph goes here
+        $alert_width = "8";     // percent
+        $graph_bgcolor = "#AABBCC";
+        $alert_okcolor = "#58D68D";
+        $alert_ngcolor = "#FE2E2E";
+        
+        $datetime = func_get_graph_datetime();
+        
+        $temperatures = $db->GetLatestTemperatures( $_SESSION['GraphHours'], $datetime );
+        $voltages = $db->GetLatestVoltages( $_SESSION['GraphHours'], $datetime );
+        
+        $g_devices = func_get_graph_devices( $temperatures, $voltages );
+        
+        $g_data = func_get_graph_data( $temperatures, $voltages, $g_devices );
+        func_draw_graph_div( true, "graphdiv", 1, $alert_width, $graph_bgcolor, $alert_okcolor, $alert_ngcolor, $g_data );
+        func_create_graph( $g_data, "graphdiv" );
+        ?>
+		<div class="row">
+
+            <!-- ***************************************************************************
+            -->
+			<div class="col-sm-12">
+
+            <?php 
+            printf( "<p>" );
+            printf( "<a href='?Hours=1'><input class='btn btn-outline-dark %s' type='button' name='Hours1' value='1 Hour'></a> ", ($_SESSION['GraphHours'] == 1 ? "btn-info" : "") );
+            printf( "<a href='?Hours=3'><input class='btn btn-outline-dark %s' type='button' name='Hours3' value='3 Hours'></a> ", ($_SESSION['GraphHours'] == 3 ? "btn-info" : "") );
+            printf( "<a href='?Hours=6'><input class='btn btn-outline-dark %s' type='button' name='Hours6' value='6 Hours'></a> ", ($_SESSION['GraphHours'] == 6 ? "btn-info" : "") );
+            printf( "<a href='?Hours=12'><input class='btn btn-outline-dark %s' type='button' name='Hours12' value='12 Hours'></a> ", ($_SESSION['GraphHours'] == 12 ? "btn-info" : "") );
+            printf( "<a href='?Hours=24'><input class='btn btn-outline-dark %s' type='button' name='Hours24' value='24 Hours'></a> ", ($_SESSION['GraphHours'] == 24 ? "btn-info" : "") );
+            printf( "<a href='?Hours=48'><input class='btn btn-outline-dark %s' type='button' name='Hours48' value='48 Hours'></a> ", ($_SESSION['GraphHours'] == 48 ? "btn-info" : "") );
+            printf( "<a href='?GraphMinusHour'><input class='btn btn-outline-dark' type='button' name='GraphMinusHour' value='-1 hrs'></a> " );
+            printf( "<a href='?GraphMinusDay'><input class='btn btn-outline-dark' type='button' name='GraphMinusDay' value='-24 hrs'></a> " );
+            printf( "<a href='?GraphPlusDay'><input class='btn btn-outline-dark' type='button' name='GraphPlusDay' value='+24 hrs'></a> " );
+            printf( "<a href='?GraphPlusHour'><input class='btn btn-outline-dark' type='button' name='GraphPlusHour' value='+1 hrs'></a> " );
+            printf( "</p>" );
+            
+            printf( "<p>" );
+            printf( "Historic: Date <input class='form-control' type='text' name='GStartDate' value='%s' size='8'> ", $_SESSION['GStartDate'] );
+            printf( "Time <input class='form-control' type='text' name='GStartTime' value='%s' size='5'> ", $_SESSION['GStartTime'] );
+            printf( "<a href='?GraphGo'><input class='btn btn-outline-dark' type='submit' name='GraphGo' value='Go'></a> " );
+            printf( "<a href='?CurrentGraph'><input class='btn btn-outline-dark' type='button' name='CurrentGraph' value='Graph Now'></a> " );
+            printf( "<a href='?ClearGraph'><input class='btn btn-outline-dark' type='button' name='ClearGraph' value='Clear'></a> " );
+            printf( "</p>" );
+            ?>
+
+			</div>
+		</div> <!-- row -->
+
+	<?php
+	    }
+	}
+	?>
+	
+    <?php
+    $show_row_cfd = "";
+    if ( $_SESSION['ShowCameraFile'] == "" && $_SESSION['ShowCameraNo'] == "" && count($_SESSION['GraphDevices']) == 0 )
+    {
+        $show_row_cfd = "show";
+    }
+    ?>	
+	
+
+	<!-- *************************************************************************** -->
+	<div class="row">
+
+		<!-- *************************************************************************** -->
+        <div class="col-sm-4" id='Control'>
+			<div class='row'>
+				<div class='col'>
+    				<h3>Control</h3>
+    			</div>
+    			<div class='col'>
+					<a href='#row_cfd' data-toggle='collapse' class='small'><i>Hide/Show</i></a>
+				</div>
+			</div>
+
+			<div id="row_cfd" class="collapse  <?php echo $show_row_cfd; ?>">
+
+            <table class='table table-striped'>
+            <thead class="thead-light">
+              <tr>
+              <th>Name</th>
+              <th>Output</th>
+              </tr>
+            </thead>
+            <?php
+            foreach ( $deviceinfo_list as $dinfo )
+            {
+                $ok = false;
+                $on = false;
+                $outname = "";
+                if ( isset($_POST['WebClick']) )
+                    $outname = "!";
+                switch ( $dinfo['di_IOType'] )
+                {
+                default:
+                    break;
+                case E_IO_ON_TIMER:
+                case E_IO_TOGGLE:
+                case E_IO_ON_OFF_TIMER:
+                    //$ok = true;
+                    
+                    // find any io links
+                    foreach ( $iolinks_list as $ilink )
+                    {
+                        if ( $ilink['il_InDeviceNo'] == $dinfo['di_DeviceNo'] && $ilink['il_InChannel'] == $dinfo['di_IOChannel'] )
+                        {
+                            if ( $outname != "" )
+                                $outname .= ",";
+                            $outname .= $ilink['di_IOName'];
+                            
+                            if ( $ilink['di_OutOnStartTime'] != 0 )
+                                $on = true;
+                            
+                            $ok = true;
+                        }
+                    }
+                    break;
+                }
+                
+                if ( $ok )
+                {
+                    printf( "<tr>" );
+                    
+                    printf( "<td><a class='btn btn-outline-dark %s' href='?WebClick%02d%02d=%d#Control'>%s</a></td>", 
+                        ($on ? "btn-success" : ""), $dinfo['di_DeviceNo'], $dinfo['di_IOChannel'], time(), $dinfo['di_IOName'] );
+                    printf( "<td>%s<br><div class='small %s'>%s</div></td>", $outname, ($on ? "text-success" : ""), ($on ? "(on)" : "(off)") );
+                    
+                    printf( "</tr>" );
+                }
+            }
+            ?>
+            </table>
+
+        </div>
+        </div>
+
+		<!-- *************************************************************************** -->
+        <div class="col-sm-4">
+		<div id="row_cfd" class="collapse  <?php echo $show_row_cfd; ?>">
+            <h3>Failures</h3>
+            
+            <table class='table table-striped'>
+            <thead class="thead-light">
+              <tr>
+              <th>Name</th>
+              <th>Last Failure</th>
+              </tr>
+            </thead>
+
+            <?php 
+            $printed = false;
+            foreach ( $devices as $dd )
+            {
+            	$failures = $db->GetDeviceFailures( $dd['de_DeviceNo'] );
+            	
+            	if ( count($failures) > 0 )
+            	{
+            		$printed = true;
+            		printf( "<tr>" );
+            		
+            		printf( "<td><b>%s</b></td>", $dd['de_Name'] );
+            		
+            		$onclick = sprintf( "return confirm(\"Are you sure you want to delete this event ?\")" );
+            		printf( "<td>" );
+            		printf( "<a href='?DeleteEventNo=%d' onclick='%s;'>%s</a>", $failures[0]['ev_EventNo'], $onclick, $failures[0]['ev_Timestamp'] );
+            		
+            		printf( "&nbsp;&nbsp;" );
+            		
+            		$onclick = sprintf( "return confirm(\"Are you sure you want to delete all failure events ?\")" );
+            		printf( "<a href='?DeleteAllEventNo=%d' onclick='%s;'>All</a>", $failures[0]['ev_EventNo'], $onclick );
+            		printf( "</td>" );
+            		
+            		printf( "</tr>" );
+            	}
+            }
+            if ( !$printed )
+            {
+            	printf( "<tr>" );
+            	printf( "<td colspan='2'>No recent failures</td>" );
+            	printf( "</tr>" );
+            }
+            ?>
+            
+            </table>
+        </div>
+        </div>
+
+		<!-- *************************************************************************** -->
+        <div class="col-sm-4">
+		<div id="row_cfd" class="collapse  <?php echo $show_row_cfd; ?>">
+            <h3>Database</h3>
+            
+            <table class='table table-striped'>
+            <thead class="thead-light">
+              <tr>
+              <th>Table</th>
+              <th>Records</th>
+              </tr>
+            </thead>
+
+            <?php 
+            foreach( $records as $record )
+            {
+                printf( "<tr>" );
+                
+                printf( "<td>%s</td><td>%d</td>", $record['table'], $record['count'] );
+                
+                printf( "</tr>" );
+            }
+            ?>
+
+            </table>
+        </div>
+        </div>
+	
+	</div> <!-- row -->
+	
+	
+    <?php 
+    if ( count($_SESSION['camera_list']) > 0 )
+    {
+    ?>
+	<!-- *************************************************************************** -->
+	<div class="row">
+
+		<!-- *************************************************************************** -->
+        <div class="col-sm-2">
+            <h3>Cameras</h3>
+            
+            <table class='table table-striped'>
+            <thead class="thead-light">
+              <tr>
+              <th>Camera</th>
+              <th></th>
+              </tr>
+            </thead>
+
+            <?php 
+            $dir = "";
+            foreach ( $_SESSION['camera_list'] as $camera )
+            {
+                printf( "<tr>" );
+                if ( $_SESSION['us_AuthLevel'] == SECURITY_LEVEL_ADMIN )    
+                    printf( "<td><a href='?CameraNo=%s'>%s</a></td>", $camera['addr'], $camera['name'] );
+                else
+                    printf( "<td><div class='text-muted'>%s</div></td>", $camera['name'] );
+                $img = "&nbsp;&nbsp;&nbsp;";
+                if ( $_SESSION['ShowCameraNo'] == $camera['addr'] )
+                {
+                    $dir = $camera['directory'];
+                    $img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
+                }
+                printf( "<td>%s</td>", $img );
+                printf( "</tr>" );
+            }
+            ?>
+
+            </table>
+        </div>
+
+        <?php
+        if ( $_SESSION['ShowCameraNo'] != "" )
+        {
+        ?>
+		<!-- *************************************************************************** -->
+        <div class="col-sm-6">
+            <h3>Video Files</h3>
+    		<?php
+    		if ( count($camera_files) > 0 )
+    		{
+                printf( "<div id='cameragraph' class='chart'></div><br><a href='' id='cameragraphclick'></a>" );
+                func_create_camera_graph( $camera_files, "cameragraph" );
+                
+                if ( $_SESSION['ShowCameraFile'] != "" )
+                {
+                    printf( "%s <div class='small'>(%s)</div><br>", func_get_date_from_video($_SESSION['ShowCameraFile']), $_SESSION['ShowCameraFile'] );
+                    $filemkv = sprintf( "%s%s/record/%s", CAMERA_FS_ROOT, $dir, $_SESSION['ShowCameraFile'] );
+                    $expl = explode(".", $_SESSION['ShowCameraFile'] );
+                    $basemp4 = sprintf( "%s.mp4", $expl[0] );
+                    $filemp4 = sprintf( "%s%s/record/%s", CAMERA_WEB_ROOT, $dir, $basemp4 );
+                    if ( !file_exists($filemp4) )
+                    {
+                        $cmd = sprintf( "ffmpeg -hide_banner -loglevel warning -i %s -codec copy %s", $filemkv, $filemp4 );
+                        system( $cmd );
+                        //printf( $cmd );
+                    }
+                    $filemp4x = sprintf( "%s/%s/record/%s", dirname($_SERVER['PHP_SELF']), $dir, $basemp4 );
+                    
+                    printf( "<video width='400' height='225' controls type='video/mp4'>" );
+        		    printf( "<source src='../../../%s'>", $filemp4x );
+        		    printf( "</video>" );
+                }
+    		}
+    		else
+    		{
+    		    printf( "No video files available" );
+    		}
+    		?>
+        </div>
+        <?php
+        }
+        ?>
+	
+	</div> <!-- row -->
+    <?php 
+    }
+    ?>
+	
+</div>
+
+
+
 

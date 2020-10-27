@@ -9,7 +9,7 @@ motorbike glove heater 30 minutes before my morning alarm went off if the outsid
 The Nimrod software is compiled on your standard linux desktop PC, then cross compiled for the Pi version your are using.  In theory you could compile everything on the Pi and 
 do away with the cross compiler step.
 
-Uses PHPGraphLib https://github.com/elliottb/phpgraphlib for displaying graphs.
+Uses dygraph.js from http://dygraphs.com for displaying graphs.
 
 What can you do with it ?
 * Input events can be switches, temperature values, voltage levels or time of day
@@ -33,10 +33,10 @@ Each Modbus interface device is called a "Device" in Nimrod speak.  So a "Device
 
 Once you have define a device you need to tell Nimrod what each of it's ports is connected to, this is called the "Device Info".  So for a 16DI unit you would setup input channel 1 is 
 "Kitchen switch 1", input channel 2 is "Lounge switch 1", etc. The actual connections are determined by the physical cabling between the switch and the Modbus device.  Output devices 
-are similarly defined, e.g. 8RO device channel #4 is "Car Port Lights".
+are similarly defined, e.g. 8RO device channel #4 is "Carport Lights".
 
 Now that you have defined the inputs and outputs you need to tell Nimrod how to connect them together.  This is called "IO Links".  E.g. "Kitchen switch 1" links to 
-"Car Port Lights", and you can also specify if the output is on until the switch is pressed again or automatically turns off after a set time.
+"Carport Lights", and you can also specify if the output is on until the switch is pressed again or automatically turns off after a set time.
 
 ## Supported Modbus devices
 
@@ -51,6 +51,7 @@ Wellpro modbus devices
 * WP8026ADAM		16DI - 16x digital inputs
 * WP8027ADAM		16DO - 16x digital outputs
 * WP8028ADAM		8DI/8DO - 8x digital outputs, 8x digital inputs
+* PD3064			8KT - 8 K Thermocouples
 
 ## Supported WiFi devices
 
@@ -74,10 +75,14 @@ Wellpro modbus devices
 * ./files/commonhtml.php			Common functions which include HTML output.
 * ./files/deviceinfo.php
 * ./files/devices.php
+* ./files/dygraph.js				Javascript graphing lib
+* ./files/dygraph.css				Javascript graphing lib
+* ./files/dygraph.min.js			Javascript graphing lib
+* ./files/events.php				ToDo
 * ./files/home.php
-* ./files/intro.php
+* ./files/intro.php					What is Nimrod
+* ./files/monitor.php				Full screen monitor pages 1 and 2
 * ./files/iolinks.php
-* ./files/phpgraphlib.php			PHP graphing lib
 * ./files/site_config.php
 * ./files/site_config.php.sample	Example site config file
 * ./files/styles.css
@@ -86,6 +91,8 @@ Wellpro modbus devices
 * ./scripts/build-num.sh			Update the build number automatically each time makerelease.sh is run
 * ./scripts/makerelease.sh			Create a new nimrod package
 * ./scripts/nimrod.service			Exampe Nimrod service file of the Pi
+* ./sounds/alerts.mp3
+* ./sounds/warning1.mp3
 
 
 # Raspberry Pi Model 2 B+

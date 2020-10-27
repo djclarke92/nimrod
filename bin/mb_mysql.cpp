@@ -232,3 +232,34 @@ time_t CMysql::ReadConfigUpdateTime()
 
 	return tUpdated;
 }
+
+bool CMysql::WebClickEvent( const int iDeviceNo, const int iIOChannel )
+{
+	bool bRet = false;
+	int iNumFields;
+	MYSQL_ROW row;
+	char szBuf[100];
+
+	snprintf( szBuf, sizeof(szBuf), "select unix_timestamp(ev_Timestamp) from events where ev_DeviceNo=%d and ev_IOChannel=%d", -(1000 + iDeviceNo), iIOChannel );
+	if ( RunQuery( szBuf ) != 0 )
+	{	// error
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+	else if ( (row = FetchRow( iNumFields )) )
+	{
+		bRet = true;
+	}
+
+	FreeResult();
+
+	if ( bRet )
+	{
+		snprintf( szBuf, sizeof(szBuf), "delete from events where ev_DeviceNo=%d and ev_IOChannel=%d", -(1000 + iDeviceNo), iIOChannel );
+		if ( RunQuery( szBuf ) != 0 )
+		{	// error
+			LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+		}
+	}
+
+	return bRet;
+}
