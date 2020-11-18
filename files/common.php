@@ -13,8 +13,9 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 100 );
-
+define( "THIS_DATABASE_VERSION", 107 );
+define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
+define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
 define( "SECURITY_LEVEL_NONE", 0 );
 define( "SECURITY_LEVEL_GUEST", 1 );
@@ -177,7 +178,7 @@ function func_session_init()
 function func_check_database( $db )
 {
     $version = false;
-    $query = sprintf( "select ev_value from events where ev_DeviceNo=-2" );
+    $query = sprintf( "select ev_Value from events where ev_DeviceNo=-2" );
     $result = $db->RunQuery( $query );
     if ( $line = mysqli_fetch_row($result) )
     {
@@ -185,29 +186,106 @@ function func_check_database( $db )
     }
     $db->FreeQuery($result);
     
-    if ( $version === false || $version < THIS_DATABASE_VERSION )
+    if ( $version === false || $version < 100 )
     {   // we have some work to do
         
         // add us_Features column
         $query = sprintf( "alter table users add us_Features char(10) not null default 'NNNNNNNNNN'" );
         $result = $db->RunQuery( $query );
-        if ( mysqli_affected_rows($db->db_link) <= 0 )
+        if ( func_db_warning_count($db) != 0 )
         {   // error
             ReportDBError("Failed to add us_Features column", $db->db_link );
         }
         
+
+        $version = func_update_database_version( $db, 100 );
+    }
+ 
+    if ( $version === false || $version < 107 )
+    {   // we have some work to do
         
-        // update the database version
-        if ( $version === false )
-            $query = sprintf( "insert into events (ev_DeviceNo,ev_Value) values(-2,%d)", THIS_DATABASE_VERSION );
-        else
-            $query = sprintf( "update events set ev_value=%d where ev_DeviceNo=-2", THIS_DATABASE_VERSION );
+        // add conditions table
+        $query = sprintf( "create TABLE IF NOT EXISTS `conditions` (
+            	`co_ConditionNo` int(10) unsigned NOT NULL auto_increment,	# unique record number
+            	`co_LinkNo` int(10) NOT NULL default '0',					# link to iolinks table
+            	`co_LinkDeviceNo` int(10) NOT NULL default '0',
+            	`co_LinkChannel` int(10) NOT NULL default '0',
+            	`co_LinkTest` varchar(5) NOT NULL default ' ',				# LT, GT, LE, GE, EQ, NE
+            	`co_LinkValue` decimal(6,1) NOT NULL default '0.0', 
+            	PRIMARY KEY (`co_ConditionNo`),
+            	KEY `co_linkno_index` (`co_LinkNo`) )" );
         $result = $db->RunQuery( $query );
-        if ( mysqli_affected_rows($db->db_link) <= 0 )
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to add conditions table", $db->db_link );
+        }
+
+        // drop il_LinkDeviceNo column
+        $query = sprintf( "alter table iolinks drop il_LinkDeviceNo" );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to drop il_LinkDeviceNo column", $db->db_link );
+        }
+        
+        // drop il_LinkChannel column
+        $query = sprintf( "alter table iolinks drop il_LinkChannel" );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to drop il_LinkChannel column", $db->db_link );
+        }
+        
+        // drop il_LinkTest column
+        $query = sprintf( "alter table iolinks drop il_LinkTest" );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to drop il_LinkTest column", $db->db_link );
+        }
+        
+        // drop il_LinkValue column
+        $query = sprintf( "alter table iolinks drop il_LinkValue" );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to drop il_LinkValue column", $db->db_link );
+        }
+        
+        
+        $version = func_update_database_version( $db, 107 );
+    }
+}
+
+function func_db_warning_count( $db )
+{
+    $count = -1;
+    $query = sprintf( "select @@warning_count" );
+    $result = $db->RunQuery( $query );
+    if ( $line = mysqli_fetch_row($result) )
+    {
+        $count = $line[0];
+    }
+    $db->FreeQuery($result);
+    
+    return $count;
+}
+function func_update_database_version( $db, $ver )
+{
+    // update the database version
+    $query = sprintf( "update events set ev_value=%d where ev_DeviceNo=-2", $ver );
+    $result = $db->RunQuery( $query );
+    if ( mysqli_affected_rows($db->db_link) < 0 )
+    {	// error
+        $query = sprintf( "insert into events (ev_DeviceNo,ev_Value) values(-2,%d)", $ver );
+        $result = $db->RunQuery( $query );
+        if ( mysqli_affected_rows($db->db_link) < 0 )
         {	// error
             ReportDBError("Failed to update database version", $db->db_link );
         }
     }
+    
+    return $ver;
 }
 
 function func_user_logout()
@@ -589,12 +667,12 @@ class MySQLDB
 				di_Hysteresis,di_Temperature,di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset,di_MonitorPos,
                 di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo,
                 de_Address,de_Hostname from 
-				deviceinfo,devices where di_DeviceNo=de_DeviceNo order by di_DeviceNo,di_IOChannel,di_IOType" ); 
+				deviceinfo,devices where di_DeviceNo=de_DeviceNo order by de_Address,di_IOChannel" ); 
 		$result = $this->RunQuery( $query );
 		while ( $line = mysqli_fetch_row($result) )
 		{
 			$info[] = array( 'di_DeviceInfoNo'=>$line[0], 'di_DeviceNo'=>$line[1],
-							'di_IOChannel'=>$line[2], 'di_IOName'=>$line[3], 'di_IOType'=>$line[4],
+							'di_IOChannel'=>$line[2], 'di_IOName'=>stripslashes($line[3]), 'di_IOType'=>$line[4],
 							'di_OnPeriod'=>$line[5], 'di_StartTime'=>$line[6], 'di_Hysteresis'=>$line[7], 
 							'di_Temperature'=>$line[8], 'di_OutOnStartTime'=>$line[9], 'di_OutOnPeriod'=>[10], 
 			                 'di_Weekdays'=>$line[11], 'di_AnalogType'=>$line[12], 
@@ -744,7 +822,7 @@ class MySQLDB
 	{
 		$info = array();
 		$query = sprintf( "select il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,
-				il_LinkDeviceNo,il_LinkChannel,il_LinkTest,il_LinkValue,di_IOName,di_OutOnStartTime,di_OutOnPeriod from 
+				di_IOName,di_OutOnStartTime,di_OutOnPeriod from 
 				iolinks,deviceinfo where il_OutDeviceNo=di_DeviceNo and il_OutChannel=di_IOChannel order by il_OutDeviceNo,il_OutChannel" );
 				 
 		$result = $this->RunQuery( $query );
@@ -752,9 +830,8 @@ class MySQLDB
 		{
 			$info[] = array( 'il_LinkNo'=>$line[0], 'il_InDeviceNo'=>$line[1], 'il_InChannel'=>$line[2],
 							'il_OutDeviceNo'=>$line[3], 'il_OutChannel'=>$line[4], 'il_EventType'=>$line[5],
-							'il_OnPeriod'=>$line[6], 'il_LinkDeviceNo'=>$line[7], 'il_LinkChannel'=>$line[8],
-							'il_LinkTest'=>$line[9], 'il_LinkValue'=>$line[10], 'di_IOName'=>$line[11],
-			                 'di_OutOnStartTime'=>$line[12], 'di_OutOnPeriod'=>$line[13] );
+							'il_OnPeriod'=>$line[6], 'di_IOName'=>$line[7],
+			                 'di_OutOnStartTime'=>$line[8], 'di_OutOnPeriod'=>$line[9] );
 		}
 
 		$this->FreeQuery($result);
@@ -766,16 +843,14 @@ class MySQLDB
 	{
 		$info = false;
 		$query = sprintf( "select il_LinkNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,
-				il_LinkDeviceNo,il_LinkChannel,il_LinkTest,il_LinkValue from 
-				iolinks where il_InDeviceNo=%d", $de_no );
+				from iolinks where il_InDeviceNo=%d", $de_no );
 
 		$result = $this->RunQuery( $query );
 		while ( $line = mysqli_fetch_row($result) )
 		{
 			$info[] = array( 'il_LinkNo'=>$line[0], 'il_InDeviceNo'=>$line[1], 'il_InChannel'=>$line[2], 
 							'il_OutDeviceNo'=>$line[3], 'il_OutChannel'=>$line[4], 'il_EventType'=>$line[5],
-							'il_OnPeriod'=>$line[6], 'il_LinkDeviceNo'=>$line[7], 'il_LinkChannel'=>$line[8],
-							'il_LinkTest'=>$line[9], 'il_LinkValue'=>$line[10] );
+							'il_OnPeriod'=>$line[6] );
 		}
 
 		$this->FreeQuery($result);
@@ -783,21 +858,19 @@ class MySQLDB
 		return $info;
 	}
 
-	function UpdateIOLinksTable( $il_no, $inde_no, $inch, $outde_no, $outch, $ev, $op, $link_deno, $link_ch, $link_test, $link_val )
+	function UpdateIOLinksTable( $il_no, $inde_no, $inch, $outde_no, $outch, $ev, $op )
 	{
 		if ( $il_no == 0 )
 		{	// insert
-			$query = sprintf( "insert into iolinks (il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,
-					il_LinkDeviceNo,il_LinkChannel,il_LinkTest,il_LinkValue)
-					values(%d,%d,%d,%d,%d,%d,%d,%d,'%s',%.1f)",
-					$inde_no, $inch, $outde_no, $outch, $ev, $op, $link_deno, $link_ch, $link_test, $link_val );
+			$query = sprintf( "insert into iolinks (il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod)
+					values(%d,%d,%d,%d,%d,%d)",
+					$inde_no, $inch, $outde_no, $outch, $ev, $op );
 		}
 		else
 		{
 			$query = sprintf( "update iolinks set il_InDeviceNo=%d,il_InChannel=%d,il_OutDeviceNo=%d,il_OutChannel=%d,
-					il_EventType=%d,il_OnPeriod=%d,il_LinkDeviceNo=%d,il_LinkChannel=%d,il_LinkTest='%s',il_LinkValue=%.1f
-					where il_LinkNo=%d",
-					$inde_no, $inch, $outde_no, $outch, $ev, $op, $link_deno, $link_ch, $link_test, $link_val, $il_no );
+					il_EventType=%d,il_OnPeriod=%d where il_LinkNo=%d",
+					$inde_no, $inch, $outde_no, $outch, $ev, $op, $il_no );
 		}
 		$result = $this->RunQuery( $query );
 		if ( mysqli_affected_rows($this->db_link) >= 0 )
@@ -839,6 +912,91 @@ class MySQLDB
 		
 		return false;
 	}
+
+	//*******************************************
+	//
+	//	conditions table
+	//
+	//*******************************************
+	function ReadConditionsTable( $link_no )
+	{
+	    $info = array();
+	    $query = sprintf( "select co_ConditionNo,co_LinkNo,co_LinkDeviceNo,co_LinkChannel,co_LinkTest,co_LinkValue,di_IOName from
+				conditions,deviceinfo where co_LinkNo=%d and co_LinkDeviceNo=di_DeviceNo and co_LinkChannel=di_IOChannel 
+                order by co_LinkDeviceNo", $link_no );
+	    
+	    $result = $this->RunQuery( $query );
+	    while ( $line = mysqli_fetch_row($result) )
+	    {
+	        $info[] = array( 'co_ConditionNo'=>$line[0], 'co_LinkNo'=>$line[1], 'co_LinkDeviceNo'=>$line[2], 
+	            'co_LinkChannel'=>$line[3], 'co_LinkTest'=>$line[4], 'co_LinkValue'=>$line[5], 'di_IOName'=>stripslashes($line[6]) );
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $info;
+	}
+	
+	function ConditionExists( $link_no, $device_no, $channel_no )
+	{
+	    $exists = false;
+	    $query = sprintf( "select co_ConditionNo from conditions where co_LinkNo=%d and co_LinkDeviceNo=%d and co_LinkChannel=%d",
+	        $link_no, $device_no, $channel_no );
+	    $result = $this->RunQuery( $query );
+	    if ( $line = mysqli_fetch_row($result) )
+	    {
+	        $exists = true;
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $exists;
+	}
+	
+	function UpdateConditionsTable( $co_no, $link_no, $link_deno, $link_ch, $link_test, $link_val )
+	{
+	    if ( $co_no == 0 )
+	    {	// insert
+	        $query = sprintf( "insert into conditions (co_LinkNo,co_LinkDeviceNo,co_LinkChannel,co_LinkTest,co_LinkValue)
+					values(%d,%d,%d,'%s',%.1f)",
+	            $link_no, $link_deno, $link_ch, $link_test, $link_val );
+	    }
+	    else
+	    {
+	        $query = sprintf( "update conditions set co_LinkNo=%d,co_LinkDeviceNo=%d,co_LinkChannel=%d,co_LinkTest='%s',co_LinkValue=%.1f
+					where co_ConditionNo=%d",
+	            $link_no, $link_deno, $link_ch, $link_test, $link_val, $co_no );
+	    }
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) >= 0 )
+	    {	// success
+	        $this->TouchTriggerFile();
+	        return true;
+	    }
+	    
+	    return false;
+	}
+
+	function DeleteConditions( $co_no )
+	{
+	    $ok = true;
+	    
+	    // TODO: check if we can delete the condition
+	    
+	    if ( $ok )
+	    {
+	        $query = sprintf( "delete from conditions where co_ConditionNo=%d limit 1", $co_no );
+	        $result = $this->RunQuery( $query );
+	        if ( mysqli_affected_rows($this->db_link) == 1 )
+	        {	// success
+	            return true;
+	        }
+	    }
+	    
+	    return false;
+	}
+	
+	
 	
 	//*******************************************
 	//
@@ -1187,7 +1345,7 @@ function func_convert_timestamp( $tt )
 		$expld = explode( "-", $expl[0] );
 		$explt = explode( ":", $expl[1] );
 		
-		$out = sprintf( "%02d:%02d %d/%d", $explt[0], $explt[1], $expld[2], $expld[1] );
+		$out = sprintf( "%02d:%02d %02d/%02d", $explt[0], $explt[1], $expld[2], $expld[1] );
 	}
 	else 
 	{
@@ -1719,6 +1877,7 @@ function func_get_package_number()
 function func_read_camera_files( $camera_dir, $year, $month, $day )
 {
 	$info = array();
+	$info2 = array();
 	
 	$mask = sprintf( "MDalarm_%4d%02d%02d", $year, $month, $day );
 	$dir = sprintf( "%s%s/record/", CAMERA_FS_ROOT, $camera_dir );
@@ -1729,20 +1888,39 @@ function func_read_camera_files( $camera_dir, $year, $month, $day )
 	   {
 	       if ( strstr( $entry, $mask ) != false && strstr( $entry, "mp4" ) == false )
 	       {
-	           $info[] = $entry;
+	           $info[] = array( 'file'=>$entry, 'dir'=>'record/' );
 	       }
 	   }
 	   
-	   if ( count($info) == 0 && count($list) > 0 )
+       if ( count($info) == 0 && count($list) > 0 )
 	   {   // funky date issue - camera time not being updated by ntp
 	       foreach( $list as $entry )
 	       {
 	           if ( substr( $entry, 0, 8 ) == "MDalarm_" )
 	           {
-    	           $info[] = $entry;
+    	           $info2[] = array( 'file'=>$entry, 'dir'=>'record/' );
 	           }
 	       }
-	   }
+	       
+	       // check the archive directory
+	       $dir = sprintf( "%s%s/record/archive/", CAMERA_FS_ROOT, $camera_dir );
+	       if ( is_dir($dir) )
+	       {
+	           $list = scandir( $dir );
+	           foreach( $list as $entry )
+	           {
+	               if ( strstr( $entry, $mask ) != false && strstr( $entry, "mp4" ) == false )
+	               {
+	                   $info[] = array( 'file'=>$entry, 'dir'=>'record/archive/' );
+	               }
+	           }
+	       }
+	   
+	       if ( count($info) == 0 && count($info2) > 0 )
+	       {
+	           $info = $info2;
+	       }
+       }
 	}
 	
 	sort( $info );
@@ -2155,7 +2333,7 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
 // file format is
 // 012345678901234567890123456789
 // MDalarm_yyyymmdd_hhmmss.mkv
-function func_create_camera_graph( $gdata, $divname )
+function func_create_camera_graph( $gdata, $divname, $camera_addr )
 {
     printf( "<script type='text/javascript'>" );
     
@@ -2204,12 +2382,12 @@ function func_create_camera_graph( $gdata, $divname )
     $count = 0;
     foreach ( $gdata as $data )
     {
-        $year = substr( $data, 8, 4 );
-        $mon = substr( $data, 12, 2 );
-        $day = substr( $data, 14, 2 );
-        $hour = substr( $data, 17, 2 );
-        $min = substr( $data, 19, 2 );
-        $sec = substr( $data, 21, 2 );
+        $year = substr( $data['file'], 8, 4 );
+        $mon = substr( $data['file'], 12, 2 );
+        $day = substr( $data['file'], 14, 2 );
+        $hour = substr( $data['file'], 17, 2 );
+        $min = substr( $data['file'], 19, 2 );
+        $sec = substr( $data['file'], 21, 2 );
         printf( "[new Date('%d-%02d-%02dT%02d:%02d:%02d'),1]", $year, $mon, $day, $hour, $min, $sec );
                 
         $count += 1;
@@ -2283,7 +2461,7 @@ function func_create_camera_graph( $gdata, $divname )
     printf( "    html += ('0' + dd.getSeconds()).slice(-2);" );
     printf( "    html += '.mkv';" );
     printf( "    document.getElementById('cameragraphclick').innerHTML = html;" );
-    printf( "    var href = '?CameraNo=%s&CameraFile=';", $_SESSION['ShowCameraNo'] );
+    printf( "    var href = '?CameraNo=%s&CameraFile=';", $camera_addr );
     printf( "    href += html;" );
     printf( "    document.getElementById('cameragraphclick').href = href;" );
     printf( "    document.getElementById('cameragraphclick').click()" );

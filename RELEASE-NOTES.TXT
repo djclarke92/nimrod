@@ -6,6 +6,20 @@
 
 Nimrod Release Notes and History
 
+Version 0.1.7		November 2020
+1.	Fixes to automatic database schema updates, you may need to create the 'conditions' table manually	
+2.	Add new table "conditions" to allow multiple "AND" iolink conditions when decinding to take action on an event
+	Note: any existing conditions must be reentered after upgrading to this version.
+3.	Add historical cctv video file viewing to the 'Cameras' page
+4.	Minor layout improvements to the web pages to support mobile and desktop devices
+5.	Red colour highlighting on the home page if values are out of range or the value has not been recently updated
+6.	Community contributed bug fixes, thanks Andrew F
+	- Makefile.arm changes to reference ${HOME}
+	- Typo fixed in cameras.php
+	- Improvements to README.md
+	- handle libmodbus version differences during compile
+
+
 Version 0.1.6		October 2020
 1.	Check the state of output device channels match the nimrod state and reset the state if necessary
 2.	The files/site_config.php file has 2 new camera defines CAMERA_WEB_ROOT and CAMERA_FS_ROOT, see site_config.php.sample
@@ -13,6 +27,11 @@ Version 0.1.6		October 2020
 4.	Add control of PTZ cameras via image maps
 5.	A number of minor layout changes to better support mobile devices
 6.	Add camera refresh and cycle options
+7.	Viewing camera files:
+	- Create a cctv symlink under /var/www/html to where ever your camera files are stored (/var/cctv)
+	- The guest user used by the cameras to ftp the video files needs a umask of 002 and all cctv files and directories need g+w permissions
+	- Add the guest user group to the apache user
+	- Most browsers cannot display mkv files by default, so these are now converted to mp4 format by ffmpeg before viewing
 
 
 Version 0.1.5		September 2020

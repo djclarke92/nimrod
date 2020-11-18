@@ -514,6 +514,7 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 		default:
 			LogMessage( E_MSG_ERROR, "LinkTestPassed: unsupported m_eDeviceType" );
 			break;
+
 		case E_DT_TEMPERATURE_DS:
 			dVal = CalcTemperature( iLinkChannel, true );
 			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
@@ -2238,6 +2239,7 @@ CInOutLinks::~CInOutLinks()
 void CInOutLinks::Init()
 {
 	int i;
+	int cn;
 
 	//m_DB.Connect();
 	for ( i = 0; i < MAX_IO_LINKS; i++ )
@@ -2249,11 +2251,16 @@ void CInOutLinks::Init()
 		SetOutChannel( i, 0 );
 		SetEventType( i, E_ET_CLICK );
 		SetOnPeriod( i, 0 );
-		SetLinkDeviceNo( i, 0 );
-		SetLinkChannel( i, 0 );
-		SetLinkTest( i, "" );
-		SetLinkValue( i, 0.0 );
+
+		for ( cn = 0; cn < MAX_CONDITIONS; cn++ )
+		{
+			SetLinkDeviceNo( i, cn, 0 );
+			SetLinkChannel( i, cn, 0 );
+			SetLinkTest( i, cn, "" );
+			SetLinkValue( i, cn, 0.0 );
+		}
 	}
+
 }
 
 void CInOutLinks::SetLinkNo( const int idx, const int iVal )
@@ -2327,56 +2334,96 @@ void CInOutLinks::SetOnPeriod( const int idx, const int iVal )
 	}
 }
 
-void CInOutLinks::SetLinkDeviceNo( const int idx, const int iVal )
+void CInOutLinks::SetLinkDeviceNo( const int idx, const int cn, const int iVal )
 {
-	if ( idx >= 0 && idx < MAX_IO_LINKS )
+	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
 	{
 		if ( iVal >= 0 && iVal < 0xfe )
 		{
-			m_iLinkDeviceNo[idx] = iVal;
+			m_iLinkDeviceNo[idx][cn] = iVal;
 		}
 	}
 }
 
-void CInOutLinks::SetLinkChannel( const int idx, const int iVal )
+void CInOutLinks::SetLinkChannel( const int idx, const int cn, const int iVal )
 {
-	if ( idx >= 0 && idx < MAX_IO_LINKS )
+	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
 	{
 		if ( iVal >= 0 && iVal < MAX_IO_PORTS )
 		{
-			m_iLinkChannel[idx] = iVal;
+			m_iLinkChannel[idx][cn] = iVal;
 		}
 	}
 }
 
-void CInOutLinks::SetLinkTest( const int idx, const char* szTest )
+void CInOutLinks::SetLinkTest( const int idx, const int cn, const char* szTest )
 {
-	if ( idx >= 0 && idx < MAX_IO_LINKS )
+	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
 	{
-		snprintf( m_szLinkTest[idx], sizeof(m_szLinkTest[idx]), "%s", szTest );
+		snprintf( m_szLinkTest[idx][cn], sizeof(m_szLinkTest[idx][cn]), "%s", szTest );
 	}
 }
 
-void CInOutLinks::SetLinkValue( const int idx, const double dVal )
+void CInOutLinks::SetLinkValue( const int idx, const int cn, const double dVal )
 {
-	if ( idx >= 0 && idx < MAX_IO_LINKS )
+	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
 	{
-		m_dLinkValue[idx] = dVal;
+		m_dLinkValue[idx][cn] = dVal;
 	}
 }
 
-bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, int& iOutDeviceNo, int& iOutChannel, int& iOnPeriod,
-		int& iLinkDeviceNo, int& iLinkChannel, char* szLinkTest, double& dLinkValue )
+const int CInOutLinks::GetLinkDeviceNo( const int idx, const int cn )
+{
+	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
+	{
+		return m_iLinkDeviceNo[idx][cn];
+	}
+
+	return 0;
+}
+
+const int CInOutLinks::GetLinkChannel( const int idx, const int cn )
+{
+	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
+	{
+		return m_iLinkChannel[idx][cn];
+	}
+
+	return 0;
+}
+
+const char* CInOutLinks::GetLinkTest( const int idx, const int cn )
+{
+	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
+	{
+		return m_szLinkTest[idx][cn];
+	}
+
+	return 0;
+}
+
+const double CInOutLinks::GetLinkValue( const int idx, const int cn )
+{
+	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
+	{
+		return m_dLinkValue[idx][cn];
+	}
+
+	return 0.0;
+}
+
+
+
+bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, int& iOutDeviceNo, int& iOutChannel, int& iOnPeriod, bool& bLinkTestPassed, bool& bInvertState, CDeviceList* m_pmyDevices )
 {
 	bool bRet = false;
+	int cn;
 
 	iOutDeviceNo = 0;
 	iOutChannel = 0;
 	iOnPeriod = 0;
-	iLinkDeviceNo = 0;
-	iLinkChannel = 0;
-	szLinkTest[0] = '\0';
-	dLinkValue = 0.0;
+	bLinkTestPassed = true;
+	bInvertState = false;
 
 	//LogMessage( E_MSG_INFO, "Find() %d %d", iInDeviceNo, iInChannel );
 
@@ -2390,10 +2437,38 @@ bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, i
 				iOutDeviceNo = m_iOutDeviceNo[idx];
 				iOutChannel = m_iOutChannel[idx];
 				iOnPeriod = m_iOnPeriod[idx];
-				iLinkDeviceNo = m_iLinkDeviceNo[idx];
-				iLinkChannel = m_iLinkChannel[idx];
-				snprintf( szLinkTest, sizeof(m_szLinkTest[0]), "%s", m_szLinkTest[idx] );
-				dLinkValue = m_dLinkValue[idx];
+
+				// check if the link test passes all conditions
+				for ( cn = 0; cn < MAX_CONDITIONS; cn++ )
+				{
+					if ( m_iLinkDeviceNo[idx][cn] == 0 )
+					{	// end of list
+						break;
+					}
+					else
+					{
+						int iLinkAddress;
+						int iLinkIdx;
+
+						iLinkAddress = m_pmyDevices->GetAddressForDeviceNo( m_iLinkDeviceNo[idx][cn] );
+						iLinkIdx = m_pmyDevices->GetIdxForAddr(iLinkAddress);
+
+						if ( m_pmyDevices->LinkTestPassed( iLinkIdx, m_iLinkChannel[idx][cn], m_szLinkTest[idx][cn], m_dLinkValue[idx][cn], bInvertState ) )
+						{
+							LogMessage( E_MSG_INFO, "Checking link '%s' (0x%x->%d,%d), '%s' %.1f (%d), passed", m_pmyDevices->GetInIOName(iLinkIdx,m_iLinkChannel[idx][cn]),
+									iLinkAddress, iLinkIdx, m_iLinkChannel[idx][cn], m_szLinkTest[idx][cn], m_dLinkValue[idx][cn], bInvertState );
+						}
+						else
+						{
+							LogMessage( E_MSG_INFO, "Checking link '%s' (0x%x->%d,%d), '%s' %.1f (%d), failed", m_pmyDevices->GetInIOName(iLinkIdx,m_iLinkChannel[idx][cn]),
+									iLinkAddress, iLinkIdx, m_iLinkChannel[idx][cn], m_szLinkTest[idx][cn], m_dLinkValue[idx][cn], bInvertState );
+
+							bLinkTestPassed = false;
+							break;
+						}
+
+					}
+				}
 
 				idx += 1;
 				break;
@@ -2406,19 +2481,36 @@ bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, i
 	return bRet;
 }
 
+const int CInOutLinks::FindEmptyConditionSlot( const int idx )
+{
+	int cn = -1;
+
+	if ( idx >= 0 && idx < MAX_IO_LINKS )
+	{
+		for ( cn = 0; cn < MAX_CONDITIONS; cn++ )
+		{
+			if ( m_iLinkDeviceNo[idx][cn] == 0 )
+			{	// empty slot
+				break;
+			}
+		}
+	}
+
+	return cn;
+}
 
 bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 {
 	bool bRet = true;
 	int i;
-
+	int cn;
 
 	int iNumFields;
 	MYSQL_ROW row;
 
 	// read from mysql
-	if ( myDB.RunQuery( "SELECT il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,"
-			"il_LinkDeviceNo,il_LinkChannel,il_LinkTest,il_LinkValue FROM iolinks order by il_InDeviceNo,il_InChannel") != 0 )
+	if ( myDB.RunQuery( "SELECT il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod "
+			"FROM iolinks order by il_InDeviceNo,il_InChannel") != 0 )
 	{
 		bRet = false;
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
@@ -2435,20 +2527,54 @@ bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 			SetOutChannel( i, atoi( row[4] ) );
 			SetEventType( i, (E_EVENT_TYPE)atoi( row[5] ) );
 			SetOnPeriod( i, atoi( row[6] ) );
-			SetLinkDeviceNo( i, atoi(row[7]) );
-			SetLinkChannel( i, atoi( row[8] ) );
-			SetLinkTest( i, row[9] );
-			SetLinkValue( i, atof( row[10] ) );
 
-			LogMessage( E_MSG_INFO, "IOLink: InDeviceNo:%d, InChannel:%d, OutDeviceNo:%d OutChannel:%d, EventType:%d, OnPeriod:%d LinkDeNo:%d, LinkCh:%d, LinkTest:%s, LinkVal:%.1f",
-					GetInDeviceNo(i), GetInChannel(i), GetOutDeviceNo(i), GetOutChannel(i), GetEventType(i), GetOnPeriod(i),
-					GetLinkDeviceNo(i), GetLinkChannel(i), GetLinkTest(i), GetLinkValue(i) );
+			LogMessage( E_MSG_INFO, "IOLinkNo:%d, InDeviceNo:%d, InChannel:%d, OutDeviceNo:%d, OutChannel:%d, EventType:%d, OnPeriod:%d", GetLinkNo(i),
+					GetInDeviceNo(i), GetInChannel(i), GetOutDeviceNo(i), GetOutChannel(i), GetEventType(i), GetOnPeriod(i) );
 
 			i += 1;
 		}
 	}
 
 	myDB.FreeResult();
+
+	// read the conditions
+	if ( myDB.RunQuery( "SELECT co_ConditionNo,co_LinkNo,co_LinkDeviceNo,co_LinkChannel,co_LinkTest,co_LinkValue "
+			"FROM conditions order by co_LinkNo") != 0 )
+	{
+		bRet = false;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	else
+	{
+		while ( (row = myDB.FetchRow( iNumFields )) )
+		{
+			// find the position
+			for ( i = 0; i < MAX_IO_LINKS; i++ )
+			{
+				if ( GetLinkNo(i) == atoi(row[1]) )
+				{
+					break;
+				}
+			}
+
+			if ( i >= 0 && i < MAX_IO_LINKS )
+			{
+				cn = FindEmptyConditionSlot( i );
+
+				SetLinkDeviceNo( i, cn, atoi( row[2] ) );
+				SetLinkChannel( i, cn, atoi( row[3] ) );
+				SetLinkTest( i, cn, row[4] );
+				SetLinkValue( i, cn, atof( row[5] ) );
+
+				LogMessage( E_MSG_INFO, "Conditions: IOLinkNo:%d, LinkDeNo:%d, LinkCh:%d, LinkTest:%s, LinkValue:%.1f",
+						GetLinkNo(i), GetLinkDeviceNo(i,cn), GetLinkChannel(i,cn), GetLinkTest(i,cn), GetLinkValue(i,cn) );
+			}
+			else
+			{
+				LogMessage( E_MSG_ERROR, "Condition %d, cannot find LinkNo %d", atoi(row[0]), atoi(row[1]) );
+			}
+		}
+	}
 
 	return bRet;
 }

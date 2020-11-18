@@ -12,6 +12,7 @@
 #define MAX_DEVICES					32		// across all pi's
 #define MAX_IO_PORTS				16		// max channels per modbus io device
 #define MAX_IO_LINKS				100		// across all pi's
+#define MAX_CONDITIONS				10		// per each iolink
 #define MCU_MSG_SIZE				20
 #define MAX_MCU_QUEUE				4
 #define MAX_DATA_BUFFER				10
@@ -73,6 +74,7 @@ enum E_DAY_NIGHT_STATE {
 
 
 class CMysql;
+class CDeviceList;
 class CInOutLinks {
 private:
 	int m_iLinkNo[MAX_IO_LINKS];
@@ -82,10 +84,10 @@ private:
 	int m_iOutChannel[MAX_IO_LINKS];
 	enum E_EVENT_TYPE m_eEventType[MAX_IO_LINKS];
 	int m_iOnPeriod[MAX_IO_LINKS];
-	int m_iLinkDeviceNo[MAX_IO_LINKS];
-	int m_iLinkChannel[MAX_IO_LINKS];
-	char m_szLinkTest[MAX_IO_LINKS][6];
-	double m_dLinkValue[MAX_IO_LINKS];
+	int m_iLinkDeviceNo[MAX_IO_LINKS][MAX_CONDITIONS];
+	int m_iLinkChannel[MAX_IO_LINKS][MAX_CONDITIONS];
+	char m_szLinkTest[MAX_IO_LINKS][MAX_CONDITIONS][6];
+	double m_dLinkValue[MAX_IO_LINKS][MAX_CONDITIONS];
 
 public:
 	CInOutLinks();
@@ -100,10 +102,10 @@ public:
 	const int GetOutChannel( const int idx ){ return m_iOutChannel[(idx >= 0 && idx < MAX_IO_LINKS ? idx : 0)]; };
 	const enum E_EVENT_TYPE GetEventType( const int idx ){ return m_eEventType[(idx >= 0 && idx < MAX_IO_LINKS ? idx : 0)]; };
 	const int GetOnPeriod( const int idx ){ return m_iOnPeriod[(idx >= 0 && idx < MAX_IO_LINKS ? idx : 0)]; };
-	const int GetLinkDeviceNo( const int idx ){ return m_iLinkDeviceNo[(idx >= 0 && idx < MAX_IO_LINKS ? idx : 0)]; };
-	const int GetLinkChannel( const int idx ){ return m_iLinkChannel[(idx >= 0 && idx < MAX_IO_LINKS ? idx : 0)]; };
-	const char* GetLinkTest( const int idx ){ return m_szLinkTest[(idx >= 0 && idx < MAX_IO_LINKS ? idx : 0)]; };
-	const double GetLinkValue( const int idx ){ return m_dLinkValue[(idx >= 0 && idx < MAX_IO_LINKS ? idx : 0)]; };
+	const int GetLinkDeviceNo( const int idx, const int cn );
+	const int GetLinkChannel( const int idx, const int cn );
+	const char* GetLinkTest( const int idx, const int cn );
+	const double GetLinkValue( const int idx, const int cn );
 
 	void SetLinkNo( const int idx, const int iVal );
 	void SetInDeviceNo( const int idx, const int iVal );
@@ -112,14 +114,15 @@ public:
 	void SetOutChannel( const int idx, const int iVal );
 	void SetEventType( const int idx, const enum E_EVENT_TYPE eVal );
 	void SetOnPeriod( const int idx, const int iVal );
-	void SetLinkDeviceNo( const int idx, const int iVal );
-	void SetLinkChannel( const int idx, const int iVal );
-	void SetLinkTest( const int idx, const char* szTest );
-	void SetLinkValue( const int idx, const double dVal );
+	void SetLinkDeviceNo( const int idx, const int cn, const int iVal );
+	void SetLinkChannel( const int idx, const int cn, const int iVal );
+	void SetLinkTest( const int idx, const int cn, const char* szTest );
+	void SetLinkValue( const int idx, const int cn, const double dVal );
 
 	bool ReadIOLinks( CMysql& myDB );
 
-	bool Find( const int iInAddress, const int iInSwitch, int &idx, int& iOutADdress, int& iOutChannel, int& iOnPeriod, int& iLinkDeviceNo, int& iLinkChannel, char* szLinkTest, double& dLinkValue );
+	const int FindEmptyConditionSlot( const int idx );
+	bool Find( const int iInAddress, const int iInSwitch, int &idx, int& iOutADdress, int& iOutChannel, int& iOnPeriod, bool& bLinkTestPassed, bool& bInvertState, CDeviceList* m_pmyDevices );
 };
 
 

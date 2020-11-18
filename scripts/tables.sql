@@ -63,10 +63,6 @@ create TABLE IF NOT EXISTS `iolinks` (
 	`il_OutChannel` int(10) NOT NULL default '0',				# output channel address
 	`il_EventType` int(10) NOT NULL default '0',				# event type: click, dbl click, long press
 	`il_OnPeriod` int(10) NOT NULL default '0',					# output on period if timer triggered
-	`il_LinkDeviceNo` int(10) NOT NULL default '0',
-	`il_LinkChannel` int(10) NOT NULL default '0',
-	`il_LinkTest` varchar(5) NOT NULL default ' ',				# LT, GT, LE, GE, EQ, NE
-	`il_LinkValue` decimal(4,1) NOT NULL default '0.0', 
 	PRIMARY KEY (`il_LinkNo`),
 	KEY `il_link_index` (`il_InDeviceNo`,`il_InChannel`)
 ) ;
@@ -88,7 +84,7 @@ create TABLE IF NOT EXISTS `events` (
 ) ;
 
 # table of users
-create table IF NOT EXISTS `users` (
+create TABLE IF NOT EXISTS `users` (
 	`us_Username` varchar(50) NOT NULL default '',				# user name / email address
 	`us_Name` varchar(100) NOT NULL default '',					# name
 	`us_Password` text(256) NOT NULL default '',				# SHA-256 hash
@@ -97,6 +93,18 @@ create table IF NOT EXISTS `users` (
 	PRIMARY KEY (`us_Username`),
 	KEY `us_name_index` (`us_Name`)
 );
+
+# table of link conditions
+create TABLE IF NOT EXISTS `conditions` (
+	`co_ConditionNo` int(10) unsigned NOT NULL auto_increment,	# unique record number
+	`co_LinkNo` int(10) NOT NULL default '0',					# link to iolinks table
+	`co_LinkDeviceNo` int(10) NOT NULL default '0',
+	`co_LinkChannel` int(10) NOT NULL default '0',
+	`co_LinkTest` varchar(5) NOT NULL default ' ',				# LT, GT, LE, GE, EQ, NE
+	`co_LinkValue` decimal(6,1) NOT NULL default '0.0', 
+	PRIMARY KEY (`co_ConditionNo`),
+	KEY `co_linkno_index` (`co_LinkNo`)
+) ;
 
 # add default table records:
 # 

@@ -428,14 +428,19 @@ foreach ( $_SESSION['camera_list'] as $camera )
     		<?php         
             foreach ( $voltages as $tt )
             {
-                $val = func_calc_voltage( $tt['data'][count($tt['data'])-1]['ev_Value'], $tt['di_AnalogType'] );
+                $val = 0;
+                if ( count($tt['data']) > 0 )
+                    $val = func_calc_voltage( $tt['data'][count($tt['data'])-1]['ev_Value'], $tt['di_AnalogType'] );
                 $class = "";
                 if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
                     $class = "table-danger";
                 printf( "<tr class='%s'>", $class );
-            	printf( "<td><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
+            	printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
             	printf( "<td>%s%s</td>", $val, $tt['di_AnalogType'] );
-            	printf( "<td>%s</td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+            	if ( count($tt['data']) > 0 )
+                	printf( "<td><div class='timestamp text-nowrap'>%s</div></td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+            	else
+            	    printf( "<td><div class='timestamp text-nowrap'>?</div></td>" );
             	
             	$img = "&nbsp;&nbsp;&nbsp;";
             	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
@@ -471,7 +476,9 @@ foreach ( $_SESSION['camera_list'] as $camera )
             <?php   
             foreach ( $temperatures as $tt )
             {
-                $val = func_calc_temperature( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                $val = 0;
+                if ( count($tt['data']) > 0 )
+                    $val = func_calc_temperature( $tt['data'][count($tt['data'])-1]['ev_Value'] );
                 $class = "";
                 if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
                     $class = "table-danger";
@@ -480,9 +487,9 @@ foreach ( $_SESSION['camera_list'] as $camera )
             	
             	if ( isset($tt['data'][count($tt['data'])-1]) )
             	{
-            		printf( "<td><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
+            		printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
             		printf( "<td>%s&#8451</td>", $val );
-            		printf( "<td>%s</td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+            		printf( "<td><div class='timestamp text-nowrap'>%s</div></td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
             	}
             	else
             	{
@@ -760,7 +767,7 @@ foreach ( $_SESSION['camera_list'] as $camera )
             </thead>
 
             <?php 
-            $dir = "";
+            $camera_dir = "";
             foreach ( $_SESSION['camera_list'] as $camera )
             {
                 printf( "<tr>" );
@@ -771,7 +778,7 @@ foreach ( $_SESSION['camera_list'] as $camera )
                 $img = "&nbsp;&nbsp;&nbsp;";
                 if ( $_SESSION['ShowCameraNo'] == $camera['addr'] )
                 {
-                    $dir = $camera['directory'];
+                    $camera_dir = $camera['directory'];
                     $img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
                 }
                 printf( "<td>%s</td>", $img );
@@ -793,22 +800,22 @@ foreach ( $_SESSION['camera_list'] as $camera )
     		if ( count($camera_files) > 0 )
     		{
                 printf( "<div id='cameragraph' class='chart'></div><br><a href='' id='cameragraphclick'></a>" );
-                func_create_camera_graph( $camera_files, "cameragraph" );
+                func_create_camera_graph( $camera_files, "cameragraph", $_SESSION['ShowCameraNo'] );
                 
                 if ( $_SESSION['ShowCameraFile'] != "" )
                 {
                     printf( "%s <div class='small'>(%s)</div><br>", func_get_date_from_video($_SESSION['ShowCameraFile']), $_SESSION['ShowCameraFile'] );
-                    $filemkv = sprintf( "%s%s/record/%s", CAMERA_FS_ROOT, $dir, $_SESSION['ShowCameraFile'] );
+                    $filemkv = sprintf( "%s%s/%s%s", CAMERA_FS_ROOT, $camera_dir, $camera_files[0]['dir'], $_SESSION['ShowCameraFile'] );
                     $expl = explode(".", $_SESSION['ShowCameraFile'] );
                     $basemp4 = sprintf( "%s.mp4", $expl[0] );
-                    $filemp4 = sprintf( "%s%s/record/%s", CAMERA_WEB_ROOT, $dir, $basemp4 );
+                    $filemp4 = sprintf( "%s%s/%s%s", CAMERA_WEB_ROOT, $camera_dir, $camera_files[0]['dir'], $basemp4 );
                     if ( !file_exists($filemp4) )
                     {
                         $cmd = sprintf( "ffmpeg -hide_banner -loglevel warning -i %s -codec copy %s", $filemkv, $filemp4 );
                         system( $cmd );
                         //printf( $cmd );
                     }
-                    $filemp4x = sprintf( "%s/%s/record/%s", dirname($_SERVER['PHP_SELF']), $dir, $basemp4 );
+                    $filemp4x = sprintf( "%s/%s/%s%s", dirname($_SERVER['PHP_SELF']), $camera_dir, $camera_files[0]['dir'], $basemp4 );
                     
                     printf( "<video width='400' height='225' controls type='video/mp4'>" );
         		    printf( "<source src='../../../%s'>", $filemp4x );

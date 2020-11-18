@@ -271,11 +271,45 @@ $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
     		{	
     			if ( $_SESSION['page_mode'] == "Home" )
     			{
-    			    printf( "if ( counter >= 30 ) {" );
-    			    printf( "  if ( document.getElementById('RefreshEnabled').checked ) {" );
-    				printf( "    window.location.href = '%s?RefreshEnabled';", $_SERVER['PHP_SELF'] );
-    				printf( "  }" );
-    				printf( "}" );
+    			    ?>
+    			    if ( counter >= 30 ) {
+    			      if ( document.getElementById('RefreshEnabled').checked ) {
+    				    window.location.href = '<?php echo $_SERVER['PHP_SELF']; ?>?RefreshEnabled'; 
+    				  }
+    				} else {
+            			var all = document.getElementsByClassName('timestamp');
+            			for (var i = 0; i < all.length; i++) {
+                		  // 01234567890
+                		  // hh:mm dd/mm
+                		  var dd = all[i].textContent;
+                		  var now = new Date();
+                		  var last = new Date();
+
+                		  last.setFullYear( now.getFullYear() );
+                		  last.setMonth( parseInt(dd.substr(9,2))-1 );
+                		  last.setDate( parseInt(dd.substr(6,2)) );
+                		  last.setHours( parseInt(dd.substr(0,2)) );
+                		  last.setMinutes( parseInt(dd.substr(3,2)) );
+                		  last.setSeconds( 0 );
+                		   
+                		  if ( last.getTime() + 16*60*1000 < now.getTime() ) {
+                			if ( (now.getSeconds() % 2) == 0 ) {
+                    			all[i].style.color = 'white';
+                    			all[i].style.backgroundColor = 'red';
+                			} else {
+                    			all[i].style.color = 'red';
+                				all[i].style.backgroundColor = 'transparent';
+                			}
+                		  } else if ( last.getTime() + 6*60*1000 < now.getTime() ) {
+              			    all[i].style.color = 'red';
+            				all[i].style.backgroundColor = 'transparent';
+                		  } else {
+                			all[i].style.color = 'black';
+            				all[i].style.backgroundColor = 'transparent';
+                		  }
+            			}
+    				}
+    				<?php 
     			}
     			else if ( $_SESSION['page_mode'] == "Cameras" )
     			{

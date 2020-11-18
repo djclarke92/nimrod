@@ -29,17 +29,16 @@ define( "CAMERA_USER", "camuser" );
 define( "CAMERA_PWD", "passw0rd.39" );
 
 // camera files web root
+// create a link under this directory to your camera files location or mountpoint eg ln -s /var/www/html/cctv /cctv
 define( "CAMERA_WEB_ROOT", "/var/www/html" );
-define( "CAMERA_FS_ROOT", "/home" );
+// CAMERA_FS_ROOT = the directory that contains your mountpoint
+define( "CAMERA_FS_ROOT", "/var" );
 
 // format is "ip_address:Camera_Name:PTZ_Capable:FTP_server_directory"
 define( "CAMERA_01", "192.168.1.121:Garage:false:/cctv/garage/FI9853EP_00626E570130" );
 define( "CAMERA_02", "192.168.1.122:Front Door:false:/cctv/frontdoor/FI9853EP_00626E588A36" );
 define( "CAMERA_03", "192.168.1.123:Car Port:false:/cctv/carport/FI9853EP_00626E588A46" );
-define( "CAMERA_04", "192.168.1.124:Back Yard:false:/cctv/backyard/FI9853EP_00626E6174E5" );
-define( "CAMERA_05", "192.168.1.125:Back Shed:false:/cctv/backshed/FI9853EP_00626E617511" );
-define( "CAMERA_06", "192.168.1.126:Front Yard:false:/cctv/frontyard/FI9853EP_00626E588A1C" );
-define( "CAMERA_07", "192.168.1.120:Test:true:/cctv/test/FI9821EP_00626E562835" );
+define( "CAMERA_04", "192.168.1.120:Test:true:/cctv/test/FI9821EP_00626E562835" );
 
 
 ?>

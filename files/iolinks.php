@@ -23,10 +23,11 @@ function func_clear_il_array( &$il_array )
 	$il_array['il_OutChannel'] = "";
 	$il_array['il_EventType'] = "";
 	$il_array['il_OnPeriod'] = "";
-	$il_array['il_LinkDeviceNo'] = "";
-	$il_array['il_LinkChannel'] = "";
-	$il_array['il_LinkTest'] = "";
-	$il_array['il_LinkValue'] = "";
+	$il_array['co_ConditionNo'] = 0;
+	$il_array['co_LinkDeviceNo'] = "";
+	$il_array['co_LinkChannel'] = "";
+	$il_array['co_LinkTest'] = "";
+	$il_array['co_LinkValue'] = "";
 	$il_array['error_msg'] = "";
 	$il_array['info_msg'] = "";
 }
@@ -66,6 +67,21 @@ function func_check_il_array( &$il_array )
 		$il_array['error_msg'] = "The On Period must be >= zero.";
 		return false;
 	}
+	else if ( $il_array['co_LinkDeviceNo'] == 0 && ($il_array['co_LinkTest'] != "" || $il_array['co_LinkValue'] != "") )
+	{
+	    $il_array['error_msg'] = "The Condition Link Device must be selected.";
+	    return false;
+	}
+	else if ( $il_array['co_LinkDeviceNo'] != 0 && $il_array['co_LinkTest'] == "" )
+	{
+	    $il_array['error_msg'] = "The Condition Link Test must be selected.";
+	    return false;
+	}
+	else if ( $il_array['co_LinkDeviceNo'] != 0 && $il_array['co_LinkValue'] == "" )
+	{
+	    $il_array['error_msg'] = "The Condition Link Value must be entered.";
+	    return false;
+	}
 	
 	return true;
 }
@@ -91,28 +107,13 @@ function func_get_ioname( $dd_list, $de_no, $ch, $in )
 	return $name;
 }
 
-function func_get_deviceno( $dd_list, $addr )
-{
-	$de_no = 0;
-	
-	foreach( $dd_list as $dd )
-	{
-		if ( $dd['de_Address'] == $addr )
-		{
-			$de_no = $dd['de_DeviceNo'];
-			break;
-		}	
-	}	
-	
-	return $de_no;
-}
-
 
 
 $il_array = array();
 func_clear_il_array( $il_array );
 
 $new_iolink = false;
+$new_condition = false;
 
 $ddi_list = $db->GetIOAddresses( true, false );
 $ddo_list = $db->GetIOAddresses( false, true );
@@ -123,29 +124,31 @@ if ( isset( $_GET['LinkNo']) )
 	$il_array['il_LinkNo'] = $_GET['LinkNo'];
 if ( isset( $_POST['il_LinkNo']) )
 	$il_array['il_LinkNo'] = $_POST['il_LinkNo'];
+if ( isset( $_POST['co_ConditionNo']) )
+    $il_array['co_ConditionNo'] = $_POST['co_ConditionNo'];
 if ( isset( $_POST['il_InDeviceNo']) )
 {
-	$il_array['il_InDeviceNo'] = func_get_deviceno( $ddi_list, intval($_POST['il_InDeviceNo']));
+	$il_array['il_InDeviceNo'] = intval($_POST['il_InDeviceNo']);
 	$il_array['il_InChannel'] = intval(substr($_POST['il_InDeviceNo'],3)) - 1;
 }
 if ( isset( $_POST['il_OutDeviceNo']) )
 {
-	$il_array['il_OutDeviceNo'] = func_get_deviceno( $ddo_list, intval($_POST['il_OutDeviceNo']));
+	$il_array['il_OutDeviceNo'] = intval($_POST['il_OutDeviceNo']);
 	$il_array['il_OutChannel'] = intval(substr($_POST['il_OutDeviceNo'],3)) - 1;
 }
 if ( isset( $_POST['il_EventType']) )
 	$il_array['il_EventType'] = func_get_eventtype($_POST['il_EventType']);
 if ( isset( $_POST['il_OnPeriod']) )
 	$il_array['il_OnPeriod'] = func_get_duration( $_POST['il_OnPeriod'] );
-if ( isset( $_POST['il_LinkDeviceNo']) && strlen($_POST['il_LinkDeviceNo']) > 0 )
+if ( isset( $_POST['co_LinkDeviceNo']) && strlen($_POST['co_LinkDeviceNo']) > 0 )
 {
-	$il_array['il_LinkDeviceNo'] = func_get_deviceno( $ddi_list, intval($_POST['il_LinkDeviceNo']));
-	$il_array['il_LinkChannel'] = intval(substr($_POST['il_LinkDeviceNo'],3)) - 1;
+	$il_array['co_LinkDeviceNo'] = intval($_POST['co_LinkDeviceNo']);
+	$il_array['co_LinkChannel'] = intval(substr($_POST['co_LinkDeviceNo'],3)) - 1;
 }
-if ( isset( $_POST['il_LinkTest']) )
-	$il_array['il_LinkTest'] = $_POST['il_LinkTest'];
-if ( isset( $_POST['il_LinkValue']) )
-	$il_array['il_LinkValue'] = $_POST['il_LinkValue'];
+if ( isset( $_POST['co_LinkTest']) )
+	$il_array['co_LinkTest'] = $_POST['co_LinkTest'];
+if ( isset( $_POST['co_LinkValue']) )
+	$il_array['co_LinkValue'] = $_POST['co_LinkValue'];
 
 
 
@@ -155,8 +158,7 @@ if ( isset($_GET['LinkNo']) )
     {
         $new_iolink = true;
     }
-	else if ( ($line=$db->GetFields( 'iolinks', 'il_LinkNo', $il_array['il_LinkNo'], "il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,
-			il_LinkDeviceNo,il_LinkChannel,il_LinkTest,il_LinkValue" )) !== false )
+	else if ( ($line=$db->GetFields( 'iolinks', 'il_LinkNo', $il_array['il_LinkNo'], "il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod" )) !== false )
 	{	// success
 		$il_array['il_InDeviceNo'] = $line[0];
 		$il_array['il_InChannel'] = $line[1];
@@ -164,24 +166,68 @@ if ( isset($_GET['LinkNo']) )
 		$il_array['il_OutChannel'] = $line[3];
 		$il_array['il_EventType'] = $line[4];
 		$il_array['il_OnPeriod'] = $line[5];
-		$il_array['il_LinkDeviceNo'] = $line[6];
-		$il_array['il_LinkChannel'] = $line[7];
-		$il_array['il_LinkTest'] = $line[8];
-		$il_array['il_LinkValue'] = $line[9];
+
+		$il_array['co_ConditionNo'] = 0;
+		$il_array['co_LinkDeviceNo'] = "";
+		$il_array['co_LinkChannel'] = "";
+		$il_array['co_LinkTest'] = "";
+		$il_array['co_LinkValue'] = "";
 		
 		if ( $il_array['il_OnPeriod'] == 0 )
 			$il_array['il_OnPeriod'] = "";
-		if ( $il_array['il_LinkDeviceNo'] == 0 )
-			$il_array['il_LinkValue'] = "";
 	}
 	else
 	{
 		$il_array['error_msg'] = sprintf( "Failed to read iolinks table for LinkNo=%d", $il_array['il_LinkNo'] );
 	}
 }
+
+if ( isset($_GET['ConditionNo']) )
+{
+    $il_array['co_ConditionNo'] = $_GET['ConditionNo'];
+    
+    if ( ($line=$db->GetFields( 'conditions', 'co_ConditionNo', $il_array['co_ConditionNo'], "co_LinkDeviceNo,co_LinkChannel,co_LinkTest,co_LinkValue" )) !== false )
+    {	// success
+        $il_array['co_LinkDeviceNo'] = $line[0];
+        $il_array['co_LinkChannel'] = $line[1];
+        $il_array['co_LinkTest'] = $line[2];
+        $il_array['co_LinkValue'] = $line[3];
+    
+        if ( $il_array['co_LinkDeviceNo'] == 0 )
+            $il_array['co_LinkValue'] = "";
+    }
+    else
+    {
+        $il_array['error_msg'] = sprintf( "Failed to read conditions table for ConditionNo=%d", $il_array['co_ConditionNo'] );
+    }
+}
+
+
+if ( isset($_POST['DeleteCondition']) )
+{
+    $il_array['co_ConditionNo'] = $_POST['co_ConditionNo'];
+    
+    if ( $db->DeleteConditions( $il_array['co_ConditionNo'] ) )
+    {
+        $il_array['info_msg'] = sprintf( "Condition deleted" );
+        //$new_iolink = false;
+        //func_clear_il_array( $il_array );
+        
+        $il_array['co_ConditionNo'] = 0;
+        $il_array['co_LinkDeviceNo'] = "";
+        $il_array['co_LinkChannel'] = "";
+        $il_array['co_LinkTest'] = "";
+        $il_array['co_LinkValue'] = "";
+    }
+    else
+    {
+        $il_array['error_msg'] = sprintf( "Failed to delete condition with ConditionNo=%d", $il_array['co_ConditionNo'] );
+    }
+}
 else if ( isset($_POST['DeleteIOLink']) )
 {
-	$il_array['il_LinkNo'] = $_POST['il_LinkNo']; 
+	$il_array['il_LinkNo'] = $_POST['il_LinkNo'];
+	
 	if ( $db->DeleteIOLinks( $il_array['il_LinkNo'] ) )
 	{
 		$il_array['info_msg'] = sprintf( "IOLink deleted" );
@@ -204,19 +250,82 @@ else if ( isset($_POST['NewIOLink']) || isset($_POST['UpdateIOLink']) )
 	if ( func_check_il_array( $il_array ) )
 	{
 		if ( $db->UpdateIOLinksTable( $il_array['il_LinkNo'], $il_array['il_InDeviceNo'], $il_array['il_InChannel'], $il_array['il_OutDeviceNo'],
-			$il_array['il_OutChannel'], $il_array['il_EventType'], $il_array['il_OnPeriod'], $il_array['il_LinkDeviceNo'], $il_array['il_LinkChannel'],
-			$il_array['il_LinkTest'], $il_array['il_LinkValue'] ) )
+			$il_array['il_OutChannel'], $il_array['il_EventType'], $il_array['il_OnPeriod'] ) )
 		{	// success
-		    $new_iolink = false;
-			func_clear_il_array( $il_array );
-			
-			$il_array['info_msg'] = "New iolink saved successfully.";
+		    if ( $new_iolink )
+    		    $il_array['info_msg'] = "New iolink saved successfully.";
+		    else
+		        $il_array['info_msg'] = "Updated iolink saved successfully.";
+		    
+                
+            if ( $il_array['co_LinkDeviceNo'] != "" )
+	        {  // save the new condition
+	            if ( $db->UpdateConditionsTable( $il_array['co_ConditionNo'], $il_array['il_LinkNo'], $il_array['co_LinkDeviceNo'], $il_array['co_LinkChannel'], $il_array['co_LinkTest'], $il_array['co_LinkValue'] ) )
+	            {  // success
+	                if ( $new_iolink )
+	                    $il_array['info_msg'] = "New iolink/condition saved successfully.";
+	                else
+	                    $il_array['info_msg'] = "Updated iolink/condition saved successfully.";
+	                        
+	                //$new_iolink = false;
+	                //func_clear_il_array( $il_array );
+	            }
+	            else
+	            {
+	                $il_array['error_msg'] = sprintf( "Failed to add condition record" );
+	            }
+	        }
+		    else
+		    {
+    		    $new_iolink = false;
+	   		    func_clear_il_array( $il_array );
+		    }
 		}
 		else
 		{
 			$il_array['error_msg'] = sprintf( "Failed to update IOLink record %d", $il_array['il_LinkNo'] );
 		}
 	}
+}
+else if ( isset($_POST['NewCondition']) || isset($_POST['UpdateCondition']) )
+{
+    if ( isset($_POST['NewCondition']) )
+    {
+        $new_condition = true;
+        $il_array['co_ConditionNo'] = 0;
+    }
+    
+    if ( func_check_il_array( $il_array ) )
+    {
+        $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
+        
+        if ( $new_condition && $db->ConditionExists( $il_array['il_LinkNo'], $il_array['co_LinkDeviceNo'], $il_array['co_LinkChannel'] ) )
+        {
+            $il_array['error_msg'] = sprintf( "The condition record already exists" );
+        }
+        else if ( $il_array['co_LinkDeviceNo'] == 0 )
+        {
+            $il_array['error_msg'] = "The Condition Device, Test and Value must be entered.";
+        }
+        else if ( count($co_list) >= MAX_CONDITIONS )
+        {
+            $il_array['error_msg'] = sprintf( "The maximum of %d conditions already exist for this iolink", MAX_CONDITIONS );
+        }
+        else if ( $db->UpdateConditionsTable( $il_array['co_ConditionNo'], $il_array['il_LinkNo'], $il_array['co_LinkDeviceNo'], $il_array['co_LinkChannel'], $il_array['co_LinkTest'], $il_array['co_LinkValue'] ) )
+        {  // success
+            if ( $new_condition )
+                $il_array['info_msg'] = "New iolink/condition saved successfully.";
+            else
+                $il_array['info_msg'] = "Updated iolink/condition saved successfully.";
+                
+            //$new_condition = false;
+            //func_clear_il_array( $il_array );
+        }
+        else
+        {
+            $il_array['error_msg'] = sprintf( "Failed to add condition record" );
+        }
+    }
 }
 else if ( isset($_POST['ClearIOLink']) )
 {
@@ -225,6 +334,7 @@ else if ( isset($_POST['ClearIOLink']) )
 
 
 $il_list = $db->ReadIOLinksTable();
+$co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
 
 
 ?>
@@ -320,7 +430,7 @@ $il_list = $db->ReadIOLinksTable();
 		        $sel = "";
 		        if ( $dd['de_DeviceNo'] == $il_array['il_InDeviceNo'] && $dd['di_IOChannel'] == $il_array['il_InChannel'] )
 		            $sel = "selected";
-	            printf( "<option %s>%02d.%02d %s</option>", $sel, $dd['de_Address'], $dd['di_IOChannel']+1, $dd['di_IOName'] );
+	            printf( "<option %s>%02d.%02d %s</option>", $sel, $dd['de_DeviceNo'], $dd['di_IOChannel']+1, $dd['di_IOName'] );
 		    }
 	        printf( "</select>" );
 	        printf( "</div>" );
@@ -352,7 +462,7 @@ $il_list = $db->ReadIOLinksTable();
 		        $sel = "";
 		        if ( $dd['de_DeviceNo'] == $il_array['il_OutDeviceNo'] && $dd['di_IOChannel'] == $il_array['il_OutChannel'] )
 		            $sel = "selected";
-		        printf( "<option %s>%02d.%02d %s</option>", $sel, $dd['de_Address'], $dd['di_IOChannel']+1, $dd['di_IOName'] );
+		        printf( "<option %s>%02d.%02d %s</option>", $sel, $dd['de_DeviceNo'], $dd['di_IOChannel']+1, $dd['di_IOName'] );
 		    }
 		    printf( "</select>" );
 		    printf( "</div>" );
@@ -367,19 +477,49 @@ $il_list = $db->ReadIOLinksTable();
     		printf( "</div>" );
     		printf( "</div>" );
     		
+    		printf( "<div class='card bg-light'>" );
+    		printf( "<div class='card-body'>" );
+    		
     		printf( "<div class='form-row'>" );
     		printf( "<div class='col'>" );
-    		printf( "<label for='il_LinkDeviceNo'>Condition Link: </label>" );
+
+    		printf( "<table class='table table-striped table-bordered'>" );
+    		printf( "<thead>" );
+    		printf( "<tr>" );
+    		printf( "<th>Conditions %s</th>", (count($co_list) == 0 ? " (none)" : "") );
+    		printf( "</tr>" );
+    		printf( "</thead>" );
+    		printf( "<tbody>" );
+    		
+    		foreach ( $co_list as $co )
+    		{
+    		    printf( "<tr>" );
+    		    $sel = "";
+    		    if ( $co['co_ConditionNo'] == $il_array['co_ConditionNo'] )
+    		        $sel = "selected";
+   		        printf( "<td><a href='?ConditionNo=%d&LinkNo=%d'>%02d.%02d %s %s %.1f</a></td>", $co['co_ConditionNo'], $il_array['il_LinkNo'], $co['co_LinkDeviceNo'], $co['co_LinkChannel']+1, 
+   		            $co['di_IOName'], $co['co_LinkTest'], $co['co_LinkValue'] );
+   		        printf( "<tr>" );
+    		}
+    		printf( "</tbody>" );
+    		printf( "</table>" );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col'>" );
+    		printf( "<label for='co_LinkDeviceNo'>Condition Link: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<select class='form-control custom-select' name='il_LinkDeviceNo' id='ilLinkDeviceNo size='1'>" );
+    		printf( "<select class='form-control custom-select' name='co_LinkDeviceNo' id='co_LinkDeviceNo size='1'>" );
     		printf( "<option></option>" );
     		foreach ( $ddi_list as $dd )
     		{
     		    $sel = "";
-    		    if ( $dd['de_DeviceNo'] == $il_array['il_LinkDeviceNo'] && $dd['di_IOChannel'] == $il_array['il_LinkChannel'] )
+    		    if ( $dd['de_DeviceNo'] == $il_array['co_LinkDeviceNo'] && $dd['di_IOChannel'] == $il_array['co_LinkChannel'] )
     		        $sel = "selected";
-    		    printf( "<option %s>%02d.%02d %s</option>", $sel, $dd['de_Address'], $dd['di_IOChannel']+1, $dd['di_IOName'] );
+    		    printf( "<option %s>%02d.%02d %s</option>", $sel, $dd['de_DeviceNo'], $dd['di_IOChannel']+1, $dd['di_IOName'] );
     		}
     		printf( "</select>" );
     		printf( "</div>" );
@@ -387,20 +527,20 @@ $il_list = $db->ReadIOLinksTable();
     		
     		printf( "<div class='form-row'>" );
     		printf( "<div class='col'>" );
-    		printf( "<label for='il_LinkTest'>Operator: </label>" );
+    		printf( "<label for='co_LinkTest'>Operator: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<select class='form-control custom-select' name='il_LinkTest' id='il_LinkTest' size='1'>" );
+    		printf( "<select class='form-control custom-select' name='co_LinkTest' id='co_LinkTest' size='1'>" );
     		printf( "<option></option>" );
     		foreach ( $_SESSION['link_tests'] as $dd )
     		{
     		    $sel = "";
-    		    if ( $dd == $il_array['il_LinkTest'] )
+    		    if ( $dd == $il_array['co_LinkTest'] )
     		        $sel = "selected";
     		    printf( "<option %s>%s</option>", $sel, $dd );
     		}
     		printf( "</select>" );
-    		if ( strstr( $il_array['il_LinkTest'], "/" ) !== false )
+    		if ( strstr( $il_array['co_LinkTest'], "/" ) !== false )
     		{
     		    printf( " (Invert State)" );
     		}
@@ -409,25 +549,36 @@ $il_list = $db->ReadIOLinksTable();
     		
     		printf( "<div class='form-row'>" );
     		printf( "<div class='col'>" );
-    		printf( "<label for='il_LinkValue'>Value: </label>" );
+    		printf( "<label for='co_LinkValue'>Value: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' size='4' name='il_LinkValue' id='il_LinkValue' value='%s'>", $il_array['il_LinkValue'] );
+    		printf( "<input type='text' class='form-control' size='4' name='co_LinkValue' id='co_LinkValue' value='%s'>", $il_array['co_LinkValue'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		
+    		printf( "<div class='form-row mt-2'>" );
+    		printf( "<div class='col'>" );
+    		printf( "<button type='submit' class='btn btn-outline-dark' name='NewCondition' id='NewCondition' %s>New Condition</button>", func_disabled_non_admin() );
+    		printf( "&nbsp;&nbsp;" );
+    		$onclick = sprintf( "return confirm(\"Are you sure you want to delete condition #%s ?\")", $il_array['co_ConditionNo'] );
+    		printf( "<button type='submit' class='btn btn-outline-dark' name='DeleteCondition' id='DeleteCondition' onclick='%s' %s>Delete Condition</button>", $onclick, ($il_array['co_ConditionNo'] == 0 || func_disabled_non_admin() != "" ? "disabled" : "") );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		printf( "</div>" );   // card body end
+    		printf( "</div>" );   // card end
+    		
     		printf( "<div class='form-row mb-2 mt-2'>" );
-    		printf( "<p>" );
     		printf( "<input type='hidden' name='il_LinkNo' value='%d'>", $il_array['il_LinkNo'] );
+    		printf( "<input type='hidden' name='co_ConditionNo' value='%d'>", $il_array['co_ConditionNo'] );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateIOLink' id='UpdateIOLink' %s>Update</button>", ($il_array['il_LinkNo'] == 0 || func_disabled_non_admin() != "" ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;" );
-    		printf( "<button type='submit' class='btn btn-outline-dark' name='NewIOLink' id='NewIOLink' %s>New</button>", func_disabled_non_admin() );
+    		printf( "<button type='submit' class='btn btn-outline-dark' name='NewIOLink' id='NewIOLink' %s>New Link</button>", func_disabled_non_admin() );
     		printf( "&nbsp;&nbsp;" );
-    		$onclick = sprintf( "return confirm(\"Are you sure you want to delete iolink with address %s ?\")", $il_array['il_InDeviceNo'] );
-    		printf( "<button type='submit' class='btn btn-outline-dark' name='DeleteIOLink' id='DeleteIOLink' onclick='%s' %s>Delete</button>", $onclick, ($il_array['il_LinkNo'] == 0 || func_disabled_non_admin() != "" ? "disabled" : "") );
+    		$onclick = sprintf( "return confirm(\"Are you sure you want to delete iolink for device %s ?\")", $il_array['il_InDeviceNo'] );
+    		printf( "<button type='submit' class='btn btn-outline-dark' name='DeleteIOLink' id='DeleteIOLink' onclick='%s' %s>Delete Link</button>", $onclick, ($il_array['il_LinkNo'] == 0 || func_disabled_non_admin() != "" ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;" );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='ClearIOLink' id='ClearIOLink'>Clear</button>" );
-    		printf( "</p>" );
     		printf( "</div>" );
     		
             ?>

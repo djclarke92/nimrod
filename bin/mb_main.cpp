@@ -456,7 +456,7 @@ void TestFunc()
 	tv.tv_sec = 1;
 	tv.tv_usec = 0;
 
-#ifdef __arm__
+#if LIBMODBUS_VERSION_CHECK(3,1,0)
 	modbus_set_response_timeout( ctx, tv.tv_sec, tv.tv_usec );
 #else
 	modbus_set_response_timeout( ctx, &tv );

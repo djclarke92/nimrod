@@ -88,8 +88,8 @@ function func_check_di_array(&$di_array)
     if ($di_array['de_Address'] === "") {
         $di_array['error_msg'] = "You must select the Device Address.";
         return false;
-    } else if ($di_array['di_IOChannel'] < 0 || $di_array['di_IOChannel'] > 15) {
-        $di_array['error_msg'] = "You must enter the IO Channel.";
+    } else if ($di_array['di_IOChannel'] < 0 || $di_array['di_IOChannel'] > MAX_IO_PORTS-1 ) {
+        $di_array['error_msg'] = sprintf( "You must enter the IO Channel in the range 1 to %d.", MAX_IO_PORTS );
         return false;
     } else if ($di_array['di_IOName'] == "") {
         $di_array['error_msg'] = "You must enter the Name.";

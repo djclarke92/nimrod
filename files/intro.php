@@ -57,16 +57,16 @@ if ( $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL_NONE )
 			<p>A home automation project based on the Raspberry Pi, Modbus IO devices and NodeMCU modules. The control software is written in C++ and the web configuration is in
 			PHP7, Bootstrap and JQuery and uses MySQL/MariaDB as the database</p>
 			<h3>Some Links</h3>
-			<p>The Nimrod source is available on Github.</p>
+			<p>The <a class="" target='_blank' href="https://github.com/djclarke92/nimrod">Nimrod source</a> is available on Github.</p>
 			<ul class="nav nav-pills flex-column">
 				<li class="nav-item">
-				<a class="nav-link" href="https://github.com/djclarke92/nimrod">Nimrod on Github</a>
+				<a class="nav-link" target='_blank' href="http://libmodbus.org/">Lib Modbus</a>
 				</li>
 				<li class="nav-item">
-				<a class="nav-link" href="http://libmodbus.org/">Lib Modbus</a>
+				<a class="nav-link" target='_blank' href="https://www.raspberrypi.org/">Raspberry Pi</a>
 				</li>
 				<li class="nav-item">
-				<a class="nav-link" href="https://www.raspberrypi.org/">Raspberry Pi</a>
+				<a class="nav-link" target='_blank' href="https://dygraphs.com/">Dygraphs</a>
 				</li>
 			</ul>
 			<hr class="d-sm-none">

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Nimrod script to archive/delete cctv video files
 # Run from crontab at 4:20am or some other time
+# 20 4 * * * /home/<user>/bin/archive_cctv.sh 2>&1  
 
 BASE=/var/cctv
 DAYS=45

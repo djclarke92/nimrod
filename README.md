@@ -22,10 +22,34 @@ Communication with each modbus device is polled.  All digital inputs are active 
 The Nimrod web page also supports displaying CCTV camera images and video streams, to do this you need the mount the CCTV image storage filesystem onto the Pi (edit /etc/fstab and 
 create /etc/.smbpwd).  The camera definitions are in the file/site_config.conf file.
 1.	/etc/fstab example
-	//<SERVER_IP_ADDRESS>/cctv  /cctv   cifs    auto,gid=users,file_mode=0660,dir_mode=0660,iocharset=utf8,domain=YOURDOMAIN,credentials=/etc/.smbpwd  0 0
+	//<SERVER_IP_ADDRESS>/cctv  /cctv   cifs    auto,gid=users,file_mode=0660,dir_mode=0660,iocharset=utf8,credentials=/etc/.smbpwd  0 0
 2.	/etc/.smbpwd example, mode must be 0600
 	username=<some_user_name>
 	password=<some_password>
+	domain=YOURSMBWORKGROUP
+
+Note that for each server using a guest account, you may wish to specify an additional share in /etc/samba/smb.conf
+thus;
+
+[cctv]
+        comment = cctv
+        inherit acls = Yes
+        path = /cctv
+        read only = No
+        vfs objects =
+[cctv2]
+        comment = cctv2
+        inherit acls = Yes
+        path = /cctv
+        read only = No
+        vfs objects =
+
+Add a share for each additional server that will connect using the same account. In /etc/fstab, specifiy the new share name for each additional server
+//<SERVER_IP_ADDRESS/cctv2, etc
+
+This works around some Windows/samba peculiarities and allows conflict-free file/directory access.
+
+Alternatively, you could use NFS instead, if you aren't using Windows PC's to access the camera files.
 
 ## Devices, Device Info and IO Links
 
@@ -91,6 +115,7 @@ Wellpro modbus devices
 * ./scripts/build-num.sh			Update the build number automatically each time makerelease.sh is run
 * ./scripts/makerelease.sh			Create a new nimrod package
 * ./scripts/nimrod.service			Exampe Nimrod service file of the Pi
+* ./scripts/archive_cctv.sh			Script to delete old cctv files
 * ./sounds/alerts.mp3
 * ./sounds/warning1.mp3
 
@@ -98,6 +123,8 @@ Wellpro modbus devices
 # Raspberry Pi Model 2 B+
 
 ## Create Pi bootable SD card
+
+We recommend 16GB SD cards are used, an 8GB card is likely to run out of space in the future.
 
 1.	umount /dev/sdd1
 2.	dd bs=4M if=2019-07-10-raspbian-buster.img of=/dev/sdd
@@ -158,6 +185,9 @@ Raspbian buster
 
 ## Create the nimrod user on the Pi
 
+It is recommended that you use the same uid/gid for each user/group across your installation. The useradd/groupadd 
+commands have options for this.
+
 1.	> adduser nimrod
 	- Set password to something
 2.	Add nimrod user to the dialout group to give acces to the /dev/ttyUSB* devices
@@ -195,6 +225,16 @@ On your linux desktop PC:
 > mkdir raspberrypi; 
 > cd raspberrypi
 > rsync -rl --delete-after --copy-unsafe-links --progress pi@nimrod:/{lib,usr} $HOME/raspberrypi/rootfs
+
+# Download the raspberrypi tools from github
+
+cd $HOME/raspberrypi
+
+> git clone https://github.com/raspberrypi/tools
+
+# Download the raspberrypi documentation from github 
+
+> git clone https://github.com/raspberrypi/documentation
 
 - add to .bashrc
 export PATH=$PATH:$HOME/raspberrypi/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin

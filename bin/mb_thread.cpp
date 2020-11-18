@@ -353,7 +353,7 @@ void CThread::Worker()
 					if ( !bPrintedTO )
 					{	// Save original timeout
 						bPrintedTO = true;
-#ifdef __arm__
+#if LIBMODBUS_VERSION_CHECK(3,1,0)
 						modbus_get_response_timeout( ctx, (uint32_t*)&old_response_to_tv.tv_sec, (uint32_t*)&old_response_to_tv.tv_usec );
 						LogMessage( E_MSG_INFO, "Response timeout ctx %p is %u.%06u usec", ctx, old_response_to_tv.tv_sec, old_response_to_tv.tv_usec );
 #else
@@ -2038,7 +2038,8 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 
 void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t uState, const enum E_EVENT_TYPE eEvent )
 {
-	bool bInvertState;
+	bool bInvertState = false;
+	bool bLinkTestPassed = false;
 	int idx;
 	int count = 0;
 	int iOutAddress = 0;
@@ -2048,15 +2049,9 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 	int iInIdx;
 	int iInDeviceNo;
 	int iOutDeviceNo;
-	int iLinkDeviceNo = 0;
-	int iLinkChannel = 0;
-	int iLinkAddress;
-	int iLinkIdx;
 	uint8_t uLinkState;
 	char szOutDeviceName[MAX_DEVICE_NAME_LEN+1];
 	char szOutHostname[HOST_NAME_MAX+1] = "";
-	char szLinkTest[6] = {""};
-	double dLinkValue = 0.0;
 	enum E_IO_TYPE eSwType = E_IO_UNUSED;
 
 	iInIdx = m_pmyDevices->GetIdxForAddr(iInAddress);
@@ -2067,7 +2062,7 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 	//LogMessage( E_MSG_INFO, "ChangeOutput %d %d %d %d", iInIdx, eSwType, iInAddress, iInDeviceNo );
 
 	idx = 0;
-	while ( m_pmyIOLinks->Find( iInDeviceNo, iInChannel, idx, iOutDeviceNo, iOutChannel, iOutOnPeriod, iLinkDeviceNo, iLinkChannel, szLinkTest, dLinkValue ) )
+	while ( m_pmyIOLinks->Find( iInDeviceNo, iInChannel, idx, iOutDeviceNo, iOutChannel, iOutOnPeriod, bLinkTestPassed, bInvertState, m_pmyDevices ) )
 	{	// loop through all linked devices/channels
 		count += 1;
 
@@ -2079,31 +2074,15 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 		strcpy( szOutHostname, m_pmyDevices->GetDeviceHostname( iOutIdx ) );
 		strcpy( szOutDeviceName, m_pmyDevices->GetDeviceName( iOutIdx ) );
 
-		if ( iLinkDeviceNo != 0 )
+		if ( bInvertState )
+			uLinkState = (uState ? false : true);
+
+		if ( !bLinkTestPassed )
 		{
-			iLinkAddress = m_pmyDevices->GetAddressForDeviceNo( iLinkDeviceNo );
-			iLinkIdx = m_pmyDevices->GetIdxForAddr(iLinkAddress);
+			LogMessage( E_MSG_INFO, "Skipped output change for '%s' (0x%x->%d,%d), new state %u (%d)", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
+					iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod );
 
-			if ( m_pmyDevices->LinkTestPassed( iLinkIdx, iLinkChannel, szLinkTest, dLinkValue, bInvertState ) )
-			{
-				if ( bInvertState )
-					uLinkState = (uState ? false : true);
-
-				LogMessage( E_MSG_INFO, "Checking link '%s' (0x%x->%d,%d), '%s' %.1f (%d), passed", m_pmyDevices->GetInIOName(iLinkIdx,iLinkChannel),
-						iLinkAddress, iLinkIdx, iLinkChannel, szLinkTest, dLinkValue, bInvertState );
-			}
-			else
-			{
-				if ( bInvertState )
-					uLinkState = (uState ? false : true);
-
-				LogMessage( E_MSG_INFO, "Checking link '%s' (0x%x->%d,%d), '%s' %.1f (%d), failed", m_pmyDevices->GetInIOName(iLinkIdx,iLinkChannel),
-						iLinkAddress, iLinkIdx, iLinkChannel, szLinkTest, dLinkValue, bInvertState );
-
-				LogMessage( E_MSG_INFO, "Skipped output change for '%s' (0x%x->%d,%d), new state %u (%d)", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
-						iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod );
-				continue;
-			}
+			continue;
 		}
 
 		LogMessage( E_MSG_INFO, "Output change for '%s' (0x%x->%d,%d), new state %u (%d), on %s", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
