@@ -2,16 +2,17 @@ CC=c++
 CFLAGS=-c -Wall -g -I/usr/include/modbus -I/usr/include/mariadb -I/usr/include/openssl \
 	-fmessage-length=0 -grecord-gcc-switches -D_FORTIFY_SOURCE=2 -fstack-protector -funwind-tables -fasynchronous-unwind-tables \
 	-DOPENSSL_LOAD_CONF -DPIC -fPIC -fno-strict-aliasing -g -O -DNDEBUG -MMD -MP
-LDFLAGS=-L/usr/lib64 -lmodbus -lmariadbclient -lpthread -lz -lm -lssl -lcrypto -ldl -lrt
+LDFLAGS=-L/usr/lib64 -lmodbus -lmariadbclient -lpthread -lz -lm -lssl -lcrypto -ldl -lrt -lwebsockets
 EXE=nimrod
 SAEXE=set-address
 CLEXE=nimrod-msg
-SRCS=mb_main.cpp mb_utils.cpp mb_devices.cpp mb_mysql.cpp mb_thread.cpp
+SRCS=websockets.cpp cameras.cpp plcstates.cpp mb_main.cpp mb_utils.cpp mb_devices.cpp mb_mysql.cpp mb_thread.cpp
 SASRCS=set-address.cpp
 CLSRCS=nimrod-msg.cpp
-OBJS=$(SRCS:.cpp=.o) build-number.o
-SAOBJS=$(SASRCS:.cpp=.o)
-CLOBJS=$(CLSRCS:.cpp=.o)
+OBJDIR=obj
+OBJS=$(SRCS:%.cpp=$(OBJDIR)/%.o)
+SAOBJS=$(SASRCS:%.cpp=$(OBJDIR)/%.o)
+CLOBJS=$(CLSRCS:%.cpp=$(OBJDIR)/%.o)
 DEP=$(SRCS:.cpp=.d)
 SADEP=$(SASRCS:.cpp=.d)
 CLDEP=$(CLSRCS:.cpp=.d)
@@ -19,13 +20,14 @@ CLDEP=$(CLSRCS:.cpp=.d)
 -include $(SADEP)
 -include $(CLDEP)
 
-BUILD_NUMBER_FILE=build-number.c
-OBJECTS=build-number.o
+.DEFAULT_GOAL := all
 
-all: $(SRCS) $(SASRCS) $(CLSRCS) $(EXE) $(SAEXE) $(CLEXE)
+all: $(OBJS) $(SAOBJS) $(CLOBJS) $(EXE) $(SAEXE) $(CLEXE)
 
-$(EXE): $(OBJS) $(BUILD_NUMBER_FILE)
-	$(CC) $(LDFLAGS) $(OBJS) -o $(EXE) 
+$(EXE): $(OBJS)
+	bash -c "../scripts/build-num.sh"
+	$(CC) $(CFLAGS) -c build-number.c -o $(OBJDIR)/build-number.o
+	$(CC) $(LDFLAGS) $(OBJS) $(OBJDIR)/build-number.o -o $(EXE) 
 
 $(SAEXE): $(SAOBJS)
 	$(CC) $(LDFLAGS) $(SAOBJS) -o $(SAEXE) 
@@ -33,15 +35,18 @@ $(SAEXE): $(SAOBJS)
 $(CLEXE): $(CLOBJS)
 	$(CC) $(LDFLAGS) $(CLOBJS) -o $(CLEXE) 
 
-.cpp.o: 
-	$(CC) $(CFLAGS) $< -o $@
+$(OBJS): $(OBJDIR)/%.o: %.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
     
-$(BUILD_NUMBER_FILE).o: $(BUILD_NUMBER_FILE).c
-	bash -c "../scripts/build-num.sh"
-	$(CC) $(CFLAGS) -c $(BUILD_NUMBER_FILE).c
-	
+$(SAOBJS): $(OBJDIR)/%.o: %.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
+    
+$(CLOBJS): $(OBJDIR)/%.o: %.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
 	rm -rf *.o
+	rm -rf $(OBJDIR)/*.o
 	rm -rf $(DEP)
 	rm -rf $(SADEP)
 	rm -rf $(CLDEP)

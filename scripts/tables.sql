@@ -70,6 +70,9 @@ create TABLE IF NOT EXISTS `iolinks` (
 # table of events
 # ev_DeviceNo=-1: trigger file
 # ev_DeviceNo=-2: database structure version
+# ev_DeviceNo=-3: user login attempt
+# ev_DeviceNo=-4: plcstate table changed
+# ev_DeviceNo=-5: plcstate screen button event
 # ev_DeviceNo=-10xx: device channel click event
 create TABLE IF NOT EXISTS `events` (
 	`ev_EventNo` int(10) unsigned NOT NULL auto_increment,		# unique record number
@@ -106,9 +109,46 @@ create TABLE IF NOT EXISTS `conditions` (
 	KEY `co_linkno_index` (`co_LinkNo`)
 ) ;
 
+# table of camera info
+create table IF NOT EXISTS `cameras` (
+	`ca_CameraNo` int(10) unsigned NOT NULL auto_increment,		# unique record number
+	`ca_Name` varchar(50) NOT NULL default ' ',					# camera name
+	`ca_IPAddress` varchar(15) NOT NULL default ' ',			# camera IPv4 address
+	`ca_PTZ` char(1) NOT NULL default 'N',						# PTZ capable Y/N
+	`ca_Encoding` varchar(10) NOT NULL default ' ',				# H.264 / H.265 encoding
+	`ca_Directory` varchar(250) NOT NULL default ' ',			# file system directory from root (/)
+	`ca_UserId` varchar(20) NOT NULL default ' ',				# camera user id
+	`ca_Password` varchar(50) NOT NULL DEFAULT ' ',				# camera password (encrypted)
+	`ca_Model` varchar(20) NOT NULL default ' ',				# camera model, e.g. FI9853EP
+	`ca_MJpeg` char(1) NOT NULL default 'N',					# supports MJpeg streaming Y/N/H (H means supports mjpeg over https)
+	PRIMARY KEY (`ca_CameraNo`),
+	KEY `ca_name_index` (`ca_Name`)
+) ;
+
+# table of plc states
+create table IF NOT EXISTS `plcstates` (
+	`pl_StateNo` int(10) unsigned NOT NULL auto_increment,			# unique record number
+	`pl_Operation` varchar(50) NOT NULL default '',					# operation name, e.g. Setup Mode or Run Mode
+	`pl_StateName` varchar(50) NOT NULL default '',					# state name, e.g. WAITING or MOVING_LEFT
+	`pl_StateIsActive` char(1) NOT NULL default 'N',				# remember which state is active
+	`pl_StateTimestamp` timestamp NOT NULL default '0000-00-00',	# when did this state become active
+	`pl_RuleType` char(1) NOT NULL default '',						# I=Init, E=Event
+	`pl_DeviceNo` int(10) NOT NULL default 0,						# link to the deviceinfo table
+	`pl_IOChannel` int(10) NOT NULL default 0,						# link to the deviceinfo table
+	`pl_Value` int(10) NOT NULL default 0,							# data value
+	`pl_Test` varchar(5) NOT NULL default '',						# LT, GT, LE, GE, EQ, NE
+	`pl_NextStateName` varchar(50) NOT NULL default "",				# link to the next state
+	`pl_Order` int(10) NOT NULL default 0,							# optional execution order
+	`pl_DelayTime` int(10) NOT NULL default 0,						# time delay in seconds to ignore the event
+	PRIMARY KEY (`pl_StateNo`),
+	KEY `pl_statename_index` (`pl_StateName`)
+) ;
+
+
 # add default table records:
 # 
 insert into users (us_Username,us_Name,us_Password,us_AuthLevel) values ('nimrod@nimrod.co.nz','Nimrod Admin User','258497f62679c89a7ac952b27c2d2c6040cf8da412b8dd044d11156db0986b55',9);
+insert into events (ev_DeviceNo,ev_Value) values(-2,108);
 
 # nimrod and nimrod_user are changed to 
 GRANT insert,select,update,delete,create,drop,alter,lock tables on nimrod.* to nimrod_user@'localhost' identified by 'passw0rd.23';

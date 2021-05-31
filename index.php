@@ -39,7 +39,7 @@ function ValidateUser( $db, $username, $password, &$my_login_msg )
     $list = $db->ReadUsers();
     foreach ( $list as $user )
     {
-        if ( $username == $user['us_Username'] )
+        if ( strtolower($username) == strtolower($user['us_Username']) )
         {
             $hash = hash( "sha256", $password, FALSE );
             if ( strcmp( $user['us_Password'], $hash ) == 0 )
@@ -61,6 +61,11 @@ function ValidateUser( $db, $username, $password, &$my_login_msg )
     if ( $_SESSION['us_Username'] == "" && $my_login_msg == "" )
     {	// error
         $my_login_msg = sprintf( "The Username entered does not exist in the database." );
+    }
+    
+    if ( !$ok )
+    {   // delay to stop robot attacks
+        sleep( 4 );
     }
     
     return $ok;
@@ -98,6 +103,14 @@ if ( isset($_GET['PageMode']) )
         $display_mode = "Monitor";
         $monitor_page = 2;
     }
+    else if ( $_GET['PageMode'] == "PlcState" )
+    {
+        $display_mode = "PlcState";
+    }
+    else if ( $_GET['PageMode'] == "CameraFS" )
+    {
+        $display_mode = "Camera";
+    }
     else
     {
         $_SESSION['page_mode'] = $_GET['PageMode'];
@@ -110,6 +123,10 @@ if ( isset($_POST['MonitorPage']) )
 else if ( isset($_GET['MonitorPage']) )
 {
     $monitor_page = $_GET['MonitorPage'];
+}
+else if ( isset($POST['PlcStateRefresh']) )
+{
+    $display_mode = "PlcState";
 }
 if ( isset($_POST['AudioToggle']) )
 {
@@ -168,6 +185,12 @@ else if ( isset($_POST['Username']) && isset($_POST['Password']) )
         {
             $new_login = true;
             $_SESSION['page_mode'] = "Home";
+            
+            $db->SaveUserLoginAttempt( $my_email, 1 );
+        }
+        else   
+        {   // failed
+            $db->SaveUserLoginAttempt( $my_email, 0 );
         }
     }
 }
@@ -188,7 +211,7 @@ $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
 <head>
   <title>Nimrod Admin Console</title>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
@@ -207,16 +230,12 @@ $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
   <?php
   if ( $display_mode == "" )
   {
-  ?>
-  body {
-    padding-top: 30px;
-  }
-  @media (max-width: 979px) {
-    body {
-      padding-top: 30px;
-    }
-  }
-  <?php
+      printf( "body { padding-top: 30px; }" );
+      
+      if ( $_SESSION['page_mode'] != "Cameras" )
+      {
+//          printf( "@media (max-width: 979px) { body { padding-top: 30px; } }" );
+      }
   }
   ?>
   </style>
@@ -267,12 +286,19 @@ $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
     		    printf( "   document.getElementById('MonitorRefreshEnabled').checked = true;" );
     		    printf( "   setTimeout( 'refreshTimer()', %d );", $_SESSION['MonitorRefreshPeriod'] * 1000 );
     		}
+    		else if ( $display_mode == "Camera" )
+    		{
+    		}
+    		else if ( $display_mode == "PlcState" )
+    		{
+    		}
     		else 
     		{	
     			if ( $_SESSION['page_mode'] == "Home" )
     			{
     			    ?>
     			    if ( counter >= 30 ) {
+        			  counter = 0;
     			      if ( document.getElementById('RefreshEnabled').checked ) {
     				    window.location.href = '<?php echo $_SERVER['PHP_SELF']; ?>?RefreshEnabled'; 
     				  }
@@ -314,6 +340,7 @@ $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
     			else if ( $_SESSION['page_mode'] == "Cameras" )
     			{
     			    printf( "if ( counter >= 10 ) {" );
+    			    printf( "  counter = 0;" );
     			    printf( "  if ( document.getElementById('CameraRefresh').checked && document.getElementById('CameraCycle').checked ) {" );
     			    printf( "    window.location.href = '%s?CameraRefresh&CameraCycle';", $_SERVER['PHP_SELF'] );
     			    printf( "  } else if ( document.getElementById('CameraRefresh').checked ) {" );
@@ -335,12 +362,72 @@ $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
   			$('[data-toggle="tooltip"]').tooltip();
 		});
 	</script>
+	
+	<?php 
+	if ( $display_mode == "PlcState" )
+	{
+    ?>
+		<script type = "text/javascript">
+  	  	var socket = new WebSocket( "ws://localhost:8000", "nimrod-protocol" );
+
+	  	function update(msg) { 
+		  	if ( msg.length > 0 ) 
+		  	{
+    		  	document.getElementById("ws_message").innerHTML = msg;
+    
+    		  	var select = document.getElementById('ws_list');
+    
+    		  	var date = new Date();
+    
+    		  	var dateStr =
+    		  	  ("00" + (date.getMonth() + 1)).slice(-2) + "/" +
+    		  	  ("00" + date.getDate()).slice(-2) + "/" +
+    		  	  date.getFullYear() + " " +
+    		  	  ("00" + date.getHours()).slice(-2) + ":" +
+    		  	  ("00" + date.getMinutes()).slice(-2) + ":" +
+    		  	  ("00" + date.getSeconds()).slice(-2);
+    
+    		  	var msg2 = dateStr + ': ' + msg;
+    		  	
+    	  	    var opt = document.createElement('option');
+    	  	    opt.value = msg2;
+    	  	    opt.innerHTML = msg2;
+    	  	    select.add(opt,0)
+    	  	    
+    	  	    // only allow 20 items in the list
+    	  	    if ( select.length >= 20 )
+    	  	    {
+    		  	    select.removeChild( select.options[20] );
+    	  	    }
+    
+    	  	    //select.scrollTo( 0, select.length - 4 ); 
+    
+    	  	    if ( msg == "Refresh" || msg == "closed" )
+    	  	    {
+    	  	    	window.location.replace('index.php?PageMode=PlcState'); 
+    	  	    }
+		  	}
+		}
+		
+	  	socket.onopen = function() { console.log("socket open"); update("open"); }
+	  	socket.onclose = function() { console.log("socket close"); update("closed"); }
+	  	socket.onmessage = function(msg) { console.log("socket message: " + msg.data); update(msg.data); }    </script>
+	<?php 
+	}
+	?>      
 </head>
 
 
 
 <?php
-printf( "<body onLoad='firstTime();homeTimer();' style='background-color: #F5F5F5;' %s>", ($display_mode == "" ? "" : "background='images/background.jpg'") );
+$bg = "";
+if ( $display_mode == "Monitor" || $display_mode == "PlcState" )
+{
+    $bg = "background='images/background.jpg'";
+}
+printf( "<body onLoad='firstTime();homeTimer();' style='background-color: #F5F5F5;' %s>", $bg );
+
+$devices = $db->ReadDevicesTable();
 
 if ( $display_mode == "" )
 {
@@ -355,38 +442,52 @@ if ( $display_mode == "" )
       <?php
       if ( $_SESSION['us_Username'] != "" )
       {
-      ?>
-      <li class="nav-item">
-        <a class="nav-link" href="?PageMode=Devices">Devices</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" href="?PageMode=DeviceInfo">Device Info</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" href="?PageMode=IOLinks">IO Links</a>
-      </li> 
-      <li class="nav-item">
-        <a class="nav-link" href="?PageMode=Cameras">Cameras</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" href="?PageMode=Events">Events</a>
-      </li>    
-      <li class="nav-item">
-        <a class="nav-link" href="?PageMode=Users">Users</a>
-      </li>    
-      <?php
+          printf( "<li class='nav-item'>" );
+          printf( "  <a class='nav-link' href='?PageMode=Devices'>Devices</a>" );
+          printf( "</li>" );
+          if ( count($devices) > 1 || (count($devices) == 1 && $devices[0]['de_Type'] != E_DT_TIMER) )
+          {
+              printf( "<li class='nav-item'>" );
+              printf( "  <a class='nav-link' href='?PageMode=DeviceInfo'>Device Info</a>" );
+              printf( "</li>" );
+              printf( "<li class='nav-item'>" );
+              printf( "  <a class='nav-link' href='?PageMode=IOLinks'>IO Links</a>" );
+              printf( "</li>" ); 
+              if ( SHOW_PLC == 1 )
+              {
+                  printf( "<li class='nav-item'>" );
+                  printf( "  <a class='nav-link' href='?PageMode=PLC'>PLC</a>" );
+                  printf( "</li>" );
+              }
+          }
+          if ( func_user_feature_enabled(E_UF_CAMERAS) )
+          {
+              printf( "<li class='nav-item'>" );
+              printf( "  <a class='nav-link' href='?PageMode=Cameras'>Cameras</a>" );
+              printf( "</li>" );
+          }
+          printf( "<li class='nav-item'>" );
+          printf( "  <a class='nav-link' href='?PageMode=Events'>Events</a>" );
+          printf( "</li>" );    
+          printf( "<li class='nav-item'>" );
+          printf( "  <a class='nav-link' href='?PageMode=Users'>Users</a>" );
+          printf( "</li>" );    
       }
 
-      if ( !func_is_external_connection() || $_SESSION['us_Username'] != "" )
+      if ( (count($devices) > 1 || (count($devices) == 1 && $devices[0]['de_Type'] != E_DT_TIMER)) && (!func_is_external_connection() || $_SESSION['us_Username'] != "") )
       {
-      ?>
-      <li class='nav-item'>
-        <a class='nav-link' href='?PageMode=Monitor1'>Monitor 1</a>
-      </li>    
-      <li class='nav-item'>
-        <a class='nav-link' href='?PageMode=Monitor2'>Monitor 2</a>
-      </li>
-      <?php
+          printf( "<li class='nav-item'>" );
+          printf( "  <a class='nav-link' href='?PageMode=Monitor1'>Monitor 1</a>" );
+          printf( "</li>" );    
+          printf( "<li class='nav-item'>" );
+          printf( "  <a class='nav-link' href='?PageMode=Monitor2'>Monitor 2</a>" );
+          printf( "</li>" );
+          if ( SHOW_PLC == 1 )
+          {
+             printf( "<li class='nav-item'>" );
+             printf( "  <a class='nav-link' href='?PageMode=PlcState'>PlcState</a>" );
+             printf( "</li>" );
+          }
       }
       
       if ( $_SESSION['us_Username'] != "" )
@@ -402,18 +503,17 @@ if ( $display_mode == "" )
 </nav>
 <?php
 $mm = sprintf( "?MonitorPage=%d", $monitor_page );
-printf( "<form action='%s%s' method='post' class='form-inline'>", $_SERVER['PHP_SELF'], ($display_mode == "Monitor" ? $mm : "") );
+printf( "<form action='%s%s' enctype='multipart/form-data' method='post' class='form-inline'>", $_SERVER['PHP_SELF'], ($display_mode == "Monitor" ? $mm : "") );
 
 }
-else 
+else if ( $display_mode == "Monitor" )
 {   // monitor mode
     $mm = sprintf( "?MonitorPage=%d", $monitor_page );
-    printf( "<form action='%s%s' method='post' >", $_SERVER['PHP_SELF'], ($display_mode == "Monitor" ? $mm : "") );
+    printf( "<form action='%s%s' enctype='multipart/form-data' method='post' >", $_SERVER['PHP_SELF'], ($display_mode == "Monitor" ? $mm : "") );
     
     printf( "<table width='100%%' border='0'>" );
     printf( "<tr>" );
     printf( "<td><a href='index.php?PageMode=Home'><input type='button' name='PageMode' value='Home'></a></td>" );
-    //printf( "<td><a href='index.php?PageMode=Home'><input type='button' name='PageMode' value='Home' style='display:block;width:100%%'></a></td>" );
     if ( $display_mode == "Monitor" )
     {
         printf( "<td>" );
@@ -433,9 +533,23 @@ else
         printf( "<input type='checkbox' name='MonitorRefreshEnabled' id='MonitorRefreshEnabled' value='MonitorRefreshEnabled' %s>", ($_SESSION['MonitorRefreshEnabled'] ? "checked" : "") );
         printf( "<label for='MonitorRefreshEnabled'>Refresh Enabled</label>" );
         printf( "<div id='MonitorRefreshCount'></div>" );
-        //printf( "<input type='submit' name='AudioToggle' value='%s'>", ($_SESSION['monitor_audio'] ? "Audio On" : "Audio Muted") );
         printf( "</td>" );
     }
+    
+    printf( "</tr>" );
+    printf( "</table>" );
+}
+else if ( $display_mode == "PlcState" )
+{   // plcstate mode
+    printf( "<form action='%s?PageMode=PlcState' enctype='multipart/form-data' method='post' >", $_SERVER['PHP_SELF'] );
+    
+    printf( "<table width='100%%' border='0'>" );
+    printf( "<tr>" );
+    printf( "<td><a href='index.php?PageMode=Home'><input type='button' name='PageMode' value='Home'></a></td>" );
+
+    printf( "<td>" );
+    printf( "<input type='submit' name='PlcStateRefresh' id='PlcStateRefresh' value='Refresh'>" );
+    printf( "</td>" );
     
     printf( "</tr>" );
     printf( "</table>" );
@@ -447,43 +561,59 @@ if ( $display_mode == "Monitor" )
 {
     include("./files/monitor.php");
 }
+else if ( $display_mode == "PlcState" )
+{
+    include("./files/plcstate.php");
+}
+else if ( $display_mode == "Camera" )
+{
+    include("./files/camerafs.php");
+}
 else
 {
+    printf( "<div class='container-fluid'>" );
+    
     switch ( $_SESSION['page_mode'] )
     {
-        default:
-        case "Intro":
-            include("./files/intro.php");
-            break;
-            
-        case "Home":
-            include("./files/home.php");
-            break;
-    
-        case "Devices":
-            include("./files/devices.php");
-            break;
-            
-        case "DeviceInfo":
-            include("./files/deviceinfo.php");
-            break;
-            
-        case "IOLinks":
-            include("./files/iolinks.php");
-            break;
-            
-        case "Cameras":
-            include("./files/cameras.php");
-            break;
-            
-        case "Users":
-            include("./files/users.php");
-            break;
-            
-        case "Events":
-            include("./files/events.php");
-            break;
+    default:
+    case "Intro":
+        include("./files/intro.php");
+        break;
+        
+    case "Home":
+        include("./files/home.php");
+        break;
+
+    case "Devices":
+        include("./files/devices.php");
+        break;
+        
+    case "DeviceInfo":
+        include("./files/deviceinfo.php");
+        break;
+        
+    case "IOLinks":
+        include("./files/iolinks.php");
+        break;
+        
+    case "PLC":
+        include("./files/plc.php");
+        break;
+        
+    case "Cameras":
+        include("./files/cameras.php");
+        break;
+        
+    case "Users":
+        include("./files/users.php");
+        break;
+        
+    case "Events":
+        include("./files/events.php");
+        break;
     }
+    
+    printf( "</div>" );
 }
 ?>
 
@@ -513,6 +643,8 @@ if ( $display_mode == "" )
 
 <?php 
 }
+
+$db->Close();
 ?>
 
 </body>

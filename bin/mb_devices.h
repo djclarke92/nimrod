@@ -25,7 +25,9 @@ enum E_DEVICE_TYPE {
 	E_DT_TEMPERATURE_DS,	// 2: temperature DS18B20 devices
 	E_DT_TIMER,				// 3: timer
 	E_DT_VOLTAGE,			// 4: analogue voltage
-	E_DT_TEMPERATURE_K1		// 5: temperature, PD3064 K thermocouple
+	E_DT_TEMPERATURE_K1,	// 5: temperature, PD3064 K thermocouple
+	E_DT_LEVEL_K02,			// 6: ultrasonic level measurement type K02
+	E_DT_LEVEL_HDL			// 7: water level sensor type HDL300
 };
 
 enum E_IO_TYPE {
@@ -42,6 +44,12 @@ enum E_IO_TYPE {
 	E_IO_TEMP_MONITOR,		// 10:	temperature monitor only
 	E_IO_VOLT_MONITOR,		// 11:	voltage monitor only
 	E_IO_VOLT_DAYNIGHT,		// 12:	voltage monitor day/night state
+	E_IO_TEMP_HIGHLOW,		// 13:	temperature too high or too low
+	E_IO_VOLT_HIGHLOW,		// 14:	voltage too high or too low
+	E_IO_LEVEL_MONITOR,		// 15:	level measurement K02
+	E_IO_LEVEL_HIGH,		// 16:	level too high
+	E_IO_LEVEL_LOW,		// 17:	level too low
+	E_IO_LEVEL_HIGHLOW,	// 18:	level too high or too low
 };
 
 enum E_EVENT_TYPE {
@@ -54,6 +62,7 @@ enum E_EVENT_TYPE {
 	E_ET_DEVICE_OK,			// 6:	device status is good
 	E_ET_VOLTAGE,			// 7:	voltage event
 	E_ET_STARTUP,			// 8:	program startup
+	E_ET_LEVEL,				// 9:	level event
 };
 
 enum E_DEVICE_STATUS {
@@ -70,6 +79,38 @@ enum E_DAY_NIGHT_STATE {
 	E_DN_OVERCAST,			// 3: overcast day
 	E_DN_DAY,				// 4: day time
 };
+
+
+/* Ultrasonic distance measurment module: AJ-SR04M ($5 from AliExpress)
+ * - Output is TTL level RS-232.
+ * - The module runs on 5VDC and can be powered directly from a USB/RS232 TTL converter
+ * - USB/RS232 converter wiring. Red = 5V, Black = 0V, White = Rx (wire the module Tx/Echo pin), Green = Tx (wire to module Rx/Trg pin)
+ * - Nimrod software is written to use mode 5 (R19 = 0 or short circuit) ascii data
+ *
+ * K02 example
+ * module has 5modes:
+ *
+ * mode1 R19 not instaled: module wil send pulse on echo line after at least 10us pulse on trigger line (tested, works with external pulldown - 4k7)
+ *
+ * mode2 R19 = 300k: module will send pulse on echo line after at least 10ms pulse on trigger line (tested, works with external pulldown - 4k7)
+ *
+ * mode3 R19 = 120k(100k works): module will send serial data at 9600 each 100ms
+ * data format:
+ * 0xFF
+ * upper 8bit
+ * lower 8bit
+ * check sum = ((upper+lower)&0xff)
+ *
+ * mode3 R19 = 47k: module will send serial data at 9600  after receivind any data on RX line
+ * data format:
+ * 0xFF
+ * upper 8bit
+ * lower 8bit
+ * check sum = ((upper+lower)&0xff)
+ *
+ * mode5 R19 = 0: module will send continuesly asci data (seems to only send when it receives something, not continuously):
+ * Gap=1234mm<CRLF>
+ */
 
 
 
@@ -132,6 +173,7 @@ private:
 	char m_szComPort[MAX_COMPORT_LEN+1];
 	char m_szDeviceName[MAX_DEVICE_NAME_LEN+1];
 	char m_szDeviceHostname[MAX_HOSTNAME_LEN+1];
+	int m_iComHandle;
 	modbus_t* m_pCtx;
 	int m_iDeviceNo;
 	int m_iAddress;
@@ -141,7 +183,6 @@ private:
 	enum E_DEVICE_TYPE m_eDeviceType;
 	bool m_bAlarmTriggered[MAX_IO_PORTS];
 	int m_iHysteresis[MAX_IO_PORTS];
-	double m_dTemperature[MAX_IO_PORTS];
 	double m_dMonitorHi[MAX_IO_PORTS];
 	double m_dMonitorLo[MAX_IO_PORTS];
 	time_t m_tLastRecorded[MAX_IO_PORTS];
@@ -165,9 +206,8 @@ private:
 	char m_szOutWeekdays[MAX_IO_PORTS][8];
 	char m_cAnalogType[MAX_IO_PORTS];
 	double m_dCalcFactor[MAX_IO_PORTS];
-	double m_dVoltage[MAX_IO_PORTS];
 	double m_dOffset[MAX_IO_PORTS];
-	char m_szMonitorPos[MAX_IO_PORTS][3];
+	char m_szMonitorPos[MAX_IO_PORTS][15+1];	// max of 5 sets of 3 chars
 	struct timespec m_tEventTime[MAX_IO_PORTS];
 
 public:
@@ -179,12 +219,14 @@ public:
 	const double CalculateTemperature( const uint16_t uVal );
 	const double CalcTemperature( const int iChannel, const bool bNew );
 	const double CalcVoltage( const int iChannel, const bool bNew );
+	const double CalcLevel( const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int iChannel );
 	const bool WasSensorConnected( const int iChannel );
 	const bool IsTimerEnabledToday( const int iChannel );
 	const bool LinkTestPassed( const int iLinkChannel, const char* szLinkTest, const double dLinkValue, bool& bInvertState );
 	const bool TestValue( const char* szLinkTest, const double dLinkValue, const double dVal, bool& bInvertState );
 
+	const int GetComHandle(){ return m_iComHandle; };
 	modbus_t* GetContext(){ return m_pCtx; };
 	const int GetDeviceNo(){ return m_iDeviceNo; };
 	const char* GetComPort(){ return m_szComPort; };
@@ -200,8 +242,6 @@ public:
 	uint16_t* GetNewData(){ return m_uNewData; };
 	bool& GetAlarmTriggered( const int i ){ return m_bAlarmTriggered[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	int& GetHysteresis( const int i ){ return m_iHysteresis[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
-	double& GetTemperature( const int i ){ return m_dTemperature[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
-	double& GetVoltage( const int i ){ return m_dVoltage[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	double& GetMonitorValueLo( const int i ){ return m_dMonitorLo[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	double& GetMonitorValueHi( const int i ){ return m_dMonitorHi[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	time_t& GetLastRecorded( const int i ){ return m_tLastRecorded[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
@@ -230,6 +270,7 @@ public:
 	const char* GetMonitorPos( const int i ){ return m_szMonitorPos[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	void GetEventTime( const int i, struct timespec& ts ){ ts = m_tEventTime[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 
+	void SetComHandle( int iHandle ){ m_iComHandle = iHandle; };
 	void SetContext( modbus_t* pCtx ){ m_pCtx = pCtx; };
 	void SetDeviceNo( const int iDeviceNo ){ m_iDeviceNo = iDeviceNo; };
 	void SetComPort( const char* szPort );
@@ -259,6 +300,7 @@ public:
 class CDeviceList {
 private:
 	int m_iMcuMessageCount;
+	bool m_bHostComPortModbus[MAX_DEVICES];
 	enum E_DAY_NIGHT_STATE m_eDayNightState;
 	CMyDevice m_Device[MAX_DEVICES];
 	char m_szDummy[2];
@@ -277,7 +319,7 @@ public:
 	const bool IsShared( const int idx );
 	const bool IsSharedWithNext( const int idx );
 	void FreeAllContexts();
-	void GetComPortsOnHost( CMysql& myDB, char szPort[MAX_DEVICES][MAX_COMPORT_LEN+1] );
+	int GetComPortsOnHost( CMysql& myDB, char szPort[MAX_DEVICES][MAX_COMPORT_LEN+1] );
 	const int GetTotalComPorts( char szPort[MAX_DEVICES][MAX_COMPORT_LEN+1] );
 	const int GetIdxForAddr( const int iAddr );
 	const int GetIdxForName( const char* szName );
@@ -289,12 +331,14 @@ public:
 	const bool IsOffTime( const int idx, const int iOutCoil );
 	const double CalcTemperature( const int idx, const int iChannel, const bool bNew );
 	const double CalcVoltage( const int idx, const int iChannel, const bool bNew );
+	const double CalcLevel( const int idx, const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int idx, const int iChannel );
 	const bool WasSensorConnected( const int idx, const int iChannel );
 	const bool IsTimerEnabledToday( const int idx, const int iChannel );
 	const char* GetEventTypeDesc( const enum E_EVENT_TYPE eType );
 	const bool LinkTestPassed( const int iLinkIdx, const int iLinkChannel, const char* szLinkTest, const double dLinkValue, bool& bInvertState );
 
+	int GetComHandle( const int idx );
 	modbus_t* GetContext( const int idx );
 	const int GetDeviceNo( const int idx );
 	const char* GetComPort( const int idx );
@@ -311,8 +355,6 @@ public:
 	uint16_t* GetNewData( const int idx );
 	bool& GetAlarmTriggered( const int idx, const int j );
 	int& GetHysteresis( const int idx, const int j );
-	double& GetVoltage( const int idx, const int j );
-	double& GetTemperature( const int idx, const int j );
 	double& GetMonitorValueLo( const int idx, const int j );
 	double& GetMonitorValueHi( const int idx, const int j );
 	time_t& GetLastRecorded( const int idx, const int j );

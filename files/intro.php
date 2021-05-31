@@ -81,7 +81,7 @@ if ( $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL_NONE )
 			<div class='col'><img class='img-fluid' src="./images/usb-rs485.jpg"></div>
 			<div class='col'><img class='img-fluid' src="./images/esp8266.png"></div>
 			</div>
-			<p>A number of Modbus RTU devices are supported to interface with digital inputs and outputs, voltage, current and temperature.
+			<p>A number of rs-485 Modbus RTU devices are supported to interface with digital inputs and outputs, voltage, current and temperature.
 			NodeMCU ESP8266 WiFi devices are also supported.</p>
 	
 			<h2>What can you do with it ?</h2>

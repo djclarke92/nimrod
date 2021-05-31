@@ -225,12 +225,76 @@ time_t CMysql::ReadConfigUpdateTime()
 	}
 	else if ( (row = FetchRow( iNumFields )) )
 	{
-		tUpdated = atol( row[0] );
+		tUpdated = atol( (const char*)row[0] );
 	}
 
 	FreeResult();
 
 	return tUpdated;
+}
+
+time_t CMysql::ReadPlcStatesUpdateTime()
+{
+	time_t tUpdated = 0;
+	int iNumFields;
+	MYSQL_ROW row;
+
+	if ( RunQuery( "select unix_timestamp(ev_Timestamp) from events where ev_DeviceNo=-4" ) != 0 )
+	{	// error
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+	else if ( (row = FetchRow( iNumFields )) )
+	{
+		tUpdated = atol( (const char*)row[0] );
+	}
+
+	FreeResult();
+
+	return tUpdated;
+}
+
+int CMysql::ReadPlcStatesScreenButton()
+{
+	int iStateNo = 0;
+	int iNumFields;
+	MYSQL_ROW row;
+
+	if ( RunQuery( "select ev_Value from events where ev_DeviceNo=-5" ) != 0 )
+	{	// error
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+	else if ( (row = FetchRow( iNumFields )) )
+	{
+		iStateNo = atoi( (const char*)row[0] );
+	}
+
+	FreeResult();
+
+	if ( RunQuery( "delete from events where ev_DeviceNo=-5" ) != 0 )
+	{	// error
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+
+	return iStateNo;
+}
+
+int CMysql::SetNextPlcState( const char* szOperation, const char* szNextStateName, const char* szStateName, const time_t tTimenow )
+{
+	int rc = 0;
+
+	if ( RunQuery( "update plcstates set pl_StateIsActive='Y',pl_StateTimestamp=from_unixtime(%ld) where pl_Operation='%s' and pl_StateName='%s' and pl_RuleType=''",
+			tTimenow, szOperation, szNextStateName ) )
+	{	// error
+		rc = 1;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+	else if ( RunQuery( "update plcstates set pl_StateIsActive='N' where pl_Operation='%s' and pl_StateName='%s' and pl_RuleType=''", szOperation, szStateName ) )
+	{	// error
+		rc = 2;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+
+	return rc;
 }
 
 bool CMysql::WebClickEvent( const int iDeviceNo, const int iIOChannel )
@@ -263,3 +327,4 @@ bool CMysql::WebClickEvent( const int iDeviceNo, const int iIOChannel )
 
 	return bRet;
 }
+

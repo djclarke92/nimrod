@@ -26,11 +26,9 @@ function func_clear_di_array(&$di_array)
     $di_array['di_OnPeriod'] = "";
     $di_array['di_StartTime'] = "";
     $di_array['di_Hysteresis'] = "";
-    $di_array['di_Temperature'] = "";
     $di_array['di_Weekdays'] = "";
     $di_array['di_AnalogType'] = "";
     $di_array['di_CalcFactor'] = "";
-    $di_array['di_Voltage'] = "";
     $di_array['di_Offset'] = "";
     $di_array['di_MonitorPos1'] = "";
     $di_array['di_MonitorPos2'] = "";
@@ -43,7 +41,8 @@ function func_clear_di_array(&$di_array)
     $di_array['di_ValueRangeLo'] = "";
     $di_array['error_msg'] = "";
     $di_array['info_msg'] = "";
-    $di_array['addr_filter'] = - 1;
+    $di_array['addr_filter'] = -1;
+    $di_array['dir_filter'] = -1;
 }
 
 // char 1 must be the monitor number 1 or 2
@@ -106,13 +105,15 @@ function func_check_di_array(&$di_array)
     } else if (func_convert_time($di_array['di_StartTime']) < 0 || func_convert_time($di_array['di_StartTime']) > 1439) {
         $di_array['error_msg'] = "The start time must be from 00:00 to 11:59 pm.";
         return false;
-    } else if (($di_array['di_IOType'] == E_IO_TEMP_HIGH || $di_array['di_IOType'] == E_IO_TEMP_LOW) && $di_array['di_Temperature'] === "") {
-        $di_array['error_msg'] = "You must enter the temperature trigger value.";
+    } else if (($di_array['di_IOType'] == E_IO_TEMP_HIGHLOW || $di_array['di_IOType'] == E_IO_TEMP_HIGH || $di_array['di_IOType'] == E_IO_TEMP_LOW) && $di_array['di_Hysteresis'] === "") {
+        $di_array['error_msg'] = "You must enter the temperature hysteresis value.";
         return false;
-    } else if (($di_array['di_IOType'] == E_IO_VOLT_HIGH || $di_array['di_IOType'] == E_IO_VOLT_LOW) && $di_array['di_Voltage'] === "") {
-        $di_array['error_msg'] = "You must enter the voltage trigger value.";
+    } else if (($di_array['di_IOType'] == E_IO_VOLT_HIGHLOW || $di_array['di_IOType'] == E_IO_VOLT_HIGH || $di_array['di_IOType'] == E_IO_VOLT_LOW) && $di_array['di_Hysteresis'] === "") {
+        $di_array['error_msg'] = "You must enter the voltage hysteresis value.";
         return false;
-    } else if (($di_array['di_IOType'] == E_IO_VOLT_HIGH || $di_array['di_IOType'] == E_IO_VOLT_LOW || $di_array['di_IOType'] == E_IO_VOLT_MONITOR || $di_array['di_IOType'] == E_IO_VOLT_DAYNIGHT) && doubleval($di_array['di_CalcFactor']) == 0.0) {
+    } else if (($di_array['di_IOType'] == E_IO_VOLT_HIGHLOW || $di_array['di_IOType'] == E_IO_VOLT_HIGH || $di_array['di_IOType'] == E_IO_VOLT_LOW || 
+        $di_array['di_IOType'] == E_IO_VOLT_MONITOR || $di_array['di_IOType'] == E_IO_VOLT_DAYNIGHT) && 
+        $di_array['di_CalcFactor'] === "" ) {
         $di_array['error_msg'] = "You must enter a Calculation Factor > 0.";
         return false;
     } else if ($di_array['di_IOType'] == E_IO_ON_TIMER && $di_array['di_Weekdays'] == "NNNNNNN") {
@@ -137,16 +138,32 @@ function func_check_di_array(&$di_array)
         $di_array['error_msg'] = "The Monitor Position #5 must be in the format [12][F|L|R][1..4]";
         return false;
     }
-    else if ( $di_array['di_IOType'] == E_IO_TEMP_MONITOR && ((strlen($di_array['di_MonitorHi']) != 0 && strlen($di_array['di_MonitorLo']) == 0) || 
+    else if ( ($di_array['di_IOType'] == E_IO_TEMP_MONITOR || $di_array['di_IOType'] == E_IO_VOLT_MONITOR) && ((strlen($di_array['di_MonitorHi']) != 0 && strlen($di_array['di_MonitorLo']) == 0) || 
         (strlen($di_array['di_MonitorHi']) == 0 && strlen($di_array['di_MonitorLo']) != 0)) )
     {
-        $di_array['error_msg'] = "Both monitor values must be entered for alerting";
+        $di_array['error_msg'] = "Both Monitor High and Low values must be entered for alerting";
         return false;
     }
-    else if ( $di_array['di_IOType'] == E_IO_TEMP_MONITOR && strlen($di_array['di_MonitorHi']) != 0 && strlen($di_array['di_MonitorLo']) != 0 &&
+    else if ( ($di_array['di_IOType'] == E_IO_TEMP_HIGHLOW || $di_array['di_IOType'] == E_IO_VOLT_HIGHLOW) && ((strlen($di_array['di_MonitorHi']) != 0 && strlen($di_array['di_MonitorLo']) == 0) ||
+        (strlen($di_array['di_MonitorHi']) == 0 && strlen($di_array['di_MonitorLo']) != 0)) )
+    {
+        $di_array['error_msg'] = "Both Monitor High and Low values must be entered for actions to trigger.";
+        return false;
+    }
+    else if ( ($di_array['di_IOType'] == E_IO_TEMP_HIGH || $di_array['di_IOType'] == E_IO_VOLT_HIGH) && strlen($di_array['di_MonitorHi']) == 0 )
+    {
+        $di_array['error_msg'] = "The 'Monitor High' value must be entered for actions to trigger.";
+        return false;
+    }
+    else if ( ($di_array['di_IOType'] == E_IO_TEMP_LOW || $di_array['di_IOType'] == E_IO_VOLT_LOW) && strlen($di_array['di_MonitorLo']) == 0 )
+    {
+        $di_array['error_msg'] = "The 'Monitor Low' value must be entered for actions to trigger.";
+        return false;
+    }
+    else if ( strlen($di_array['di_MonitorHi']) != 0 && strlen($di_array['di_MonitorLo']) != 0 &&
         floatval($di_array['di_MonitorLo']) > floatval($di_array['di_MonitorHi']) )
     {
-        $di_array['error_msg'] = "The 'Monitor Lo' value must be lower than the 'Monitor Hi' value";
+        $di_array['error_msg'] = "The 'Monitor Low' value must be lower than the 'Monitor High' value";
         return false;
     }
     
@@ -168,6 +185,10 @@ function func_get_dir($type, &$sdir)
             $dir = 1;
             $sdir = "Out";
             break;
+        case E_IO_TEMP_HIGHLOW:
+            $dir = 0;
+            $sdir = "Temp.H/L";
+            break;
         case E_IO_TEMP_HIGH:
             $dir = 0;
             $sdir = "Temp.H";
@@ -180,6 +201,10 @@ function func_get_dir($type, &$sdir)
             $dir = 0;
             $sdir = "T.Mon";
             break;
+        case E_IO_VOLT_HIGHLOW:
+            $dir = 0;
+            $sdir = "Volt.H/L";
+            break;
         case E_IO_VOLT_HIGH:
             $dir = 0;
             $sdir = "Volt.H";
@@ -191,6 +216,22 @@ function func_get_dir($type, &$sdir)
         case E_IO_VOLT_MONITOR:
             $dir = 0;
             $sdir = "V.Mon";
+            break;
+        case E_IO_LEVEL_MONITOR:
+            $dir = 0;
+            $sdir = "L.Mon";
+            break;
+        case E_IO_LEVEL_HIGH:
+            $dir = 0;
+            $sdir = "Lvl.H";
+            break;
+        case E_IO_LEVEL_LOW:
+            $dir = 0;
+            $sdir = "Lvl.L";
+            break;
+        case E_IO_LEVEL_HIGHLOW:
+            $dir = 0;
+            $sdir = "Lvl.H/L";
             break;
     }
     
@@ -213,6 +254,8 @@ if (isset($_GET['DeviceInfoNo']))
     $di_array['di_DeviceInfoNo'] = $_GET['DeviceInfoNo'];
 if (isset($_GET['AddrFilter']))
     $di_array['addr_filter'] = intval($_GET['AddrFilter']);
+if (isset($_GET['DirFilter']))
+    $di_array['dir_filter'] = intval($_GET['DirFilter']);
 if (isset($_POST['di_DeviceInfoNo']))
     $di_array['di_DeviceInfoNo'] = $_POST['di_DeviceInfoNo'];
 if (isset($_POST['di_DeviceNo']))
@@ -222,7 +265,7 @@ if (isset($_POST['de_Address']))
 if (isset($_POST['de_Hostname']))
     $di_array['de_Hostname'] = $_POST['de_Hostnane'];
 if (isset($_POST['di_IOChannel']))
-    $di_array['di_IOChannel'] = $_POST['di_IOChannel'] - 1;
+    $di_array['di_IOChannel'] = intval($_POST['di_IOChannel']) - 1;
 if (isset($_POST['di_IOName']))
     $di_array['di_IOName'] = $_POST['di_IOName'];
 if (isset($_POST['di_IOType']))
@@ -233,8 +276,6 @@ if (isset($_POST['di_StartTime']))
     $di_array['di_StartTime'] = $_POST['di_StartTime'];
 if (isset($_POST['di_Hysteresis']))
     $di_array['di_Hysteresis'] = $_POST['di_Hysteresis'];
-if (isset($_POST['di_Temperature']))
-    $di_array['di_Temperature'] = $_POST['di_Temperature'];
         
 if (isset($_POST['di_Weekdays_sun']))
     $dw_sun = "Y";
@@ -256,8 +297,6 @@ if (isset($_POST['di_AnalogType']))
     $di_array['di_AnalogType'] = substr($_POST['di_AnalogType'], 0, 1);
 if (isset($_POST['di_CalcFactor']))
     $di_array['di_CalcFactor'] = $_POST['di_CalcFactor'];
-if (isset($_POST['di_Voltage']))
-    $di_array['di_Voltage'] = $_POST['di_Voltage'];
 if (isset($_POST['di_Offset']))
     $di_array['di_Offset'] = $_POST['di_Offset'];
 if (isset($_POST['di_MonitorPos1']))
@@ -279,11 +318,19 @@ if (isset($_POST['di_ValueRangeLo']))
 if (isset($_POST['di_ValueRangeHi']))
     $di_array['di_ValueRangeHi'] = $_POST['di_ValueRangeHi'];
             
-if (isset($_POST['addr_filter'])) {
+if (isset($_POST['addr_filter'])) 
+{
     if (strlen($_POST['addr_filter']) == 0)
-        $di_array['addr_filter'] = - 1;
+        $di_array['addr_filter'] = -1;
     else
         $di_array['addr_filter'] = intval($_POST['addr_filter']);
+}
+if (isset($_POST['dir_filter']))
+{
+    if (strlen($_POST['dir_filter']) == 0)
+        $di_array['dir_filter'] = "";
+    else
+        $di_array['dir_filter'] = $_POST['dir_filter'];
 }
 
 if (isset($_GET['DeviceInfoNo'])) 
@@ -292,7 +339,7 @@ if (isset($_GET['DeviceInfoNo']))
     {   // show blank detail page
         $new_deviceinfo = true;
     }
-    else if (($line = $db->GetFields('deviceinfo', 'di_DeviceInfoNo', $di_array['di_DeviceInfoNo'], "di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,di_Temperature,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset,di_MonitorPos,di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo")) !== false) { // success
+    else if (($line = $db->GetFields('deviceinfo', 'di_DeviceInfoNo', $di_array['di_DeviceInfoNo'], "di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo")) !== false) { // success
         $di_array['di_DeviceNo'] = $line[0];
         $di_array['di_IOChannel'] = $line[1];
         $di_array['di_IOName'] = $line[2];
@@ -300,21 +347,19 @@ if (isset($_GET['DeviceInfoNo']))
         $di_array['di_OnPeriod'] = $line[4];
         $di_array['di_StartTime'] = func_convert_time($line[5]);
         $di_array['di_Hysteresis'] = $line[6];
-        $di_array['di_Temperature'] = $line[7];
-        $di_array['di_Weekdays'] = $line[8];
-        $di_array['di_AnalogType'] = $line[9];
-        $di_array['di_CalcFactor'] = $line[10];
-        $di_array['di_Voltage'] = $line[11];
-        $di_array['di_Offset'] = $line[12];
-        $di_array['di_MonitorPos1'] = substr($line[13], 0, 3);
-        $di_array['di_MonitorPos2'] = substr($line[13], 3, 3);
-        $di_array['di_MonitorPos3'] = substr($line[13], 6, 3);
-        $di_array['di_MonitorPos4'] = substr($line[13], 9, 3);
-        $di_array['di_MonitorPos5'] = substr($line[13], 12, 3);
-        $di_array['di_MonitorHi'] = $line[14];
-        $di_array['di_MonitorLo'] = $line[15];
-        $di_array['di_ValueRangeHi'] = $line[16];
-        $di_array['di_ValueRangeLo'] = $line[17];
+        $di_array['di_Weekdays'] = $line[7];
+        $di_array['di_AnalogType'] = $line[8];
+        $di_array['di_CalcFactor'] = $line[9];
+        $di_array['di_Offset'] = $line[10];
+        $di_array['di_MonitorPos1'] = substr($line[11], 0, 3);
+        $di_array['di_MonitorPos2'] = substr($line[11], 3, 3);
+        $di_array['di_MonitorPos3'] = substr($line[11], 6, 3);
+        $di_array['di_MonitorPos4'] = substr($line[11], 9, 3);
+        $di_array['di_MonitorPos5'] = substr($line[11], 12, 3);
+        $di_array['di_MonitorHi'] = $line[12];
+        $di_array['di_MonitorLo'] = $line[13];
+        $di_array['di_ValueRangeHi'] = $line[14];
+        $di_array['di_ValueRangeLo'] = $line[15];
         
         $di_array['de_Address'] = 0;
         $di_array['de_Hostname'] = '?';
@@ -343,8 +388,14 @@ else if (isset($_POST['DeleteDeviceInfo']))
     $info = $db->ReadDeviceInfo($_POST['di_DeviceInfoNo']);
     if ($db->DeleteDeviceInfo($info['di_DeviceInfoNo'], $info['di_DeviceNo'], $info['di_IOChannel'])) 
     {
-        $di_array['info_msg'] = sprintf("Device deleted");
+        $addr_filter = $di_array['addr_filter'];
+        $dir_filter = $di_array['dir_filter'];
+        
         func_clear_di_array($di_array);
+        
+        $di_array['info_msg'] = sprintf("Device deleted");
+        $di_array['addr_filter'] = $addr_filter;
+        $di_array['dir_filter'] = $dir_filter;
     } 
     else 
     {
@@ -397,7 +448,7 @@ else if (isset($_POST['NewDeviceInfo']) || isset($_POST['UpdateDeviceInfo']))
     {
         $stime = func_convert_time($di_array['di_StartTime']);
         $monitor_pos = sprintf("%s%s%s%s%s", $di_array['di_MonitorPos1'], $di_array['di_MonitorPos2'], $di_array['di_MonitorPos3'], $di_array['di_MonitorPos4'], $di_array['di_MonitorPos5']);
-        if ($db->UpdateDeviceInfoTable($di_array['di_DeviceInfoNo'], $di_array['di_DeviceNo'], $di_array['di_IOChannel'], $di_array['di_IOName'], $di_array['di_IOType'], $di_array['di_OnPeriod'], $stime, $di_array['di_Hysteresis'], $di_array['di_Temperature'], $di_array['di_Weekdays'], $di_array['di_AnalogType'], $di_array['di_CalcFactor'], $di_array['di_Voltage'], $di_array['di_Offset'], $monitor_pos, 
+        if ($db->UpdateDeviceInfoTable($di_array['di_DeviceInfoNo'], $di_array['di_DeviceNo'], $di_array['di_IOChannel'], $di_array['di_IOName'], $di_array['di_IOType'], $di_array['di_OnPeriod'], $stime, $di_array['di_Hysteresis'], $di_array['di_Weekdays'], $di_array['di_AnalogType'], $di_array['di_CalcFactor'], $di_array['di_Offset'], $monitor_pos, 
             $di_array['di_MonitorHi'], $di_array['di_MonitorLo'], $di_array['di_ValueRangeHi'], $di_array['di_ValueRangeLo'] )) 
         { // success
           // update iolinks
@@ -410,12 +461,14 @@ else if (isset($_POST['NewDeviceInfo']) || isset($_POST['UpdateDeviceInfo']))
             }
             
             $addr_filter = $di_array['addr_filter'];
+            $dir_filter = $di_array['dir_filter'];
             
             $new_deviceinfo = false;
             func_clear_di_array($di_array);
             
             $di_array['info_msg'] = "New deviceinfo saved successfully.";
             $di_array['addr_filter'] = $addr_filter;
+            $di_array['dir_filter'] = $dir_filter;
         } 
         else 
         {
@@ -443,7 +496,13 @@ else if (isset($_POST['ClickDeviceInfo']))
 } 
 else if (isset($_POST['ClearDeviceInfo'])) 
 {
+    $addr_filter = $di_array['addr_filter'];
+    $dir_filter = $di_array['dir_filter'];
+    
     func_clear_di_array($di_array);
+    
+    $di_array['addr_filter'] = $addr_filter;
+    $di_array['dir_filter'] = $dir_filter;
 }
 
 ?>
@@ -535,6 +594,17 @@ function ioTypeChange()
 			document.getElementById('di_rowMonitorHiLo').style.visibility = 'visible';
 			document.getElementById('di_rowValueRange').style.visibility = 'visible';
 		}
+		else if ( sel.value.indexOf("Level") >= 0 )
+		{
+			console.log( "ioTypeChange(): level" );
+			document.getElementById('di_rowAnalogType').style.visibility = 'visible';
+			document.getElementById('di_rowVoltage').style.visibility = 'visible';
+			document.getElementById('di_rowCalcFactor').style.visibility = 'visible';
+			document.getElementById('di_rowOffset').style.visibility = 'visible';
+			document.getElementById('di_rowMonitorPos').style.visibility = 'visible';
+			document.getElementById('di_rowMonitorHiLo').style.visibility = 'visible';
+			document.getElementById('di_rowValueRange').style.visibility = 'visible';
+		}
 	}
 }
 </script>
@@ -569,6 +639,18 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
 			}
 			?>
 			</select> 
+			</div>
+		</div>
+
+		<div class="col-sm-2">
+			<div class='input-group'>
+			<select class='form-control custom-select' size='1' name='dir_filter' id='dir_filter'>
+			<option></option>
+			<?php
+			printf( "<option %s>IN</option>", ($di_array['dir_filter'] == "IN" ? "selected" : "") );
+			printf( "<option %s>OUT</option>", ($di_array['dir_filter'] == "OUT" ? "selected" : "") );
+			?>
+			</select> 
 			&nbsp;
 			<button type='submit' class='btn btn-outline-dark mt-2' name='Refresh' id='Refresh'>Filter</button>
 			</div>
@@ -580,13 +662,20 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-5 mb-2">
+		<div class="col-sm-8 mb-2">
 
 			<?php 
 			if ( $di_array['error_msg'] != "" )
 			    printf( "<p class='text-danger'>%s</p>", $di_array['error_msg'] );
 		    else if ( $di_array['info_msg'] != "" )
 		        printf( "<p class='text-info'>%s</p>", $di_array['info_msg'] );
+            ?>
+
+            <?php 
+            if ( $_SESSION['us_AuthLevel'] == SECURITY_LEVEL_ADMIN && count($di_list) > 8 )
+            {
+                printf( "<a href='?DeviceInfoNo=0&AddrFilter=%d&DirFIlter=%s'>Add New DeviceInfo</a></br>", $di_array['addr_filter'], $di_array['dir_filter'] );
+            }
             ?>
             
     		<table class='table table-striped'>
@@ -603,18 +692,23 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
 			<?php
 			foreach ( $di_list as $info )
 			{
-			    if ($di_array['addr_filter'] >= 0 && $info['de_Address'] != $di_array['addr_filter']) {
+			    $dir = func_get_dir($info['di_IOType'], $sdir);
+			    if ($di_array['addr_filter'] >= 0 && $info['de_Address'] != $di_array['addr_filter']) 
+			    {
+			        continue;
+			    }
+			    else if ( ($di_array['dir_filter'] == "IN" && $dir == 1) || ($di_array['dir_filter'] == "OUT" && $dir == 0) )
+			    {
 			        continue;
 			    }
 			    
 			    printf( "<tr>" );
 			    
-			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $info['de_Address']);
-			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $info['di_IOChannel'] + 1);
-			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $info['di_IOName']);
-			    func_get_dir($info['di_IOType'], $dir);
-			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $dir);
-			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], func_get_on_period($info['di_OnPeriod']));
+			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d&DirFilter=%s'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $di_array['dir_filter'], $info['de_Address']);
+			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d&DirFilter=%s'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $di_array['dir_filter'], $info['di_IOChannel'] + 1);
+			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d&DirFilter=%s'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $di_array['dir_filter'], $info['di_IOName']);
+			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d&DirFilter=%s'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $di_array['dir_filter'], $sdir);
+			    printf("<td align='left'><a href='?DeviceInfoNo=%d&AddrFilter=%d&DirFilter=%s'>%s</a></td>", $info['di_DeviceInfoNo'], $di_array['addr_filter'], $di_array['dir_filter'], func_get_on_period($info['di_OnPeriod']));
 			    
 			    printf( "</tr>" );
 			}
@@ -623,7 +717,9 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
 
             <?php 
             if ( $_SESSION['us_AuthLevel'] == SECURITY_LEVEL_ADMIN )
-                printf( "<p><a href='?DeviceInfoNo=0'>Add New DeviceInfo</a></p>" );
+            {
+                printf( "<p><a href='?DeviceInfoNo=0&AddrFilter=%d&DirFilter=%s'>Add New DeviceInfo</a></p>", $di_array['addr_filter'], $di_array['dir_filter'] );
+            }
             ?>
 
 		</div>
@@ -669,7 +765,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_IOChannel'>IO Channel: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='di_IOChannel' id='di_IOChannel' size='3' value='%s'> ", ($di_array['di_IOChannel'] === "" ? "" : $di_array['di_IOChannel'] + 1) );
+    		printf( "<input type='text' class='form-control' name='di_IOChannel' id='di_IOChannel' size='3' value='%s'> (1-16)", ($di_array['di_IOChannel'] === "" ? "" : $di_array['di_IOChannel'] + 1) );
     		printf( "</div>" );
     		printf( "</div>" );
 
@@ -694,13 +790,19 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TOGGLE ? "selected" : ""), E_IOD_TOGGLE);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_ON_OFF_TIMER ? "selected" : ""), E_IOD_ON_OFF_TIMER);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_OUTPUT ? "selected" : ""), E_IOD_OUTPUT);
+    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TEMP_HIGHLOW ? "selected" : ""), E_IOD_TEMP_HIGHLOW);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TEMP_HIGH ? "selected" : ""), E_IOD_TEMP_HIGH);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TEMP_LOW ? "selected" : ""), E_IOD_TEMP_LOW);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TEMP_MONITOR ? "selected" : ""), E_IOD_TEMP_MONITOR);
+    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_HIGHLOW ? "selected" : ""), E_IOD_VOLT_HIGHLOW);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_HIGH ? "selected" : ""), E_IOD_VOLT_HIGH);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_LOW ? "selected" : ""), E_IOD_VOLT_LOW);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_MONITOR ? "selected" : ""), E_IOD_VOLT_MONITOR);
     		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_DAYNIGHT ? "selected" : ""), E_IOD_VOLT_DAYNIGHT);
+    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_LEVEL_MONITOR ? "selected" : ""), E_IOD_LEVEL_MONITOR);
+    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_LEVEL_HIGH ? "selected" : ""), E_IOD_LEVEL_HIGH);
+    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_LEVEL_LOW ? "selected" : ""), E_IOD_LEVEL_LOW);
+    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_LEVEL_HIGHLOW ? "selected" : ""), E_IOD_LEVEL_HIGHLOW);
     		printf("</select>");
     		printf( "</div>" );
     		printf( "</div>" );
@@ -716,7 +818,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		
     		printf( "<div class='form-row'>" );
     		printf( "<div class='col'>" );
-    		printf( "<label for='di_OnPeriod'>Name: </label>" );
+    		printf( "<label for='di_OnPeriod'>On Period: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		printf( "<input type='text' class='form-control' name='di_OnPeriod' id='di_OnPeriod' size='5' value='%s'> ", $di_array['di_OnPeriod'] );
@@ -735,15 +837,6 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf("<label><input type='checkbox' name='di_Weekdays_thu' id='di_Weekdays_thu' %s>Th&nbsp;</label>", (substr($di_array['di_Weekdays'], 4, 1) == "Y" ? "checked" : ""));
     		printf("<label><input type='checkbox' name='di_Weekdays_fri' id='di_Weekdays_fri' %s>Fr&nbsp;</label>", (substr($di_array['di_Weekdays'], 5, 1) == "Y" ? "checked" : ""));
     		printf("<label><input type='checkbox' name='di_Weekdays_sat' id='di_Weekdays_sat' %s>Sa&nbsp;</label>", (substr($di_array['di_Weekdays'], 6, 1) == "Y" ? "checked" : ""));
-    		printf( "</div>" );
-    		printf( "</div>" );
-    		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
-    		printf( "<label for='di_Temperature'>Temperature: </label>" );
-    		printf( "</div>" );
-    		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='di_Temperature' id='di_Temperature' size='5' value='%s'> (deg C) ", $di_array['di_Temperature'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -770,21 +863,20 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		
     		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
-    		printf( "<label for='di_Voltage'>Voltage: </label>" );
-    		printf( "</div>" );
-    		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='di_Voltage' id='di_Voltage' size='5' value='%s'> ", $di_array['di_Voltage'] );
-    		switch ($di_array['di_IOType']) {
-    		    default:
-    		        break;
-    		    case E_IO_VOLT_HIGH:
-    		    case E_IO_VOLT_LOW:
-    		    case E_IO_VOLT_MONITOR:
-    		        printf(" Latest Value");
-    		        break;
+    		switch ($di_array['di_IOType']) 
+    		{
+   		    default:
+   		        break;
+   		    case E_IO_VOLT_HIGHLOW:
+   		    case E_IO_VOLT_HIGH:
+   		    case E_IO_VOLT_LOW:
+   		    case E_IO_VOLT_MONITOR:
+   		        if ($di_array['di_AnalogType'] == "V")
+   		            printf("Latest Value: %.2fV %s", func_calc_voltage($current_value['ev_Value'], $di_array['di_AnalogType']), $current_value['ev_Timestamp']);
+   		        else
+   		            printf("Latest Value: %.2fA %s", func_calc_voltage($current_value['ev_Value'], $di_array['di_AnalogType']), $current_value['ev_Timestamp']);
+   		        break;
     		}
-    		printf( "</div>" );
     		printf( "</div>" );
     		
     		printf( "<div class='form-row'>" );
@@ -792,19 +884,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_CalcFactor'>Calc Factor: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='di_CalcFactor' id='di_CalcFactor' size='5' value='%s'> ", $di_array['di_CalcFactor'] );
-    		switch ($di_array['di_IOType']) {
-    		    default:
-    		        break;
-    		    case E_IO_VOLT_HIGH:
-    		    case E_IO_VOLT_LOW:
-    		    case E_IO_VOLT_MONITOR:
-    		        if ($di_array['di_AnalogType'] == "V")
-    		            printf(" %.2fV %s", func_calc_voltage($current_value['ev_Value'], $di_array['di_AnalogType']), $current_value['ev_Timestamp']);
-    		        else
-    		            printf(" %.2fA %s", func_calc_voltage($current_value['ev_Value'], $di_array['di_AnalogType']), $current_value['ev_Timestamp']);
-    		        break;
-    		}
+    		$tip = sprintf( "The Modbus devices only measure 0-10V directly, so if you are measuring 100V via a 10:1 divider the calc factor would be 10.0<br>For Level devices the Calc Factor is the max water level in mm." );
+    		printf( "<input type='text' class='form-control' name='di_CalcFactor' id='di_CalcFactor' size='5' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $di_array['di_CalcFactor'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -813,7 +894,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_Offset'>Offset Voltage: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='di_Offset' id='di_Offset' size='5' value='%s'> ", $di_array['di_Offset'] );
+    		$tip = sprintf( "For Analog Current the Offest is the 0Amp voltage, e.g. 2.49V. For Level devices the Offset is the sensor height above the max level." );
+    		printf( "<input type='text' class='form-control' name='di_Offset' id='di_Offset' size='5' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $di_array['di_Offset'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -823,7 +905,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		$tip = sprintf( "Enter 3 characters:<br>1st: monitor number 1 or 2<br>2nd: F, L or R for full width, left or right<br>3rd: graph row number, 1 to 4" );
-    		printf( "<input type='text' class='form-control' name='di_MonitorPos1' id='di_MonitorPos1' size='3' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $di_array['di_MonitorPos1'], $tip );
+    		printf( "<input type='text' class='form-control' name='di_MonitorPos1' id='di_MonitorPos1' size='3' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", 
+    		    $di_array['di_MonitorPos1'], $tip );
     		printf( "<input type='text' class='form-control' name='di_MonitorPos2' id='di_MonitorPos2' size='3' value='%s'> ", $di_array['di_MonitorPos2'] );
     		printf( "<input type='text' class='form-control' name='di_MonitorPos3' id='di_MonitorPos3' size='3' value='%s'> ", $di_array['di_MonitorPos3'] );
     		printf( "<input type='text' class='form-control' name='di_MonitorPos4' id='di_MonitorPos4' size='3' value='%s'> ", $di_array['di_MonitorPos4'] );
@@ -845,7 +928,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		
     		printf( "<div class='form-row'>" );
     		printf( "<div class='col'>" );
-    		printf( "<label for='di_ValueRangeLoHi'>Y Axis Range: </label>" );
+    		printf( "<label for='di_ValueRangeLoHi'>Graph Y Axis Range: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		printf( "<input type='text' class='form-control' name='di_ValueRangeLo' id='di_ValueRangeLo' size='3' value='%s'> ", $di_array['di_ValueRangeLo'] );
@@ -858,12 +941,14 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<p>" );
     		printf("<input type='hidden' class='form-control' name='di_DeviceInfoNo' value='%d'>", $di_array['di_DeviceInfoNo']);
     		printf("<input type='hidden' class='form-control' name='di_DeviceNo' value='%d'>", $di_array['di_DeviceNo']);
+    		printf("<input type='hidden' class='form-control' name='addr_filter' value='%d'>", $di_array['addr_filter']);
+    		printf("<input type='hidden' class='form-control' name='dir_filter' value='%d'>", $di_array['dir_filter']);
     		
     		printf("<button type='submit' class='btn btn-outline-dark' name='UpdateDeviceInfo' id='UpdateDeviceInfo' %s>Update</button>", ($di_array['di_DeviceInfoNo'] == 0 || func_disabled_non_user() != "" ? "disabled" : ""));
     		printf("&nbsp;&nbsp;");
     		printf("<button type='submit' class='btn btn-outline-dark' name='NewDeviceInfo' id='NewDeviceInfo' %s>New</button>", func_disabled_non_user() );
     		printf("&nbsp;&nbsp;");
-    		$onclick = sprintf("return confirm(\"Are you sure you want to delete deviceinfo with channel %s ?\")", $di_array['di_IOChannel']+1 );
+    		$onclick = sprintf("return confirm(\"Are you sure you want to delete deviceinfo with channel %d ?\")", intval($di_array['di_IOChannel'])+1 );
     		printf("<button type='submit' class='btn btn-outline-dark' name='DeleteDeviceInfo' id='DeleteDeviceInfo' onclick='%s' %s>Delete</button>", $onclick, ($di_array['di_DeviceInfoNo'] == 0 || func_disabled_non_user() != "" ? "disabled" : "") );
     		printf("&nbsp;&nbsp;");
     		printf("<button type='submit' class='btn btn-outline-dark' name='ClearDeviceInfo' id='ClearDeviceInfo'>Clear</button>");

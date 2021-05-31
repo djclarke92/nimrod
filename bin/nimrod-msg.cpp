@@ -76,7 +76,7 @@ int main ( int argc, char** argv )
 		iLen = write( sockfd, msgBuf.szBuf, sizeof(msgBuf) );
 		if ( iLen != sizeof(msgBuf) )
 		{
-			printf( "Error: only wrote %d of %lu bytes\n", iLen, sizeof(msgBuf) );
+			printf( "Error: only wrote %d of %lu bytes\n", iLen, (unsigned long)sizeof(msgBuf) );
 		}
 		else
 		{	// read the reply
@@ -92,7 +92,7 @@ int main ( int argc, char** argv )
 				{	// error
 					if ( errno != EINTR )
 					{	// not interrupt
-						printf( "Failed to read socket message (%u of %lu bytes), errno %d\n", iLen, sizeof(msgBuf), errno );
+						printf( "Failed to read socket message (%u of %lu bytes), errno %d\n", iLen, (unsigned long)sizeof(msgBuf), errno );
 						break;
 					}
 				}
@@ -117,7 +117,7 @@ int main ( int argc, char** argv )
 			}
 			else
 			{
-				printf( "Failed to read reply, got %d of %lu bytes, errno %d\n", iLen, sizeof(msgBuf),errno );
+				printf( "Failed to read reply, got %d of %lu bytes, errno %d\n", iLen, (unsigned long)sizeof(msgBuf),errno );
 			}
 		}
 	}

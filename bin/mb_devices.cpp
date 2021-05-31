@@ -6,6 +6,8 @@
 #include <time.h>
 #include <errno.h>
 #include <math.h>
+#include <fcntl.h>
+#include <termios.h>
 #include <sys/stat.h>
 #include <modbus/modbus.h>
 #include "mb_mysql.h"
@@ -47,6 +49,7 @@ void CMyDevice::Init()
 	SetDeviceName( "" );
 	SetDeviceHostname( "" );
 	SetContext( NULL );
+	SetComHandle( 0 );
 	SetAddress( -1 );
 	SetTimeoutCount( 0 );
 	SetDeviceType( E_DT_UNUSED );
@@ -76,11 +79,9 @@ void CMyDevice::Init()
 		SetAnalogType( j, 'V' );
 		SetCalcFactor( j, 0.0 );
 		SetOffset( j, 0.0 );
-		SetMonitorPos( j, "  " );
+		SetMonitorPos( j, "   " );
 		GetAlarmTriggered( j ) = 0;
 		GetHysteresis( j ) = 0;
-		GetTemperature( j ) = 0.0;
-		GetVoltage( j ) = 0.0;
 		GetMonitorValueLo( j ) = 0.0;
 		GetMonitorValueHi( j ) = 0.0;
 		GetLastRecorded( j ) = 0;
@@ -390,6 +391,48 @@ const double CMyDevice::CalcVoltage( const int iChannel, const bool bNew )
 	return dVal;
 }
 
+// data ifrom K02 is in mm
+// water height = <max_water_height> - (<measured_value> - <offset_above_max_level>)
+// CalcFactor is the max water level height in mm
+// Offset if the sensor height above the max level in mm
+const double CMyDevice::CalcLevel( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dMaxHeight;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		dMaxHeight = m_dCalcFactor[iChannel];
+
+		if ( bNew )
+			dUnit = (double)(m_uNewData[iChannel]);
+		else
+			dUnit = (double)(m_uLastData[iChannel]);
+
+		// subtract the sensor height above the max level
+		dUnit -= m_dOffset[iChannel];	// in mm
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 || dMaxHeight == 0 )
+		{	// sensor is not connected
+
+		}
+		else
+		{
+			if ( GetDeviceType() == E_DT_LEVEL_K02 )
+			{
+				dVal = 100 * ((dMaxHeight - dUnit) / dMaxHeight);
+			}
+			else
+			{
+				dVal = 100 * (dUnit / dMaxHeight);
+			}
+		}
+	}
+
+	return dVal;
+}
+
 const bool CMyDevice::IsSensorConnected( const int iChannel )
 {
 	bool bRc = false;
@@ -560,7 +603,17 @@ CDeviceList::CDeviceList()
 
 CDeviceList::~CDeviceList()
 {
+	int i;
+
 	//m_DB.Disconnect();
+	for ( i = 0; i < MAX_DEVICES; i++ )
+	{
+		if ( m_Device[i].GetComHandle() != 0 )
+		{
+			close( m_Device[i].GetComHandle() );
+			m_Device[i].SetComHandle( 0 );
+		}
+	}
 }
 
 void CDeviceList::Init()
@@ -573,6 +626,7 @@ void CDeviceList::Init()
 	m_eDayNightState = E_DN_UNKNOWN;
 	for ( i = 0; i < MAX_DEVICES; i++ )
 	{
+		m_bHostComPortModbus[i] = false;
 		m_szHostComPort[i][0] = '\0';
 		m_pHostCtx[i] = NULL;
 
@@ -605,6 +659,7 @@ bool CDeviceList::IsDeviceAlive( modbus_t* ctx, const char* szHostComPort, const
 	return bRc;
 }
 
+// should only be called for modbus devices
 void CDeviceList::UpdateDeviceComPort( CMysql& myDB, const char* szNewComPort, const char* szOldComPort, char szPortList[MAX_DEVICES][MAX_COMPORT_LEN+1] )
 {
 	int j;
@@ -641,10 +696,11 @@ void CDeviceList::UpdateDeviceComPort( CMysql& myDB, const char* szNewComPort, c
 
 }
 
-void CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][MAX_COMPORT_LEN+1] )
+int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][MAX_COMPORT_LEN+1] )
 {
 	bool bFound;
 	bool bFirstTime;
+	int iCount = 0;
 	int i;
 	int j;
 	int idx;
@@ -684,7 +740,7 @@ void CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][
 			}
 			else
 			{	// connected
-				LogMessage( E_MSG_INFO, "Modbus serial connection on '%s'", m_szHostComPort[i] );
+				LogMessage( E_MSG_INFO, "Checking Modbus serial connection on '%s'", m_szHostComPort[i] );
 			}
 		}
 		else
@@ -702,6 +758,10 @@ void CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][
 		}
 		else if ( strncmp( GetComPort(idx), "MCU", 3 ) == 0 )
 		{	// nodemcu device
+			continue;
+		}
+		else if ( GetDeviceType(idx) == E_DT_LEVEL_K02 )
+		{	// level K02 device
 			continue;
 		}
 		else if ( GetAddress(idx) > 0 )
@@ -737,7 +797,8 @@ void CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][
 						//LogMessage( E_MSG_INFO, "modbus slave connected for '%s' on address %d", m_szHostComPort[i], GetAddress(idx) );
 
 						if ( (bFound = IsDeviceAlive( m_pHostCtx[i], m_szHostComPort[i], GetAddress(idx) )) )
-						{
+						{	// modbus devices exist on this com port
+							m_bHostComPortModbus[i] = true;
 							if ( strcmp( m_szHostComPort[i], GetComPort(idx) ) != 0 )
 							{	// com port has changed
 								UpdateDeviceComPort( myDB, m_szHostComPort[i], GetComPort(idx), szPortList );
@@ -777,11 +838,60 @@ void CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][
 		}
 	}
 
+	// ensure K02 level devices are not on the modbus com ports
+	// check which device is on each real com port
+	for ( idx = 0; idx < MAX_DEVICES; idx++ )
+	{
+		if ( !IsMyHostname( GetDeviceHostname(idx) ) )
+		{	// device is not on this host
+			continue;
+		}
+		else if ( strncmp( GetComPort(idx), "MCU", 3 ) == 0 )
+		{	// nodemcu device
+			continue;
+		}
+		else if ( GetDeviceType(idx) == E_DT_LEVEL_K02 )
+		{	// level K02 device using /dev/tty* port
+			if ( strncmp( GetComPort(idx), "/dev/tty", 8 ) == 0 )
+			{
+				LogMessage( E_MSG_INFO, "Checking K02 device on %s", GetComPort(idx) );
+
+				for ( i = 0; i < MAX_DEVICES; i++ )
+				{
+					if ( idx != i && m_bHostComPortModbus[i] && strcmp( GetComPort(i), GetComPort(idx) ) == 0 )
+					{	// com port clash !
+						LogMessage( E_MSG_WARN, "K02 device on %s is using a modbus com port", GetComPort(idx) );
+
+						// TODO: how to handle multiple K02 devices on separate com ports
+						// pick the first non modbus com port instead
+						for ( j = 0; j < MAX_DEVICES; j++ )
+						{
+							if ( m_bHostComPortModbus[j] )
+							{	// found a non modbus com port
+								LogMessage( E_MSG_INFO, "K02 device address %d com port now '%s', was '%s'", GetAddress(idx), m_szHostComPort[j], GetComPort(idx) );
+								SetComPort( idx, m_szHostComPort[j] );
+
+								UpdateDBDeviceComPort( myDB, idx );
+								break;
+							}
+						}
+						break;
+					}
+				}
+			}
+			else
+			{
+				LogMessage( E_MSG_INFO, "Skipping K02 device on %s", GetComPort(idx) );
+			}
+		}
+	}
+
 	// cleanup
 	for ( i = 0; i < MAX_DEVICES; i++ )
 	{
 		if ( m_szHostComPort[i][0] != '\0' )
 		{	// found a real com port
+			iCount += 1;
 			if ( m_pHostCtx[i] != NULL )
 			{	// this com port is connected
 				modbus_close( m_pHostCtx[i] );
@@ -796,7 +906,9 @@ void CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][
 		}
 	}
 
-	LogMessage( E_MSG_INFO, "com port reconfiguration complete" );
+	LogMessage( E_MSG_INFO, "Com port reconfiguration complete, %d ports", iCount );
+
+	return iCount;
 }
 
 bool CDeviceList::InitContext()
@@ -805,6 +917,8 @@ bool CDeviceList::InitContext()
 	bool bFound;
 	int i;
 	int idx;
+	int iSuccess = 0;
+	int iFailure = 0;
 
 	for ( idx = 0; idx < MAX_DEVICES; idx++ )
 	{
@@ -828,13 +942,36 @@ bool CDeviceList::InitContext()
 			}
 		}
 
-		if ( m_Device[i].GetAddress() == 0 )
+		if ( m_Device[idx].GetAddress() == 0 )
 		{	// timer
+			iSuccess += 1;
 			LogMessage( E_MSG_INFO, "skip ctx for timer DeviceNo %d on '%s'", m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
 		}
-		else if ( strncmp( m_Device[i].GetComPort(), "MCU", 3 ) == 0 )
+		else if ( strncmp( m_Device[idx].GetComPort(), "MCU", 3 ) == 0 )
 		{	// nodemcu
+			iSuccess += 1;
 			LogMessage( E_MSG_INFO, "skip ctx for MCU DeviceNo %d on '%s'", m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
+		}
+		else if ( m_Device[idx].GetDeviceType() == E_DT_LEVEL_K02 )
+		{	// level K02 device
+			iSuccess += 1;
+			LogMessage( E_MSG_INFO, "Open COM port %s for Level K02 DeviceNo %d on '%s'", m_Device[idx].GetComPort(), m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
+
+			int iHandle;
+
+			iHandle = open( m_Device[idx].GetComPort(), O_RDWR | O_NOCTTY | O_SYNC );
+			if ( iHandle > 0 )
+			{
+				m_Device[idx].SetComHandle( iHandle );
+
+				SetComInterfaceAttribs( iHandle, B9600, 8, 0 );  // set speed to 9600 bps, 8n1 (no parity)
+				SetComBlocking( iHandle, 0 );                // set no blocking
+
+			}
+			else
+			{
+				LogMessage( E_MSG_ERROR, "Failed to open COM port %s, errno %d", m_Device[idx].GetComPort(), errno );
+			}
 		}
 		else if ( !bFound )
 		{
@@ -848,21 +985,37 @@ bool CDeviceList::InitContext()
 				bRc = false;
 				break;
 			}
+			else if ( modbus_connect(m_Device[idx].GetContext()) == -1 )
+			{	// com port does not exist...
+				iFailure += 1;
+//				FreeAllContexts();
 
-			if ( modbus_connect(m_Device[idx].GetContext()) == -1 )
-			{
-				FreeAllContexts();
-				LogMessage( E_MSG_FATAL, "modbus_connect() failed for DeviceNo %d, aborting: %s", m_Device[idx].GetDeviceNo(), modbus_strerror(errno) );
-				bRc = false;
-				break;
+				// try to continue with other devices
+				modbus_close( m_Device[i].GetContext() );
+
+				modbus_free( m_Device[i].GetContext() );
+				m_Device[i].SetContext( NULL );
+
+				LogMessage( E_MSG_ERROR, "modbus_connect() failed for DeviceNo %d, aborting: %s", m_Device[idx].GetDeviceNo(), modbus_strerror(errno) );
+				//bRc = false;
+				//break;
 			}
-
-			LogMessage( E_MSG_INFO, "Serial connection started on %s, ctx %p", m_Device[idx].GetComPort(), m_Device[idx].GetContext() );
+			else
+			{
+				iSuccess += 1;
+				LogMessage( E_MSG_INFO, "Serial connection started on %s, ctx %p", m_Device[idx].GetComPort(), m_Device[idx].GetContext() );
+			}
 		}
 		else
 		{
 			LogMessage( E_MSG_INFO, "DeviceNo %d shares a COM port", m_Device[idx].GetDeviceNo() );
 		}
+	}
+
+	if ( bRc && iSuccess == 0 )
+	{	// no successful devices
+		LogMessage( E_MSG_FATAL, "No devices successfully initialised" );
+		bRc = false;
 	}
 
 	return bRc;
@@ -940,6 +1093,16 @@ const int CDeviceList::GetTimeoutCount( const int idx )
 	}
 
 	return E_DS_DEAD;
+}
+
+int CDeviceList::GetComHandle( const int idx )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetComHandle();
+	}
+
+	return 0;
 }
 
 modbus_t* CDeviceList::GetContext( const int idx )
@@ -1076,26 +1239,6 @@ int& CDeviceList::GetHysteresis( const int idx, const int j )
 	}
 
 	return m_Device[0].GetHysteresis(j);
-}
-
-double& CDeviceList::GetTemperature( const int idx, const int j )
-{
-	if ( idx >= 0 && idx < MAX_DEVICES )
-	{
-		return m_Device[idx].GetTemperature(j);
-	}
-
-	return m_Device[0].GetTemperature(j);
-}
-
-double& CDeviceList::GetVoltage( const int idx, const int j )
-{
-	if ( idx >= 0 && idx < MAX_DEVICES )
-	{
-		return m_Device[idx].GetVoltage(j);
-	}
-
-	return m_Device[0].GetVoltage(j);
 }
 
 double& CDeviceList::GetMonitorValueLo( const int idx, const int j )
@@ -1343,7 +1486,7 @@ const char* CDeviceList::GetMonitorPos( const int idx, const int j )
 		return m_Device[idx].GetMonitorPos(j);
 	}
 
-	return "  ";
+	return "   ";
 }
 
 void CDeviceList::GetEventTime( const int idx, const int j, struct timespec& tspec )
@@ -1457,6 +1600,16 @@ const double CDeviceList::CalcVoltage( const int idx, const int iChannel, const 
 	if ( idx >= 0 && idx < MAX_DEVICES )
 	{
 		return m_Device[idx].CalcVoltage( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
+const double CDeviceList::CalcLevel( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcLevel( iChannel, bNew );
 	}
 
 	return 0.0;
@@ -1786,7 +1939,7 @@ void CDeviceList::LogOnTime( const int idx, const int iChannel )
 	}
 	else
 	{
-		LogMessage( E_MSG_WARN, "LogOnTime(): Device %d, channel %d was not on ??", idx, iChannel+1 );
+		LogMessage( E_MSG_DEBUG, "LogOnTime(): Device %d, channel %d was not on ??", idx, iChannel+1 );
 	}
 }
 
@@ -1928,10 +2081,27 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 	bool bRet = true;
 	int i, j;
 	enum E_IO_TYPE eIOType;
+	enum E_DEVICE_STATUS eStatus;
+	modbus_t* pCtx;
+	int iHandle;
 	int iNumFields;
 	MYSQL_ROW row;
 
+	for ( i = 0; i < MAX_DEVICES; i++ )
+	{
+		eStatus = m_Device[i].GetDeviceStatus();
+		pCtx = m_Device[i].GetContext();
+		iHandle = m_Device[i].GetComHandle();
+
+		m_Device[i].Init();
+
+		m_Device[i].SetComHandle( iHandle );
+		m_Device[i].SetContext( pCtx );
+		m_Device[i].SetDeviceStatus( eStatus );
+	}
+
 	// read from mysql
+	//                          0           1          2          3            4             5       6       7
 	if ( myDB.RunQuery( "SELECT de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname FROM devices order by de_DeviceNo") != 0 )
 	{
 		bRet = false;
@@ -1942,14 +2112,14 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 		i = 0;
 		while ( (row = myDB.FetchRow( iNumFields )) )
 		{
-			SetDeviceNo( i, atoi(row[0]) );
-			SetComPort( i, row[1] );
-			SetAddress( i, atoi( row[2] ) );
-			SetNumInputs( i, atoi( row[3] ) );
-			SetNumOutputs( i, atoi( row[4] ) );
-			SetDeviceType( i, (enum E_DEVICE_TYPE)atoi( row[5] ) );
-			SetDeviceName( i, row[6] );
-			SetDeviceHostname( i, row[7] );
+			SetDeviceNo( i, atoi((const char*)row[0]) );
+			SetComPort( i, (const char*)row[1] );
+			SetAddress( i, atoi( (const char*)row[2] ) );
+			SetNumInputs( i, atoi( (const char*)row[3] ) );
+			SetNumOutputs( i, atoi( (const char*)row[4] ) );
+			SetDeviceType( i, (enum E_DEVICE_TYPE)atoi( (const char*)row[5] ) );
+			SetDeviceName( i, (const char*)row[6] );
+			SetDeviceHostname( i, (const char*)row[7] );
 
 			LogMessage( E_MSG_INFO, "Device(%d): DeNo:%d, Port:'%s', Addr:%d, DType:%d, Name:'%s', Host:'%s'", i, GetDeviceNo(i), GetComPort(i), GetAddress(i), GetDeviceType(i),
 					GetDeviceName(i), GetDeviceHostname(i) );
@@ -1968,9 +2138,11 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 	for ( i = 0; i < MAX_DEVICES; i++ )
 	{
 		if ( m_Device[i].GetAddress() >= 0 )
-		{
-			if ( myDB.RunQuery( "SELECT di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,di_Temperature,"
-					"di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset,di_MonitorPos,"
+		{	//                          0            1         2         3           4            5
+			if ( myDB.RunQuery( "SELECT di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,"
+				//   6                 7              8           9             10            11        12
+					"di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,"
+				//   13           14
 					"di_MonitorHi,di_MonitorLo FROM deviceinfo WHERE di_DeviceNo=%d order by di_IOChannel",
 					m_Device[i].GetDeviceNo() ) != 0 )
 			{
@@ -1981,28 +2153,26 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 			{
 				while ( (row = myDB.FetchRow( iNumFields )) )
 				{
-					j = atoi( row[0] );
+					j = atoi( (const char*)row[0] );
 
-					eIOType = (enum E_IO_TYPE)atoi( row[2] );
+					eIOType = (enum E_IO_TYPE)atoi( (const char*)row[2] );
 
 					if ( eIOType == E_IO_OUTPUT )
 					{
-						SetOutIOName( i, j, row[1] );
-						GetOutChannelType( i, j ) = (enum E_IO_TYPE)atoi( row[2] );
+						SetOutIOName( i, j, (const char*)row[1] );
+						GetOutChannelType( i, j ) = eIOType;
 						// row[3]
 						// row[4]
 						// row[5]
-						// row[6]
-						SetOutOnStartTime( i, j, atoi( row[7] ) );
-						SetOutOnPeriod( i, j, atoi( row[8] ) );
-						SetOutWeekdays( i, j, row[9] );
+						SetOutOnStartTime( i, j, atoi( (const char*)row[6] ) );
+						SetOutOnPeriod( i, j, atoi( (const char*)row[7] ) );
+						SetOutWeekdays( i, j, (const char*)row[8] );
+						// row[9]
 						// row[10]
 						// row[11]
-						// row[12]
+						SetMonitorPos( i, j, (const char*)row[12] );
 						// row[13]
-						SetMonitorPos( i, j, row[14] );
-						// row[15]
-						// row[16]
+						// row[14]
 
 						LogMessage( E_MSG_INFO, "DeviceInfo OUT(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, OnPeriod:%d, Days:%s, MonPos:'%s'", i, j,
 								GetOutIOName(i,j), GetOutChannelType(i,j), GetOutOnPeriod(i,j),
@@ -2011,26 +2181,24 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 					}
 					else
 					{
-						SetInIOName( i, j, row[1] );
-						GetInChannelType( i, j ) = (enum E_IO_TYPE)atoi( row[2] );
-						SetInOnPeriod( i, j, atoi( row[3] ) );
-						SetStartTime( i, j, atoi( row[4] ) );
-						GetHysteresis( i, j ) = atoi( row[5] );
-						GetTemperature( i, j ) = atof( row[6] );
+						SetInIOName( i, j, (const char*)row[1] );
+						GetInChannelType( i, j ) = eIOType;
+						SetInOnPeriod( i, j, atoi( (const char*)row[3] ) );
+						SetStartTime( i, j, atoi( (const char*)row[4] ) );
+						GetHysteresis( i, j ) = atoi( (const char*)row[5] );
+						// row[6]
 						// row[7]
-						// row[8]
-						SetInWeekdays( i, j, row[9] );
-						SetAnalogType( i, j, row[10][0] );
-						SetCalcFactor( i, j, atof( row[11] ) );
-						GetVoltage( i, j ) = atof( row[12] );
-						SetOffset( i, j, atof( row[13] ) );
-						SetMonitorPos( i, j, row[14] );
-						GetMonitorValueHi( i, j ) = atof( row[15] );
-						GetMonitorValueLo( i, j ) = atof( row[16] );
+						SetInWeekdays( i, j, (const char*)row[8] );
+						SetAnalogType( i, j, (const char)row[9][0] );
+						SetCalcFactor( i, j, atof( (const char*)row[10] ) );
+						SetOffset( i, j, atof( (const char*)row[11] ) );
+						SetMonitorPos( i, j, (const char*)row[12] );
+						GetMonitorValueHi( i, j ) = atof( (const char*)row[13] );
+						GetMonitorValueLo( i, j ) = atof( (const char*)row[14] );
 
-						LogMessage( E_MSG_INFO, "DeviceInfo  IN(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, Hyst:%d, Temp:%.1f, Days:%s AType:'%c', CFactor:%.3f, Volt:%.1f, Offset:%.2f, MonPos:'%s', MonHi:%.1f, MonLo:%.1f",
+						LogMessage( E_MSG_INFO, "DeviceInfo  IN(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, Hyst:%d, Temp:%.1f, Days:%s AType:'%c', CFactor:%.3f, Offset:%.2f, MonPos:'%s', MonHi:%.1f, MonLo:%.1f",
 								i, j, GetInIOName(i,j), GetInChannelType(i,j), GetInOnPeriod(i,j),
-								GetStartTime(i,j), GetHysteresis(i,j), GetMonitorValueLo(i,j), GetInWeekdays(i,j), GetAnalogType(i,j), GetCalcFactor(i,j), GetVoltage(i,j),
+								GetStartTime(i,j), GetHysteresis(i,j), GetMonitorValueLo(i,j), GetInWeekdays(i,j), GetAnalogType(i,j), GetCalcFactor(i,j),
 								GetOffset(i,j), GetMonitorPos(i,j), GetMonitorValueHi(i,j), GetMonitorValueLo(i,j) );
 					}
 				}
@@ -2184,6 +2352,9 @@ const char* CDeviceList::GetEventTypeDesc( const enum E_EVENT_TYPE eType )
 	case E_ET_STARTUP:			// 8:	program startup
 		snprintf( szBuf, sizeof(szBuf), "Startup" );
 		break;
+	case E_ET_LEVEL:			// 9:	level
+		snprintf( szBuf, sizeof(szBuf), "Level" );
+		break;
 	}
 
 	return szBuf;
@@ -2241,7 +2412,6 @@ void CInOutLinks::Init()
 	int i;
 	int cn;
 
-	//m_DB.Connect();
 	for ( i = 0; i < MAX_IO_LINKS; i++ )
 	{
 		SetLinkNo( i, 0 );
@@ -2504,11 +2674,13 @@ bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 	bool bRet = true;
 	int i;
 	int cn;
-
 	int iNumFields;
 	MYSQL_ROW row;
 
+	Init();
+
 	// read from mysql
+	//                          0         1             2            3              4             5            6
 	if ( myDB.RunQuery( "SELECT il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod "
 			"FROM iolinks order by il_InDeviceNo,il_InChannel") != 0 )
 	{
@@ -2520,13 +2692,13 @@ bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 		i = 0;
 		while ( (row = myDB.FetchRow( iNumFields )) )
 		{
-			SetLinkNo( i, atoi( row[0] ) );
-			SetInDeviceNo( i, atoi( row[1] ) );
-			SetInChannel( i, atoi( row[2] ) );
-			SetOutDeviceNo( i, atoi( row[3] ) );
-			SetOutChannel( i, atoi( row[4] ) );
-			SetEventType( i, (E_EVENT_TYPE)atoi( row[5] ) );
-			SetOnPeriod( i, atoi( row[6] ) );
+			SetLinkNo( i, atoi( (const char*)row[0] ) );
+			SetInDeviceNo( i, atoi( (const char*)row[1] ) );
+			SetInChannel( i, atoi( (const char*)row[2] ) );
+			SetOutDeviceNo( i, atoi( (const char*)row[3] ) );
+			SetOutChannel( i, atoi( (const char*)row[4] ) );
+			SetEventType( i, (E_EVENT_TYPE)atoi( (const char*)row[5] ) );
+			SetOnPeriod( i, atoi( (const char*)row[6] ) );
 
 			LogMessage( E_MSG_INFO, "IOLinkNo:%d, InDeviceNo:%d, InChannel:%d, OutDeviceNo:%d, OutChannel:%d, EventType:%d, OnPeriod:%d", GetLinkNo(i),
 					GetInDeviceNo(i), GetInChannel(i), GetOutDeviceNo(i), GetOutChannel(i), GetEventType(i), GetOnPeriod(i) );
@@ -2538,6 +2710,7 @@ bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 	myDB.FreeResult();
 
 	// read the conditions
+	//                          0              1         2               3              4           5
 	if ( myDB.RunQuery( "SELECT co_ConditionNo,co_LinkNo,co_LinkDeviceNo,co_LinkChannel,co_LinkTest,co_LinkValue "
 			"FROM conditions order by co_LinkNo") != 0 )
 	{
@@ -2551,7 +2724,7 @@ bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 			// find the position
 			for ( i = 0; i < MAX_IO_LINKS; i++ )
 			{
-				if ( GetLinkNo(i) == atoi(row[1]) )
+				if ( GetLinkNo(i) == atoi((const char*)row[1]) )
 				{
 					break;
 				}
@@ -2561,17 +2734,17 @@ bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 			{
 				cn = FindEmptyConditionSlot( i );
 
-				SetLinkDeviceNo( i, cn, atoi( row[2] ) );
-				SetLinkChannel( i, cn, atoi( row[3] ) );
-				SetLinkTest( i, cn, row[4] );
-				SetLinkValue( i, cn, atof( row[5] ) );
+				SetLinkDeviceNo( i, cn, atoi( (const char*)row[2] ) );
+				SetLinkChannel( i, cn, atoi( (const char*)row[3] ) );
+				SetLinkTest( i, cn, (const char*)row[4] );
+				SetLinkValue( i, cn, atof( (const char*)row[5] ) );
 
 				LogMessage( E_MSG_INFO, "Conditions: IOLinkNo:%d, LinkDeNo:%d, LinkCh:%d, LinkTest:%s, LinkValue:%.1f",
 						GetLinkNo(i), GetLinkDeviceNo(i,cn), GetLinkChannel(i,cn), GetLinkTest(i,cn), GetLinkValue(i,cn) );
 			}
 			else
 			{
-				LogMessage( E_MSG_ERROR, "Condition %d, cannot find LinkNo %d", atoi(row[0]), atoi(row[1]) );
+				LogMessage( E_MSG_ERROR, "Condition %d, cannot find LinkNo %d", atoi((const char*)row[0]), atoi((const char*)row[1]) );
 			}
 		}
 	}

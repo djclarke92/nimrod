@@ -6,6 +6,26 @@
 
 Nimrod Release Notes and History
 
+
+Version 0.1.8		May 2021
+1.	Added the events page so you can view data from the events table for all or a specific device for a selected period.
+2.	Schema changes to the deviceinfo table: di_Temperature and di_Voltage columns have been removed and functionality moved 
+	to di_MonitorHi and di_MonitorLo
+3.	Added new IO Types for monitoring Voltage or Temperature ranges, not just too high or too low
+4.	Added support for the waterproof ultrasonic distance measurement module JSN-SR04T / AJ-SR04M for sensing water tank levels.
+	The module interface is via TTL level RS-232.
+5.	Added instructions for setting up msmtp mail as ssmtp is depreciated
+6.	Create the cameras table to contain camera setup info rather than variables in site_config.php. The CAMERA variables in
+	site_config.php can be deleted once you have upgraded to v0.1.8
+7.	User login attempts are now saved to the events table with ev_DeviceNo=-3
+8.	Failed login attempts are delayed by 4 seconds to slow any robot DOS attacks.
+9.	Validate the username at login wihtout case sensitivity
+10.	Info on how to install a free signed certificate for apache using certbot
+11.	Improvements to the makefiles
+12.	Added PLC State Machine code and PLC monitor page and plcstates table
+13.	Added support for HDL300 type rs485 water level sensors
+
+
 Version 0.1.7		November 2020
 1.	Fixes to automatic database schema updates, you may need to create the 'conditions' table manually	
 2.	Add new table "conditions" to allow multiple "AND" iolink conditions when decinding to take action on an event

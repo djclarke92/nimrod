@@ -1,6 +1,8 @@
 #ifndef _INC_MB_UTILS_H
 #define _INC_MB_UTILS_H
 
+#include <string>
+
 
 #define MAX_LOG_FILE_SIZE			5000000
 #define MAX_LOG_BACKUPS				4
@@ -33,6 +35,12 @@ void CheckForUpgrade();
 bool CreateRestartScript( const char* szTar );
 bool CreatePackageVerFile( const char* szTar );
 
+int SetComInterfaceAttribs( int iHandle, int iSpeed, int iNumBits, int iParity );
+void SetComBlocking( int iHandle, bool bShouldBlock );
+
+std::string base64_decode(std::string const& encoded_string);
+std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_len);
+std::string urlEncode(std::string str);
 
 
 #endif

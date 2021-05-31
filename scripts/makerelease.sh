@@ -12,11 +12,17 @@ PI=nimrod@nimrod
 SRCFILE=./nimrod-$1.tgz
 DEST=0
 COPY=0
+CLEAN=
+PKG=Y
 
-if [[ $1 == "" ]] ; then
+if [[ $1 == "-?" ]] ; then
 	echo "Usage: $0 <release_version> [localhost|dest_hostname] [copy]"
 	exit;
 fi 
+
+if [[ $1 == "" ]] ; then
+	PKG=N
+fi
 
 if [[ $2 != "" ]]; then
 	DEST=$2
@@ -27,12 +33,13 @@ if [[ $3 = "copy" ]]; then
 fi
 
 
+
 if [[ $COPY = 0 ]]; then
 	cd bin
 
 	echo ""
 	echo "-> Compiling nimrod for linux $HOSTTYPE"
-	make -f Makefile clean all
+	make -f Makefile all
 	if [ $? != 0 ]; then
 		echo "-> Error: compile failed"
 		exit 1
@@ -41,7 +48,7 @@ if [[ $COPY = 0 ]]; then
 	if [ $HOSTTYPE != "arm" ]; then
 		echo ""
 		echo "-> Cross compiling nimrod for armv7"
-		make -f Makefile.arm clean all
+		make -f Makefile.arm all
 		if [ $? != 0 ]; then
 			echo "-> Error: cross compile failed"
 			exit 1
@@ -50,25 +57,28 @@ if [[ $COPY = 0 ]]; then
 
 	cd ..
 
-	echo "";
-	echo "-> Packaging Nimrod version $1";
-
-	echo "-> Make scripts executable"
-	chmod 0755 scripts/*.sh
+	if [[  $PKG = "Y" ]]; then
+		echo "";
+		echo "-> Packaging Nimrod version $1";
 	
+		echo "-> Make scripts executable"
+		chmod 0755 scripts/*.sh
+	fi	
 fi
 
-echo "-> Create tar package file"
-tar -cvz --exclude=makerelease.sh --exclude=site_config.php --exclude=site_config.php.save --exclude="*~" --exclude=no.upgrade --exclude=no.tunnel \
+if [[ $PKG = "Y" ]]; then
+	echo "-> Create tar package file"
+	tar -cvz --exclude=makerelease.sh --exclude=site_config.php --exclude=site_config.php.save --exclude="*~" --exclude=no.upgrade --exclude=no.tunnel \
 		--exclude=releases --exclude=archive --exclude="*.cpp" --exclude="*.h" --exclude="*.o" --exclude="*.d" \
-		--exclude="*.c" --exclude="Makefile*" --exclude="readconfig.txt" --exclude="*.svn*" --exclude="*.tgz" --exclude=tmp \
-		--exclude=".*" --file=${SRCFILE} *
+		--exclude="*.c" --exclude="Makefile*" --exclude="readconfig.txt" --exclude="*.svn*" --exclude="*.tgz" --exclude=tmp --exclude=websocketpp \
+		--exclude=".*" --exclude="bin/obj" --exclude="bin/objarm" --file=${SRCFILE} *
+fi
 
 if [[ $COPY = 1 ]]; then
 	echo "-> Skipping compile step"
 fi
 
-if [[ ! -f $SRCFILE ]]; then
+if [[ ! -f $SRCFILE && $PKG = "Y" ]]; then
 	echo "-> Error: $SRCFILE is missing"
 	exit 1
 fi

@@ -35,12 +35,12 @@ function func_check_de_array( &$de_array )
 	
 	if ( $de_array['de_ComPort'] == "" )
 	{
-		$de_array['error_msg'] = "You must enter the Com Port (e.g. ttyUSB0 or MCU).";
+		$de_array['error_msg'] = "You must enter the Com Port (e.g. /dev/ttyUSB0 or Timer or MCU).";
 		return false;
 	}
 	else if ( $de_array['de_Address'] == "" || ($de_array['de_Address'] < 2 && $de_array['de_Address'] != 0) || $de_array['de_Address'] > 0xfe ||
 	    ($de_array['de_Address'] == 0 && $de_array['de_ComPort'] != 'Timer' && strncmp( $de_array['de_ComPort'], 'MCU', 3 ) != 0) )
-	{
+	{  // address is required except for time and MCU devices
 		$de_array['error_msg'] = "You must enter an Address in the range 0x02 - 0xfe.";
 		return false;
 	}
@@ -68,6 +68,11 @@ function func_check_de_array( &$de_array )
 	{
 		$de_array['error_msg'] = "You must enter the hostname for this device.";
 		return false;
+	}
+	else if ( $de_array['de_Type'] == E_DT_LEVEL_HDL && ($de_array['de_NumInputs'] > 1 || $de_array['de_NumOutputs'] > 0) )
+	{
+	    $de_array['error_msg'] = "HDL Level devices can only have one input.";
+	    return false;
 	}
 	
 	return true;
@@ -147,10 +152,11 @@ else if ( isset($_POST['NewDevice']) || isset($_POST['UpdateDevice']) )
 	
 	if ( strncmp( $de_array['de_ComPort'], "MCU", 3 ) == 0 && ($info = $db->ReadDeviceWithName( $de_array['de_Name'] )) !== false && $info['de_DeviceNo'] != $de_array['de_DeviceNo'] )
 	{
-	    $de_array['error_msg'] = sprintf( "A device with name %s @ %s already exists in the database.", $de_array['de_Name'], $de_array['de_Hostname'] );
+	    $de_array['error_msg'] = sprintf( "An MCU device with name %s @ %s already exists in the database.", $de_array['de_Name'], $de_array['de_Hostname'] );
 	}
-	else if ( strncmp( $de_array['de_ComPort'], "MCU", 3 ) != 0 && ($info = $db->ReadDeviceWithAddress( $de_array['de_Address'] )) !== false && $info['de_DeviceNo'] != $de_array['de_DeviceNo'] )
-	{
+	else if ( strncmp( $de_array['de_ComPort'], "MCU", 3 ) != 0 && 
+	    ($info = $db->ReadDeviceWithAddress( $de_array['de_Address'] )) !== false && $info['de_DeviceNo'] != $de_array['de_DeviceNo'] )
+	{  // not MCU device
 		$de_array['error_msg'] = sprintf( "A device with address %d @ %s already exists in the database.", $de_array['de_Address'], $de_array['de_Hostname'] );
 	}
 	else if ( func_check_de_array( $de_array ) )
@@ -165,7 +171,7 @@ else if ( isset($_POST['NewDevice']) || isset($_POST['UpdateDevice']) )
 		}
 		else
 		{
-			$de_array['error_msg'] = sprintf( "Failed to update Device record %d", $de_array['di_DeviceNo'] );
+			$de_array['error_msg'] = sprintf( "Failed to update Device record %d", $de_array['de_DeviceNo'] );
 		}
 	}
 }
@@ -195,7 +201,7 @@ $devices_list = $db->ReadDevicesTable();
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-5">
+		<div class="col-sm-6">
 			<?php
 			if ( $de_array['error_msg'] != "" )
 			    printf( "<p class='text-danger'>%s</p>", $de_array['error_msg'] );
@@ -244,7 +250,7 @@ $devices_list = $db->ReadDevicesTable();
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-5">
+		<div class="col-sm-6">
 			<h3>Device Detail</h3>
 
 			<?php
@@ -258,7 +264,7 @@ $devices_list = $db->ReadDevicesTable();
     		printf( "<label for='de_ComPort'>COM Port: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='de_ComPort' id='de_ComPort' size='12' value='%s'> ", $de_array['de_ComPort'] );
+    		printf( "<input type='text' class='form-control' name='de_ComPort' id='de_ComPort' size='40' value='%s'> ", $de_array['de_ComPort'] );
     		printf( "</div>" );
     		printf( "</div>" );
 
@@ -282,10 +288,11 @@ $devices_list = $db->ReadDevicesTable();
   			
   			printf( "<div class='form-row'>" );
   			printf( "<div class='col'>" );
-  			printf( "<label for='de_ComPort'>Address: </label>" );
+  			printf( "<label for='de_Address'>Modbus Address: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
-  			printf( "<input type='text' class='form-control' name='de_Address' id='de_Address' size='4' value='%s'> ", $de_array['de_Address'] );
+  			$tip = sprintf( "MCU and Level devices still need a unique address to be entered event though they do not use Modbus." );
+  			printf( "<input type='text' class='form-control' name='de_Address' id='de_Address' size='4' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $de_array['de_Address'], $tip );
   			printf( "</div>" );
   			printf( "</div>" );
   			
@@ -319,6 +326,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_TIMER ? "selected" : ""), E_DTD_TIMER );
   			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_VOLTAGE ? "selected" : ""), E_DTD_VOLTAGE );
   			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_TEMPERATURE_K1 ? "selected" : ""), E_DTD_TEMPERATURE_K1 );
+  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_LEVEL_K02 ? "selected" : ""), E_DTD_LEVEL_K02 );
+  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_LEVEL_HDL ? "selected" : ""), E_DTD_LEVEL_HDL );
   			printf( "</select>" );
   			printf( "</div>" );
   			printf( "</div>" );

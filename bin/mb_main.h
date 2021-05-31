@@ -26,5 +26,18 @@ bool IsMyHostname( const char* szHost );
 const char* GetMyHostname();
 
 
+#define MAX_THREAD_MESSAGES		20
+class CThreadMsg {
+private:
+	char m_szMsg[MAX_THREAD_MESSAGES][100];
+
+public:
+	CThreadMsg();
+	~CThreadMsg();
+
+	void Init();
+	void PutMessage( const char* szFmt, ... );
+	const bool GetMessage( char* szMsg, const size_t uLen );
+};
 
 #endif

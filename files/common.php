@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 107 );
+define( "THIS_DATABASE_VERSION", 110 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -25,6 +25,10 @@ define( "SECURITY_LEVEL_ADMIN", 9 );
 // define user options access
 define( "E_UF_CAMERAS", 0 );
 define( "E_UFD_CAMERAS", "Camera Access" );
+define( "E_UF_UPGRADE", 1 );
+define( "E_UFD_UPGRADE", "Software Upgrade" );
+define( "E_UF_HOMECAMERAS", 2 );
+define( "E_UFD_HOMECAMERAS", "Show Cameras on Home Page" );
 
 define( "MAX_CAMERAS", 9 );
 
@@ -35,12 +39,16 @@ define( "E_DT_TEMPERATURE_DS", 2 );	// temperature, DS18B20
 define( "E_DT_TIMER", 3 );			// timer 
 define( "E_DT_VOLTAGE", 4 );		// voltage 
 define( "E_DT_TEMPERATURE_K1", 5 );	// temperature, PD3064 K thermocouple
+define( "E_DT_LEVEL_K02", 6 );	     // level, K02 module
+define( "E_DT_LEVEL_HDL", 7 );	     // level, HDL300 sensor
 define( "E_DTD_UNUSED", "Unused" );
 define( "E_DTD_DIGITAL_IO", "Digital IO" );
 define( "E_DTD_TEMPERATURE_DS", "Temperature DS" );	
 define( "E_DTD_TIMER", "Timer" );
 define( "E_DTD_VOLTAGE", "Voltage" );
 define( "E_DTD_TEMPERATURE_K1", "Temperature K" );
+define( "E_DTD_LEVEL_K02", "Level K02" );
+define( "E_DTD_LEVEL_HDL", "Level HDL" );
 
 
 define( "E_IO_UNUSED", 0 );
@@ -56,6 +64,12 @@ define( "E_IO_VOLT_LOW", 9 );		// 9:	voltage too low
 define( "E_IO_TEMP_MONITOR", 10 );		// 10:	temperature monitor only
 define( "E_IO_VOLT_MONITOR", 11 );		// 11:	voltage monitor only
 define( "E_IO_VOLT_DAYNIGHT", 12 );		// 12:	voltage monitor day/night
+define( "E_IO_TEMP_HIGHLOW", 13 );		// 13:	temperature too high or too low
+define( "E_IO_VOLT_HIGHLOW", 14 );		// 14:	temperature too high or too low
+define( "E_IO_LEVEL_MONITOR", 15 );     // 15:  level measurement K02
+define( "E_IO_LEVEL_HIGH", 16 );        // 16:  level measurement K02 too hig
+define( "E_IO_LEVEL_LOW", 17 );         // 17:  level measurement K02 too low
+define( "E_IO_LEVEL_HIGHLOW", 18 );     // 18:  level measurement K02 too high or too low
 define( "E_IOD_UNUSED", "Unused" );
 define( "E_IOD_ON_OFF", "Manual On Off Switch" );
 define( "E_IOD_ON_TIMER", "Manual On, Off by Timer" );
@@ -69,6 +83,12 @@ define( "E_IOD_VOLT_LOW", "Voltage Too Low" );
 define( "E_IOD_TEMP_MONITOR", "Temperature Monitor Only" );
 define( "E_IOD_VOLT_MONITOR", "Voltage Monitor Only" );
 define( "E_IOD_VOLT_DAYNIGHT", "Voltage Monitor Day/Night" );
+define( "E_IOD_TEMP_HIGHLOW", "Temperature Too High or Low" );
+define( "E_IOD_VOLT_HIGHLOW", "Temperature Too High or Low" );
+define( "E_IOD_LEVEL_MONITOR", "Level Monitor Only" );
+define( "E_IOD_LEVEL_HIGH", "Level Too High" );
+define( "E_IOD_LEVEL_LOW", "Level Too Low" );
+define( "E_IOD_LEVEL_HIGHLOW", "Level Too High or Low" );
 
 define( "E_ET_CLICK", 0 );			// 0: single click
 define( "E_ETD_CLICK", "Click" );
@@ -88,6 +108,8 @@ define( "E_ET_VOLTAGE", 7 );		// 7: voltage
 define( "E_ETD_VOLTAGE", "Voltage" );
 define( "E_ET_STARTUP", 8 );		// 8: startup
 define( "E_ETD_STARTUP", "Startup" );
+define( "E_ET_LEVEL", 9 );		    // 9: level
+define( "E_ETD_LEVEL", "Level" );
 
 define( "E_DS_ALIVE", 0 );			// 0:	alive
 define( "E_DSD_ALIVE", "Alive" );	
@@ -255,6 +277,137 @@ function func_check_database( $db )
         
         $version = func_update_database_version( $db, 107 );
     }
+    
+    if ( $version === false || $version < 108 )
+    {   // we have some work to do
+    
+        // update di_MonitorHi
+        $query = sprintf( "update deviceinfo set di_MonitorHi=di_Voltage where di_IOType=%d", E_IO_VOLT_HIGH );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to update di_MonitorLo=di_Voltage column", $db->db_link );
+        }
+        
+        // update di_MonitorHi
+        $query = sprintf( "update deviceinfo set di_MonitorHi=di_Temperature where di_IOType=%d", E_IO_TEMP_HIGH );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to update di_MonitorHi=di_Temperature column", $db->db_link );
+        }
+        
+        // update di_MonitorLo
+        $query = sprintf( "update deviceinfo set di_MonitorLo=di_Voltage where di_IOType=%d", E_IO_VOLT_LOW );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to update di_MonitorLo=di_Voltage column", $db->db_link );
+        }
+        
+        // update di_MonitorLo
+        $query = sprintf( "update deviceinfo set di_MonitorLo=di_Temperature where di_IOType=%d", E_IO_TEMP_LOW );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to update di_MonitorLo=di_Temperature column", $db->db_link );
+        }
+        
+        // drop di_Voltage column
+        $query = sprintf( "alter table deviceinfo drop di_Voltage" );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to drop di_Voltage column", $db->db_link );
+        }
+        
+        // drop di_Temperature column
+        $query = sprintf( "alter table deviceinfo drop di_Temperature" );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to drop di_Temperature column", $db->db_link );
+        }
+        
+        
+        $version = func_update_database_version( $db, 108 );
+    }
+    
+    if ( $version === false || $version < 109 )
+    {   // we have some work to do
+        // create the cameras table
+        $query = "create table IF NOT EXISTS `cameras` (
+            `ca_CameraNo` int(10) unsigned NOT NULL auto_increment,		# unique record number
+            `ca_Name` varchar(50) NOT NULL default ' ',					# camera name
+            `ca_IPAddress` varchar(15) NOT NULL default ' ',			# camera IPv4 address
+            `ca_PTZ` char(1) NOT NULL default 'N',						# PTZ capable Y/N
+            `ca_Encoding` varchar(10) NOT NULL default ' ',				# H.264 / H.265 encoding
+            `ca_Directory` varchar(250) NOT NULL default ' ',			# file system directory from root (/)
+        	`ca_UserId` varchar(20) NOT NULL default ' ',				# camera user id
+        	`ca_Password` varchar(50) NOT NULL DEFAULT ' ',				# camera password (encrypted)
+        	`ca_Model` varchar(20) NOT NULL default ' ',				# camera model, e.g. FI9853EP
+            `ca_MJpeg` char(1) NOT NULL default 'N',					# supports MJpeg streaming Y/N/H (H means supports mjpeg over https)
+            PRIMARY KEY (`ca_CameraNo`),
+            KEY `ca_name_index` (`ca_Name`)
+            )";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to create the cameras table", $db->db_link );
+        }
+        
+        // add records
+        foreach ( $_SESSION['camera_list'] as $camera )
+        {
+            $name = $camera['name'];
+            $addr = $camera['addr'];
+            $ptz = "N";
+            if ( $camera['ptz'] )
+                $ptz = "Y";
+            $encoding = "H.264";
+            $dir = sprintf( "/var%s/record", $camera['directory'] );
+            $query = sprintf( "insert into cameras (ca_Name,ca_IPAddress,ca_PTZ,ca_Encoding,ca_Directory,ca_UserId,ca_Password) values('%s','%s','%s','%s','%s','%s','%s')",
+                addslashes($name), $addr, $ptz, $encoding, $dir, CAMERA_USER, addslashes(base64_encode(CAMERA_PWD)) );
+            $result = $db->RunQuery( $query );
+            if ( func_db_warning_count($db) != 0 )
+            {   // error
+                ReportDBError(sprintf("Failed to add camera record for %s", $camera['addr']), $db->db_link );
+            }
+        }
+        
+        $version = func_update_database_version( $db, 109 );
+    }
+
+    if ( $version === false || $version < 110 )
+    {   // we have some work to do
+        // create the plcstates table
+        $query = "create table IF NOT EXISTS `plcstates` (
+        	`pl_StateNo` int(10) unsigned NOT NULL auto_increment,			# unique record number
+        	`pl_Operation` varchar(50) NOT NULL default '',					# operation name, e.g. 'Setup Mode' or 'Run Mode'
+        	`pl_StateName` varchar(50) NOT NULL default '',					# state name, e.g. 'WAITING' or 'MOVING_LEFT'
+        	`pl_StateIsActive` char(1) NOT NULL default 'N',				# remember which state is active
+        	`pl_StateTimestamp` timestamp NOT NULL default '0000-00-00',	# when did this state become active
+        	`pl_RuleType` char(1) NOT NULL default '',						# I=Init, E=Event
+        	`pl_DeviceNo` int(10) NOT NULL default 0,						# link to the deviceinfo table
+        	`pl_IOChannel` int(10) NOT NULL default 0,						# link to the deviceinfo table
+        	`pl_Value` int(10) NOT NULL default 0,							# data value
+        	`pl_Test` varchar(5) NOT NULL default '',						# LT, GT, LE, GE, EQ, NE
+        	`pl_NextStateName` varchar(50) NOT NULL default '',				# link to the next state
+        	`pl_Order` int(10) NOT NULL default 0,							# optional execution order
+            `pl_DelayTime` int(10) NOT NULL default 0,						# time delay in seconds to ignore the event
+        	PRIMARY KEY (`pl_StateNo`),
+        	KEY `pl_statename_index` (`pl_StateName`)
+            )";
+
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to create the cameras table", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 110 );
+    }
 }
 
 function func_db_warning_count( $db )
@@ -275,7 +428,7 @@ function func_update_database_version( $db, $ver )
     // update the database version
     $query = sprintf( "update events set ev_value=%d where ev_DeviceNo=-2", $ver );
     $result = $db->RunQuery( $query );
-    if ( mysqli_affected_rows($db->db_link) < 0 )
+    if ( mysqli_affected_rows($db->db_link) <= 0 )
     {	// error
         $query = sprintf( "insert into events (ev_DeviceNo,ev_Value) values(-2,%d)", $ver );
         $result = $db->RunQuery( $query );
@@ -637,14 +790,17 @@ class MySQLDB
 		
 		$ss = "";
 		if ( $in )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
-					E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR );
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
+					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
+			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW );
 		else if ( $out )
 			$ss = sprintf( "and di_IOType in (%d)", E_IO_OUTPUT );
-		if ( $in && $out )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
-					E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR );
 		
+		if ( $in && $out )
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
+					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
+			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW );
+			
 		$query = sprintf( "select de_DeviceNo,de_Address,de_Hostname,di_IOChannel,di_IOName,di_IOType from
 				deviceinfo,devices where di_DeviceNo=de_DeviceNo %s order by de_Hostname,de_Address,di_IOChannel",
 				$ss );
@@ -664,7 +820,7 @@ class MySQLDB
 	{
 		$info = array();
 		$query = sprintf( "select di_DeviceInfoNo,di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,
-				di_Hysteresis,di_Temperature,di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset,di_MonitorPos,
+				di_Hysteresis,di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,
                 di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo,
                 de_Address,de_Hostname from 
 				deviceinfo,devices where di_DeviceNo=de_DeviceNo order by de_Address,di_IOChannel" ); 
@@ -674,12 +830,12 @@ class MySQLDB
 			$info[] = array( 'di_DeviceInfoNo'=>$line[0], 'di_DeviceNo'=>$line[1],
 							'di_IOChannel'=>$line[2], 'di_IOName'=>stripslashes($line[3]), 'di_IOType'=>$line[4],
 							'di_OnPeriod'=>$line[5], 'di_StartTime'=>$line[6], 'di_Hysteresis'=>$line[7], 
-							'di_Temperature'=>$line[8], 'di_OutOnStartTime'=>$line[9], 'di_OutOnPeriod'=>[10], 
-			                 'di_Weekdays'=>$line[11], 'di_AnalogType'=>$line[12], 
-							'di_CalcFactor'=>$line[13], 'di_Voltage'=>$line[14], 'di_Offset'=>$line[15], 
-							'di_MonitorPos'=>$line[16], 'di_MonitorHi'=>$line[17], 'di_MonitorLo'=>$line[18],
-			                'di_ValueRangeHi'=>$line[19], 'di_ValueRangeLo'=>$line[20],
-			                'de_Address'=>$line[21], 'de_Hostname'=>$line[22] );
+							'di_OutOnStartTime'=>$line[8], 'di_OutOnPeriod'=>[9], 
+			                 'di_Weekdays'=>$line[10], 'di_AnalogType'=>$line[11], 
+							'di_CalcFactor'=>$line[12], 'di_Offset'=>$line[13], 
+							'di_MonitorPos'=>$line[14], 'di_MonitorHi'=>$line[15], 'di_MonitorLo'=>$line[16],
+			                'di_ValueRangeHi'=>$line[17], 'di_ValueRangeLo'=>$line[18],
+			                'de_Address'=>$line[19], 'de_Hostname'=>$line[20] );
 		}
 
 		$this->FreeQuery($result);
@@ -707,7 +863,7 @@ class MySQLDB
 	{
 		$info = false;
 		$query = sprintf( "select di_DeviceInfoNo,di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,
-				di_Temperature,di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset,di_MonitorPos,di_MonitorHi,di_MonitorLo,
+				di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,di_MonitorHi,di_MonitorLo,
                 di_ValueRangeHi,di_ValueRangeLo from
                 deviceinfo where di_DeviceInfoNo=%d", $di_no );
 
@@ -717,11 +873,11 @@ class MySQLDB
 			$info = array( 'di_DeviceInfoNo'=>$line[0], 'di_DeviceNo'=>$line[1], 
 							'di_IOChannel'=>$line[2], 'di_IOName'=>$line[3], 'di_IOType'=>$line[4], 
 							'di_OnPeriod'=>$line[5], 'di_StartTime'=>$line[6], 'di_Hysteresis'=>$line[7],
-							'di_Temperature'=>$line[8], 'di_OutOnStartTime'=>$line[9], 'di_OutOnPeriod'=>$line[10], 
-			                 'di_Weekdays'=>$line[10], 'di_AnalogType'=>$line[12],
-							'di_CalcFactor'=>$line[13], 'di_Voltage'=>$line[14], 'di_Offset'=>$line[15],
-			                'di_MonitorPos'=>$line[16], 'di_MonitorHi'=>$line[17], 'di_MonitorLo'=>$line[18],
-			                'di_ValueRangeHi'=>$line[19], 'di_ValueRangeLo'=>$line[20] );
+							'di_OutOnStartTime'=>$line[8], 'di_OutOnPeriod'=>$line[9], 
+			                 'di_Weekdays'=>$line[10], 'di_AnalogType'=>$line[11],
+							'di_CalcFactor'=>$line[12], 'di_Offset'=>$line[13],
+			                'di_MonitorPos'=>$line[14], 'di_MonitorHi'=>$line[15], 'di_MonitorLo'=>$line[16],
+			                'di_ValueRangeHi'=>$line[17], 'di_ValueRangeLo'=>$line[18] );
 		}
 
 		$this->FreeQuery($result);
@@ -733,7 +889,7 @@ class MySQLDB
 	{
 		$info = false;
 		$query = sprintf( "select di_DeviceInfoNo,di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,
-				di_Hysteresis,di_Temperature,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset,di_MonitorPos,
+				di_Hysteresis,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,
                 di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo from 
 				deviceinfo where di_DeviceNo=%d and di_IOChannel=%d", $de_no, $channel );
 
@@ -743,10 +899,10 @@ class MySQLDB
 			$info = array( 'di_DeviceInfoNo'=>$line[0], 'di_DeviceNo'=>$line[1],  
 							'di_IOChannel'=>$line[2], 'di_IOName'=>$line[3], 'di_IOType'=>$line[4], 
 							'di_OnPeriod'=>$line[5], 'di_StartTime'=>$line[6], 'di_Hysteresis'=>$line[7],
-							'di_Temperature'=>$line[8], 'di_Weekdays'=>$line[9], 'di_AnalogType'=>$line[10],
-							'di_CalcFactor'=>$line[11], 'di_Voltage'=>$line[12], 'di_Offset'=>$line[13],
-			                'di_MonitorPos'=>$line[14], 'di_MonitorHi'=>$line[15], 'di_MonitorHi'=>$line[16],
-			                'di_ValueRangeHi'=>$line[17], 'di_ValueRangeLo'=>$line[18] );
+							'di_Weekdays'=>$line[8], 'di_AnalogType'=>$line[9],
+							'di_CalcFactor'=>$line[10], 'di_Offset'=>$line[11],
+			                'di_MonitorPos'=>$line[12], 'di_MonitorHi'=>$line[13], 'di_MonitorHi'=>$line[14],
+			                'di_ValueRangeHi'=>$line[15], 'di_ValueRangeLo'=>$line[16] );
 		}
 
 		$this->FreeQuery($result);
@@ -754,24 +910,24 @@ class MySQLDB
 		return $info;
 	}
 
-	function UpdateDeviceInfoTable( $di_no, $de_no, $channel, $name, $type, $period, $stime, $hyst, $temp, $days, $atype, $factor, $voltage, $offset, $monitor_pos, $monitor_hi, $monitor_lo, $value_hi, $value_lo )
+	function UpdateDeviceInfoTable( $di_no, $de_no, $channel, $name, $type, $period, $stime, $hyst, $days, $atype, $factor, $offset, $monitor_pos, $monitor_hi, $monitor_lo, $value_hi, $value_lo )
 	{
 		if ( $di_no == 0 )
 		{	// insert
 			$query = sprintf( "insert into deviceinfo (di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,
-					di_Hysteresis,di_Temperature,di_Weekdays,di_AnalogType,di_CalcFactor,di_Voltage,di_Offset,di_MonitorPos,
+					di_Hysteresis,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,
                     di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo)
-					values(%d,%d,'%s',%d,%d,%d,%d,%.1f,'%s','%s',%.3f,%.1f,%.3f,'%s',%.1f,%.1f,'%s','%s')",
-					$de_no, $channel, addslashes($name), $type, $period, $stime, $hyst, $temp, $days, $atype, $factor, $voltage, $offset, $monitor_pos, $monitor_hi, $monitor_lo, $value_hi, $value_lo );
+					values(%d,%d,'%s',%d,%d,%d,%d,'%s','%s',%.3f,%.3f,'%s',%.1f,%.1f,'%s','%s')",
+					$de_no, $channel, addslashes($name), $type, $period, $stime, $hyst, $days, $atype, $factor, $offset, $monitor_pos, $monitor_hi, $monitor_lo, $value_hi, $value_lo );
 		}
 		else
 		{
 			$query = sprintf( "update deviceinfo set di_DeviceNo=%d,di_IOChannel=%d,di_IOName='%s',di_IOType=%d,
-					di_OnPeriod=%d,di_StartTime=%d,di_Hysteresis=%d,di_Temperature=%.1f,di_Weekdays='%s',di_AnalogType='%s',
-					di_CalcFactor=%.3f,di_Voltage=%.1f,di_Offset=%.3f,di_MonitorPos='%s',di_MonitorHi=%.1f,di_MonitorLo=%.1f,
+					di_OnPeriod=%d,di_StartTime=%d,di_Hysteresis=%d,di_Weekdays='%s',di_AnalogType='%s',
+					di_CalcFactor=%.3f,di_Offset=%.3f,di_MonitorPos='%s',di_MonitorHi=%.1f,di_MonitorLo=%.1f,
                     di_ValueRangeHi='%s',di_ValueRangeLo='%s'  
 					where di_DeviceInfoNo=%d",
-					$de_no, $channel, addslashes($name), $type, $period, $stime, $hyst, $temp, $days, $atype, $factor, $voltage, $offset, $monitor_pos,
+					$de_no, $channel, addslashes($name), $type, $period, $stime, $hyst, $days, $atype, $factor, $offset, $monitor_pos,
 			        $monitor_hi, $monitor_lo, $value_hi, $value_lo,
 					$di_no );
 		}
@@ -812,7 +968,26 @@ class MySQLDB
 		return false;
 	}
 	
-
+	function GetMonitorDevices( $pos )
+	{
+	    $devices = array();
+	    
+	    $search = sprintf( "(%d,%d,%d,%d,%d,%d)", E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_VOLT_MONITOR );
+	    $query = sprintf( "select di_DeviceNo,di_IOChannel,di_IOName from deviceinfo where di_IOType in %s and di_MonitorPos like '%%%s%%'",
+	        $search, $pos );
+	    
+	    $result = $this->RunQuery( $query );
+	    while ( $line = mysqli_fetch_row($result) )
+	    {
+	        $devices[] = array( 'di_DeviceNo'=>$line[0], 'di_IOChannel'=>$line[1], 'di_IOName'=>$line[2] );
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $devices;
+	}
+	
+	
 	//*******************************************
 	//
 	//	iolinks table
@@ -1019,41 +1194,82 @@ class MySQLDB
 		return $info;
 	}
 	
-	function GetTableRecordCount()
+	function SaveUserLoginAttempt( $user, $success )
 	{
-	    $info = array();
-	    $tables = array();
-	    $tables[] = "devices";
-	    $tables[] = "deviceinfo";
-	    $tables[] = "iolinks";
-	    $tables[] = "users";
-	    $tables[] = "events";
-	    
-	    foreach ( $tables as $table )
+	    $query = sprintf( "insert into events (ev_DeviceNo,ev_Timestamp,ev_Description,ev_Value) values(-3,now(),'%s',%d)",
+	        addslashes($user), $success );
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) < 1 )
+	    {	// failed
+	    }
+	}
+	
+	function NotifyPlcStatesTableChange()
+	{
+	    $found = false;
+	    $query = sprintf( "select ev_EventNo from events where ev_DeviceNo=-4" );
+	    $result = $this->RunQuery( $query );
+	    if ( $line = mysqli_fetch_row($result) )
 	    {
-	        $query = sprintf( "select table_rows from information_schema.tables where table_name='%s' and table_schema='nimrod'", $table );
-	        $result = $this->RunQuery( $query );
-	        if ( $line = mysqli_fetch_row($result) )
-	        {
-	            $info[] = array( 'table'=>$table,  'count'=>$line[0] );
-	        }
-	        else
-	        {
-	            $info[] = array( 'table'=>$table, 'count'=>-1 ); 
-	        }
+	        $found = true;
 	    }
 	    
-	    return $info;
+	    $this->FreeQuery($result);
+	    
+	    if ( $found )
+    	    $query = sprintf( "update events set ev_Timestamp=now(),ev_Description='%s' where ev_DeviceNo=-4", "plcstates table changed" );
+	    else
+	        $query = sprintf( "insert into events (ev_DeviceNo,ev_Timestamp,ev_Description) values(-4,now(),'%s')", "plcstates table changed" );
+
+        $result = $this->RunQuery( $query );
+        //echo $query;
+        if ( mysqli_affected_rows($this->db_link) < 1 )
+        {  // failed
+        }
+	}
+	
+	function NotifyPlcStatesScreenButton( $state_no )
+	{
+	    $found = false;
+	    $query = sprintf( "select ev_EventNo from events where ev_DeviceNo=-5" );
+	    $result = $this->RunQuery( $query );
+	    if ( $line = mysqli_fetch_row($result) )
+	    {
+	        $found = true;
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    if ( $found )
+	        $query = sprintf( "update events set ev_Value=%d,ev_Timestamp=now(),ev_Description='%s' where ev_DeviceNo=-5", $state_no, "plcstates screen button" );
+        else
+            $query = sprintf( "insert into events (ev_DeviceNo,ev_Value,ev_Timestamp,ev_Description) values(-5,%d,now(),'%s')", $state_no, "plcstates screen button" );
+            
+        $result = $this->RunQuery( $query );
+        //echo $query;
+        if ( mysqli_affected_rows($this->db_link) < 1 )
+        {  // failed
+        }            
 	}
 	
 	function GetDeviceFailures( $de_no )
 	{
 		$info = array();
 		$hours = 24;
-		$query = sprintf( "select ev_EventNo,ev_Timestamp,ev_DeviceNo,ev_IOChannel,ev_EventType,ev_Value,ev_Description 
+		if ( $de_no == -3 )
+		{ // login failures - 48 hours worth
+		    $query = sprintf( "select ev_EventNo,ev_Timestamp,ev_DeviceNo,ev_IOChannel,ev_EventType,ev_Value,ev_Description
+				from events where ev_DeviceNo=%d and ev_Value=%d and
+				ev_Timestamp>=date_sub(now(), interval %d hour)
+				order by ev_Timestamp desc", $de_no, 0, $hours*2 );
+		}
+		else
+		{
+    		$query = sprintf( "select ev_EventNo,ev_Timestamp,ev_DeviceNo,ev_IOChannel,ev_EventType,ev_Value,ev_Description 
 				from events where ev_DeviceNo=%d and ev_EventType=%d and
 				ev_Timestamp>=date_sub(now(), interval %d hour)
-				order by ev_Timestamp desc", $de_no, E_ET_DEVICE_NG, $hours ); 
+				order by ev_Timestamp desc", $de_no, E_ET_DEVICE_NG, $hours );
+		}
 		$result = $this->RunQuery( $query );
 		while ( $line = mysqli_fetch_row($result) )
 		{
@@ -1067,25 +1283,81 @@ class MySQLDB
 		return $info;
 	}
 	
-	function GetMonitorDevices( $pos )
+	// TODO: validate the date and time format ?
+	function ReadEventsTable( $sdate, $stime, $duration, $di_no )
 	{
-	    $devices = array();
+	    $info = array();
 	    
-	    $search = sprintf( "(%d,%d,%d,%d,%d,%d)", E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_VOLT_MONITOR );
-	    $query = sprintf( "select di_DeviceNo,di_IOChannel,di_IOName from deviceinfo where di_IOType in %s and di_MonitorPos like '%%%s%%'", 
-	        $search, $pos );
-	
-	    $result = $this->RunQuery( $query );
-	    while ( $line = mysqli_fetch_row($result) )
+	    $datetime = time();
+	    $expl1 = explode( "/", $sdate );
+	    $expl2 = explode( ":", $stime );
+	    if ( isset($expl1[0]) && isset($expl1[1]) && isset($expl1[2]) && isset($expl2[0]) && isset($expl2[1]) )
 	    {
-	        $devices[] = array( 'di_DeviceNo'=>$line[0], 'di_IOChannel'=>$line[1], 'di_IOName'=>$line[2] );
+	        $year = $expl1[2];
+	        $mon = $expl1[1];
+	        $day = $expl1[0];
+	        $hour = $expl2[0];
+	        $min = $expl2[1];
+    	    $datetime = mktime( $hour, $min, 0, $mon, $day, $year );
+	    }
+	    
+	    $seconds = func_get_duration( $duration );
+	    if ( $di_no < 0 )
+	    {
+	        $query = sprintf( "select ev_EventNo,ev_Timestamp,ev_DeviceNo,ev_IOChannel,ev_EventType,ev_Value,ev_Description
+	   			from events where ev_Timestamp>=from_unixtime(%d) and ev_Timestamp<=from_unixtime(%d) and ev_DeviceNo=%d
+		  		order by ev_Timestamp desc", $datetime, $datetime+$seconds, $di_no );
+	        
+	        $result = $this->RunQuery( $query );
+	        while ( $line = mysqli_fetch_row($result) )
+	        {
+	            $info[] = array( 'ev_EventNo'=>$line[0], 'ev_Timestamp'=>$line[1], 'ev_DeviceNo'=>$line[2],
+	                'ev_IOChannel'=>$line[3], 'ev_EventType'=>$line[4], 'ev_Value'=>$line[5],
+	                'ev_Description'=>stripslashes($line[6]), 'di_IOName'=>"", 'di_AnalogType'=>"" );
+	        }
+	    }
+	    else
+	    {
+    	    if ( $di_no > 0 )
+    	    {
+    	        $de_no = 0;
+    	        $ch_no = 0;
+        	    $query = sprintf( "select di_DeviceNo,di_IOChannel from deviceinfo where di_DeviceInfoNo=%d", $di_no );
+        	    $result = $this->RunQuery( $query );
+        	    if ( $line = mysqli_fetch_row($result) )
+        	    {
+        	       $de_no = $line[0];
+        	       $ch_no = $line[1];
+        	    }
+        	    $this->FreeQuery($result);
+        	    
+        	    $query = sprintf( "select ev_EventNo,ev_Timestamp,ev_DeviceNo,ev_IOChannel,ev_EventType,ev_Value,ev_Description,di_IOName,di_AnalogType
+    				from events,deviceinfo where ev_Timestamp>=from_unixtime(%d) and ev_Timestamp<=from_unixtime(%d) and
+                    ev_DeviceNo=%d and ev_IOChannel=%d and ev_DeviceNo=di_DeviceNo and ev_IOChannel=di_IOChannel
+    				order by ev_Timestamp desc", $datetime, $datetime+$seconds, $de_no, $ch_no );
+    	    }
+    	    else
+    	    {  // all devices
+        	    $query = sprintf( "select ev_EventNo,ev_Timestamp,ev_DeviceNo,ev_IOChannel,ev_EventType,ev_Value,ev_Description,di_IOName,di_AnalogType
+    	   			from events,deviceinfo where ev_Timestamp>=from_unixtime(%d) and ev_Timestamp<=from_unixtime(%d) and
+                    ev_DeviceNo=di_DeviceNo and ev_IOChannel=di_IOChannel
+    		  		order by ev_Timestamp desc", $datetime, $datetime+$seconds );
+    	    }
+    	    $result = $this->RunQuery( $query );
+    	    while ( $line = mysqli_fetch_row($result) )
+    	    {
+    	        $info[] = array( 'ev_EventNo'=>$line[0], 'ev_Timestamp'=>$line[1], 'ev_DeviceNo'=>$line[2],
+    	            'ev_IOChannel'=>$line[3], 'ev_EventType'=>$line[4], 'ev_Value'=>$line[5],
+    	            'ev_Description'=>stripslashes($line[6]), 'di_IOName'=>stripslashes($line[7]), 'di_AnalogType'=>$line[8] );
+    	    }
 	    }
 	    
 	    $this->FreeQuery($result);
 	    
-	    return $devices;
+	    return $info;
 	}
-
+	
+	
 	function GetLatestData( $hours, $datetime, $search, $event_type )
 	{
 	    $info = array();
@@ -1146,14 +1418,20 @@ class MySQLDB
 	
 	function GetLatestTemperatures( $hours, $datetime )
 	{
-	    $search = sprintf( "(%d,%d,%d)", E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_TEMP_MONITOR );
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_TEMP_MONITOR, E_IO_TEMP_HIGHLOW );
 	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_TEMPERATURE );
 	}
 	
 	function GetLatestVoltages( $hours, $datetime )
 	{
-	    $search = sprintf( "(%d,%d,%d)", E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_VOLT_MONITOR );
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_VOLT_MONITOR, E_IO_VOLT_HIGHLOW );
 	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_VOLTAGE );
+	}
+	
+	function GetLatestLevels( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_LEVEL );
 	}
 	
 	function GetCurrentValue( $device_no, $channel )
@@ -1189,7 +1467,7 @@ class MySQLDB
 		$de_no = -1;
 		$di_no = -1;
 		
-		$query = sprintf( "select ev_DeviceNo,ev_IOChannel from events where ev_EventNo=%d limit 1", $ev_no );
+		$query = sprintf( "select ev_DeviceNo,ev_IOChannel from events where ev_EventNo=%d", $ev_no );
 		$result = $this->RunQuery( $query );
 		if ( $line = mysqli_fetch_row($result) )
 		{
@@ -1300,21 +1578,21 @@ class MySQLDB
 	    }
 	    else if ( $password != "" )
 	    {
-	        $query = sprintf( "update users set us_name='%s',us_Password='%s',us_AuthLevel=%d,us_Features='%s' where us_Username='%s'",
+	        $query = sprintf( "update users set us_Name='%s',us_Password='%s',us_AuthLevel=%d,us_Features='%s' where us_Username='%s'",
 	            $name, $hash, $auth_level, $features, $username );
 	    }
 	    else
 	    {
-	        $query = sprintf( "update users set us_name='%s',us_AuthLevel=%d,us_Features='%s' where us_Username='%s'",
+	        $query = sprintf( "update users set us_Name='%s',us_AuthLevel=%d,us_Features='%s' where us_Username='%s'",
 	            $name, $auth_level, $features, $username );
 	    }
 	    
 	    $result = $this->RunQuery( $query );
-	    if ( mysqli_affected_rows($this->db_link) == 1 )
+	    if ( mysqli_affected_rows($this->db_link) >= 0 )
 	    {	// success
 	        return true;
 	    }
-
+	    
 	    return false;
 	}
 	
@@ -1334,6 +1612,308 @@ class MySQLDB
 	    
 	    return $info;
 	}
+
+	
+	//*******************************************
+	//
+	// cameras table
+	//
+	//*******************************************
+	function FindCameraByNameOrIPAddress( $name, $ipaddr )
+	{
+	    $rc = false;
+	    $query = sprintf( "select ca_CameraNo from cameras where ca_Name='%s' or ca_IPAddress='%s'", $name, $ipaddr );    
+	    $result = $this->RunQuery( $query );
+	    if ( $line = mysqli_fetch_row($result) )
+	    {
+	        $rc = true;
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $rc;
+	}
+	   
+	function ReadCameraList()
+	{
+	    $info = array();
+	    
+	    $query = sprintf( "select ca_CameraNo,ca_Name,ca_IPAddress,ca_PTZ,ca_Encoding,ca_Directory,ca_UserId,ca_Password,ca_Model,ca_MJpeg from cameras order by ca_Name" );
+	    $result = $this->RunQuery( $query );
+	    while ( $line = mysqli_fetch_row($result) )
+	    {
+	        $info[] = array( 'ca_CameraNo'=>$line[0], 'ca_Name'=>stripslashes($line[1]), 'ca_IPAddress'=>$line[2], 'ca_PTZ'=>$line[3], 'ca_Encoding'=>$line[4], 
+	            'ca_Directory'=>$line[5], 'ca_UserId'=>stripslashes($line[6]), 'ca_Password'=>stripslashes(base64_decode($line[7])),
+	            'ca_Model'=>stripslashes($line[8]), 'ca_MJpeg'=>$line[9] );
+	    }
+	
+	    $this->FreeQuery($result);
+	    
+	    return $info;
+	}
+	
+	function SaveCameraRecord( $ca_no, $name, $ipaddr, $ptz, $encoding, $dir, $userid, $pwd, $model, $mjpeg )
+	{
+	   if ( $ca_no == 0 )
+	   {   // insert
+	       $query = sprintf( "insert into cameras (ca_Name,ca_IPAddress,ca_PTZ,ca_Encoding,ca_Directory,ca_UserId,ca_Password,ca_Model,ca_MJpeg) 
+                values('%s','%s','%s','%s','%s','%s','%s','%s','%s')",
+	           addslashes($name), $ipaddr, $ptz, $encoding, $dir, addslashes($userid), addslashes(base64_encode($pwd)), addslashes($model),
+	           $mjpeg );
+	   }
+	   else
+	   {   // update
+	       if ( $pwd == "" )
+	       {   // no password
+    	       $query = sprintf( "update cameras set ca_Name='%s',ca_IPAddress='%s',ca_PTZ='%s',ca_Encoding='%s',ca_Directory='%s',ca_UserId='%s',
+                    ca_Model='%s',ca_MJpeg='%s' where ca_CameraNo=%d",
+    	           addslashes($name), $ipaddr, $ptz, $encoding, $dir, addslashes($userid), addslashes($model), $mjpeg,  
+    	           $ca_no );
+	       }
+	       else
+	       {
+    	       $query = sprintf( "update cameras set ca_Name='%s',ca_IPAddress='%s',ca_PTZ='%s',ca_Encoding='%s',ca_Directory='%s',ca_UserId='%s',
+                    ca_Password='%s',ca_Model='%s',ca_MJpeg='%s' where ca_CameraNo=%d",
+    	           addslashes($name), $ipaddr, $ptz, $encoding, $dir, addslashes($userid), addslashes(base64_encode($pwd)), addslashes($model), $mjpeg,
+    	           $ca_no );
+	       }
+	   }
+
+	   $result = $this->RunQuery( $query );
+	   if ( mysqli_affected_rows($this->db_link) >= 0 )
+	   {	// success
+	       return true;
+	   }
+	   
+	   return false;
+	}
+	
+	function DeleteCamera( $ca_no )
+	{
+	    $query = sprintf( "delete from cameras where ca_CameraNo=%d", $ca_no );
+	
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) == 1 )
+	    {
+	        return true;
+	    }
+	    
+	    return false;
+	}
+	
+	
+	
+	//*******************************************
+	//
+	//	plcstates table
+	//
+	//*******************************************
+	function ReadPlcStatesTable( $state_no, $op )
+	{
+	    $info = array();
+	    
+	    if ( $state_no == 0 )
+	    {
+	        if ( $op == "" )
+	        {  // all operations
+        	    $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
+        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime  
+        	        from plcstates order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_NextStateName" );
+	        }
+	        else
+	        {
+	            $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
+        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime 
+        	        from plcstates where pl_Operation='%s' order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_NextStateName",
+	                addslashes($op) );
+	        }
+	    }
+	    else
+	    {
+	        $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
+    	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime
+    	        from plcstates where pl_StateNo=%d", $state_no );
+	    }
+    	    
+	    $result = $this->RunQuery( $query );
+	    while ( $line = mysqli_fetch_row($result) )
+	    {
+	        $info[] = array( 'pl_StateNo'=>$line[0], 'pl_Operation'=>stripslashes($line[1]), 'pl_StateName'=>stripslashes($line[2]), 
+	               'pl_StateIsActive'=>$line[3], 'pl_StateTimestamp'=>$line[4], 'pl_RuleType'=>$line[5], 'pl_DeviceNo'=>$line[6],
+	               'pl_IOChannel'=>$line[7], 'pl_Value'=>$line[8], 'pl_Test'=>$line[9], 'pl_NextStateName'=>$line[10], 'pl_Order'=>$line[11],
+	               'pl_DelayTime'=>$line[12] );
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $info;
+	}
+	
+	function DeletePlcStateRecord( $state_no )
+	{
+	    $query = sprintf( "delete from plcstates where pl_StateNo=%d", $state_no );
+	    
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) == 1 )
+	    {
+	        return true;
+	    }
+	    
+	    return false;
+	}
+	
+	function SavePlcState( $state_no, $op, $state_name, $state_active, $state_timestamp, $rule_type, $device_no, $iochannel, $value, $test, $next_state_name, $order, $delay )
+	{
+        if ( $state_timestamp == "" )
+            $state_timestamp = "0000-00-00";
+	            
+	    if ( $state_no == 0 )
+	    {  // insert
+	        $query = sprintf( "insert into plcstates (pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,pl_RuleType,
+	               pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime) values ('%s','%s','%s','%s','%s',%d,%d,%d,'%s','%s',%d,%d)",
+	               addslashes($op), addslashes($state_name), $state_active, $state_timestamp, $rule_type,
+	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay_time );
+	    }
+	    else
+	    {  // update
+	        $query = sprintf( "update plcstates set pl_Operation='%s',pl_StateName='%s',pl_StateIsActive='%s',
+	               pl_StateTimestamp='%s',pl_RuleType='%s',pl_DeviceNo=%d,pl_IOChannel=%d,pl_Value=%d,pl_Test='%s',pl_NextStateName='%s',pl_Order=%d,
+                   pl_DelayTime=%d   
+	               where pl_StateNo=%d",
+	               addslashes($op), addslashes($state_name), $state_active, $state_timestamp, $rule_type, $device_no, $iochannel,
+	               $value, $test, addslashes($next_state_name), $order, $delay,   
+	               $state_no );	        
+	    }
+	    
+	    //echo $query;
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) >= 0 )
+	    {	// success
+	        if ( $state_active == "Y" )
+	        {  // make other states inactive
+	            $this->PlcStateClearActive( $op, $state_no );
+	        }
+	        $this->NotifyPlcStatesTableChange();
+	        
+	        return true;
+	    }
+	    
+	    
+	    return false;
+	}
+	
+	function PlcGetActiveStateName( $op )
+	{
+	    $info = false;
+	    
+	    $query = sprintf( "select pl_StateName from plcstates where pl_Operation='%s' and pl_StateIsActive='Y' and pl_RuleType=''", addslashes($op) );
+	    $result = $this->RunQuery( $query );
+	    if ( $line = mysqli_fetch_row($result) )
+	    {
+	        $info = $line[0];
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $info;
+	}
+	
+	function PlcStateClearActive( $op, $state_no )
+	{
+	   $query = sprintf( "update plcstates set pl_StateIsActive='N' where pl_Operation='%s' and pl_StateNo!=%d", addslashes($op), $state_no );    
+	   $result = $this->RunQuery( $query );
+	   if ( mysqli_affected_rows($this->db_link) >= 0 )
+	   {	// success
+	       return true;
+	   }
+	   
+	   return false;
+	}
+	
+	function OperationStateNameExists( $op, $state_name )
+	{
+	    $rc = false;
+	    
+	    $query = sprintf( "select pl_StateNo from plcstates where pl_Operation='%s' and pl_StateName='%s' and pl_DeviceNo=0 && pl_IOChannel=0", $op, $state_name );    
+	    $result = $this->RunQuery( $query );
+	    if ( $line = mysqli_fetch_row($result) )
+	    {
+	        $rc = $line[0];
+	    }
+	   
+	    $this->FreeQuery($result);
+	    
+	    return $rc;
+	}
+	
+	function CountOperationStateName( $op, $state_name )
+	{
+	    $rc = 0;
+	    
+	    $query = sprintf( "select pl_StateNo from plcstates where pl_Operation='%s' and pl_StateName='%s'", $op, $state_name );
+	    $result = $this->RunQuery( $query );
+	    while ( $line = mysqli_fetch_row($result) )
+	    {
+	        $rc += 1;
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $rc;
+	}
+	
+	function SelectPlcOperations()
+	{
+	   $info = array();
+	   
+	   $query = sprintf( "select distinct pl_Operation from plcstates" );
+	   $result = $this->RunQuery( $query );
+	   while ( $line = mysqli_fetch_row($result) )
+	   {
+	       $info[] = array( 'pl_Operation'=>stripslashes($line[0]) );
+	   }
+	   
+	   $this->FreeQuery($result);
+	   
+	   return $info;
+	}
+
+	
+	
+	
+	
+	//*******************************************
+	//
+	//	misc database functions
+	//
+	//*******************************************
+	function GetTableRecordCount()
+	{
+	    $info = array();
+	    $tables = array();
+	    $tables[] = "devices";
+	    $tables[] = "deviceinfo";
+	    $tables[] = "iolinks";
+	    $tables[] = "users";
+	    $tables[] = "events";
+	    
+	    foreach ( $tables as $table )
+	    {
+	        $query = sprintf( "select table_rows from information_schema.tables where table_name='%s' and table_schema='nimrod'", $table );
+	        $result = $this->RunQuery( $query );
+	        if ( $line = mysqli_fetch_row($result) )
+	        {
+	            $info[] = array( 'table'=>$table,  'count'=>$line[0] );
+	        }
+	        else
+	        {
+	            $info[] = array( 'table'=>$table, 'count'=>-1 );
+	        }
+	    }
+	    
+	    return $info;
+	}
+	
 }
 
 // convert yyyy-mm-dd hh:mm:ss to hh:mm dd/mm
@@ -1377,6 +1957,21 @@ function func_calc_temperature( $cc )
 	return $temp;
 }
 
+function func_calc_level( $cc )
+{
+    $temp = "?";
+    if ( $cc == -1 )
+    {	// not connected
+        $temp = "N/A";
+    }
+    else
+    {	// value is a percentage x 10: 0 - 1000 
+        $temp = sprintf( "%.1f", $cc/10 );
+    }
+    
+    return $temp;
+}
+
 function func_calc_voltage( $cc, $atype )
 {
 	$temp = "?";
@@ -1417,6 +2012,7 @@ function func_create_click_file( $db, $de_no, $ch_no )
 }
 
 // 0123456789012345678901234567
+// foscam
 // MDAlarm_yyyymmdd_hhmmss.mkv
 function func_get_date_from_video( $fname )
 {
@@ -1426,7 +2022,7 @@ function func_get_date_from_video( $fname )
     $hour = substr( $fname, 17, 2 );
     $min = substr( $fname, 19, 2 );
     $sec = substr( $fname, 21, 2 );
-    
+
     return sprintf( "%02d/%02d/%d %02d:%02d:%02d", $day, $month, $year, $hour, $min, $sec );
 }
 
@@ -1447,6 +2043,12 @@ function func_get_user_feature_desc( $feature )
         break;
     case E_UF_CAMERAS:
         $desc = E_UFD_CAMERAS;
+        break;
+    case E_UF_UPGRADE:
+        $desc = E_UFD_UPGRADE;
+        break;
+    case E_UF_HOMECAMERAS:
+        $desc = E_UFD_HOMECAMERAS;
         break;
     }
     
@@ -1483,25 +2085,34 @@ function func_get_device_type_desc( $dt )
 	
 	switch ( $dt )
 	{
-		default:
-		case E_DT_UNUSED:
-			$desc = E_DTD_UNUSED;
-			break;
-		case E_DT_DIGITAL_IO:
-			$desc = E_DTD_DIGITAL_IO;
-			break;
-		case E_DT_TEMPERATURE_DS:
-			$desc = E_DTD_TEMPERATURE_DS;
-			break;
-		case E_DT_TIMER:
-			$desc = E_DTD_TIMER;
-			break;
-		case E_DT_VOLTAGE:
-			$desc = E_DTD_VOLTAGE;
-			break;
-		case E_DT_TEMPERATURE_K1:
-		    $desc = E_DTD_TEMPERATURE_K1;
-		    break;
+	default:
+	case E_DT_UNUSED:
+		$desc = E_DTD_UNUSED;
+		break;
+	case E_DT_DIGITAL_IO:
+		$desc = E_DTD_DIGITAL_IO;
+		break;
+	case E_DT_TEMPERATURE_DS:
+		$desc = E_DTD_TEMPERATURE_DS;
+		break;
+	case E_DT_TIMER:
+		$desc = E_DTD_TIMER;
+		break;
+	case E_DT_VOLTAGE:
+		$desc = E_DTD_VOLTAGE;
+		break;
+	case E_DT_TEMPERATURE_K1:
+	    $desc = E_DTD_TEMPERATURE_K1;
+	    break;
+	case E_DT_LEVEL_K02:
+	    $desc = E_DTD_LEVEL_K02;
+	    break;
+	case E_DT_LEVEL_K02:
+	    $desc = E_DTD_LEVEL_K02;
+	    break;
+	case E_DT_LEVEL_HDL:
+	    $desc = E_DTD_LEVEL_HDL;
+	    break;
 	}
 	
 	return $desc;
@@ -1519,7 +2130,11 @@ function func_get_device_type( $desc )
 		return E_DT_VOLTAGE;
     else if ( $desc == E_DTD_TEMPERATURE_K1 )
 	    return E_DT_TEMPERATURE_K1;
-		    
+	else if ( $desc == E_DTD_LEVEL_K02 )
+	    return E_DT_LEVEL_K02;
+    else if ( $desc == E_DTD_LEVEL_HDL )
+        return E_DT_LEVEL_HDL;
+	        
 	return E_DT_UNUSED;
 }
 
@@ -1568,6 +2183,24 @@ function func_get_io_type_desc( $io )
 		case E_IO_VOLT_DAYNIGHT:
 			$desc = E_IOD_VOLT_DAYNIGHT;
 			break;
+		case E_IO_TEMP_HIGHLOW:
+		    $desc = E_IOD_TEMP_HIGHLOW;
+		    break;
+		case E_IO_VOLT_HIGHLOW:
+		    $desc = E_IOD_VOLT_HIGHLOW;
+		    break;
+		case E_IO_LEVEL_MONITOR:
+		    $desc = E_IOD_LEVEL_MONITOR;
+		    break;
+		case E_IO_LEVEL_HIGH:
+		    $desc = E_IOD_LEVEL_HIGH;
+		    break;
+		case E_IO_LEVEL_LOW:
+		    $desc = E_IOD_LEVEL_LOW;
+		    break;
+		case E_IO_LEVEL_HIGHLOW:
+		    $desc = E_IOD_LEVEL_HIGHLOW;
+		    break;
 	}	
 	
 	return $desc;
@@ -1622,7 +2255,19 @@ function func_get_io_type( $desc )
 		return E_IO_VOLT_MONITOR;
 	else if ( $desc == E_IOD_VOLT_DAYNIGHT )
 		return E_IO_VOLT_DAYNIGHT;
-	
+	else if ( $desc == E_IOD_TEMP_HIGHLOW )
+	    return E_IO_TEMP_HIGHLOW;
+	else if ( $desc == E_IOD_VOLT_HIGHLOW )
+	    return E_IO_VOLT_HIGHLOW;
+	else if ( $desc == E_IOD_LEVEL_MONITOR )
+	    return E_IO_LEVEL_MONITOR;
+	else if ( $desc == E_IOD_LEVEL_HIGH )
+	    return E_IO_LEVEL_HIGH;
+	else if ( $desc == E_IOD_LEVEL_LOW )
+	    return E_IO_LEVEL_LOW;
+	else if ( $desc == E_IOD_LEVEL_HIGHLOW )
+	    return E_IO_LEVEL_HIGHLOW;
+	                
 	return 0;
 }
 
@@ -1667,6 +2312,15 @@ function func_get_eventtype_desc( $ev )
 		case E_ET_DEVICE_OK:
 			$desc = E_ETD_DEVICE_OK;
 			break;
+		case E_ET_VOLTAGE:
+		    $desc = E_ETD_VOLTAGE;
+		    break;
+		case E_ET_STARTUP:
+		    $desc = E_ETD_STARTUP;
+		    break;
+		case E_ET_LEVEL:
+		    $desc = E_ETD_LEVEL;
+		    break;
 	}
 
 	return $desc;
@@ -1701,6 +2355,15 @@ function func_get_eventtype( $desc )
 		case E_ETD_DEVICE_OK:
 			$ev = E_ET_DEVICE_OK;
 			break;
+		case E_ETD_VOLTAGE:
+		    $ev = E_ET_VOLTAGE;
+		    break;
+		case E_ETD_STARTUP:
+		    $ev = E_ET_STARTUP;
+		    break;
+		case E_ETD_LEVEL:
+		    $ev = E_ET_LEVEL;
+		    break;
 	}
 
 	return $ev;
@@ -1819,14 +2482,14 @@ function func_get_duration( $dd )
 	{	// hours
 		$sep = "";
 		if ( strstr( strtolower($dd), ":") !== false )
-			$sep = ":";
-		else if ( strstr( strtolower($dd), ".") !== false )
-			$sep = ".";
-		
-		if ( $sep != "" )
 		{
-			$expl = explode( $sep, $dd );
-			$dur = doubleval($expl[0]) * 3600 + doubleval($expl[1]) * 60;
+		    $expl = explode( ":", $dd );
+		    $dur = doubleval($expl[0]) * 3600 + doubleval($expl[1]) * 60;
+		}
+		else if ( strstr( strtolower($dd), ".") !== false )
+		{
+			$expl = explode( ".", $dd );
+			$dur = doubleval($expl[0]) * 3600 + doubleval($expl[1]) * 30;
 		}
 		else
 		{
@@ -1871,6 +2534,13 @@ function func_get_package_number()
     return $ver;
 }
 
+// /var/cctv/...
+// /var/www/html/cctv
+function func_make_camera_web_dir( $top, $camera_dir )
+{
+    return sprintf( "%s/%s", $top, substr( $camera_dir, 5 ) );
+}
+
 // file format is
 // 012345678901234567890123456789
 // MDalarm_yyyymmdd_hhmmss.mkv
@@ -1879,8 +2549,9 @@ function func_read_camera_files( $camera_dir, $year, $month, $day )
 	$info = array();
 	$info2 = array();
 	
-	$mask = sprintf( "MDalarm_%4d%02d%02d", $year, $month, $day );
-	$dir = sprintf( "%s%s/record/", CAMERA_FS_ROOT, $camera_dir );
+	//$mask = sprintf( "MDalarm_%4d%02d%02d", $year, $month, $day );
+	$mask = sprintf( "%4d%02d%02d", $year, $month, $day );
+	$dir = sprintf( "%s", $camera_dir );
 	if ( is_dir($dir) )
 	{
 	   $list = scandir( $dir );
@@ -1888,7 +2559,7 @@ function func_read_camera_files( $camera_dir, $year, $month, $day )
 	   {
 	       if ( strstr( $entry, $mask ) != false && strstr( $entry, "mp4" ) == false )
 	       {
-	           $info[] = array( 'file'=>$entry, 'dir'=>'record/' );
+	           $info[] = array( 'file'=>$entry, 'dir'=>'' );
 	       }
 	   }
 	   
@@ -1898,12 +2569,12 @@ function func_read_camera_files( $camera_dir, $year, $month, $day )
 	       {
 	           if ( substr( $entry, 0, 8 ) == "MDalarm_" )
 	           {
-    	           $info2[] = array( 'file'=>$entry, 'dir'=>'record/' );
+    	           $info2[] = array( 'file'=>$entry, 'dir'=>'' );
 	           }
 	       }
 	       
 	       // check the archive directory
-	       $dir = sprintf( "%s%s/record/archive/", CAMERA_FS_ROOT, $camera_dir );
+	       $dir = sprintf( "%s/archive/", $camera_dir );
 	       if ( is_dir($dir) )
 	       {
 	           $list = scandir( $dir );
@@ -1911,7 +2582,7 @@ function func_read_camera_files( $camera_dir, $year, $month, $day )
 	           {
 	               if ( strstr( $entry, $mask ) != false && strstr( $entry, "mp4" ) == false )
 	               {
-	                   $info[] = array( 'file'=>$entry, 'dir'=>'record/archive/' );
+	                   $info[] = array( 'file'=>$entry, 'dir'=>'archive/' );
 	               }
 	           }
 	       }
@@ -1957,7 +2628,7 @@ function func_disabled_non_user()
 //  Graph Functions
 //
 //****************************************************************************
-function func_get_graph_data( $temperatures, $voltages, $devices )
+function func_get_graph_data( $temperatures, $voltages, $levels, $devices )
 {
     $data = array();
     foreach ( $devices as $gg )
@@ -1988,7 +2659,22 @@ function func_get_graph_data( $temperatures, $voltages, $devices )
                     $found = true;
                     $myarray = $tt;
                     $gname = $tt['di_IOName'];
-                    $atype = $tt['di_AnalogType'];
+                    $atype = $tt['di_AnalogType'];  // V or A
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            $gvoltage = false;
+            foreach ( $levels as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['di_DeviceNo'] && $tt['di_IOChannel'] == $gg['di_IOChannel'] )
+                {
+                    $found = true;
+                    $myarray = $tt;
+                    $gname = $tt['di_IOName'];
+                    $atype = "L";
                     break;
                 }
             }
@@ -2005,6 +2691,10 @@ function func_get_graph_data( $temperatures, $voltages, $devices )
                     $alert = true;
                 }
                 else if ( $atype == "V" && func_calc_voltage($val,"V") < $myarray['di_MonitorLo'] || func_calc_voltage($val,"V") > $myarray['di_MonitorHi'] )
+                {
+                    $alert = true;
+                }
+                else if ( $atype == "L" && func_calc_level($val) < $myarray['di_MonitorLo'] || func_calc_level($val) > $myarray['di_MonitorHi'] )
                 {
                     $alert = true;
                 }
@@ -2050,6 +2740,8 @@ function func_create_graph( $gdata, $divname )
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_temperature($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
             else if ( $graph['atype'] == "V" )
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_voltage($data['ev_Value'],"V"), 'SeqNo'=>$graph['SeqNo'] );
+            else if ( $graph['atype'] == "L" )
+                $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_level($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
             else
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_voltage($data['ev_Value'],"A"), 'SeqNo'=>$graph['SeqNo'] );
         }
@@ -2092,8 +2784,8 @@ function func_create_graph( $gdata, $divname )
         {
             if ( $vv == "null" )
                 printf( ",null" );
-                else
-                    printf( ",%.1f", $vv );
+            else
+                printf( ",%.1f", $vv );
         }
         
         printf( "]" );
@@ -2288,7 +2980,9 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
         foreach ( $div_data as $dat )
         {
             $a_bgcolor = $alert_okcolor;
-            $val = $dat['data'][count($dat['data'])-1]['ev_Value'];
+            $val = 0;
+            if ( isset($dat['data'][count($dat['data'])-1]) )
+                $val = $dat['data'][count($dat['data'])-1]['ev_Value'];
             if ( $dat['alert'] )
             {
                 $a_bgcolor = $alert_ngcolor;
@@ -2302,6 +2996,11 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
             {
                 $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>V</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_voltage($val,"V"), $hh );
+            }
+            else if ( $dat['atype'] == "L" )
+            {
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_level($val), $hh );
             }
             else
             {
@@ -2379,6 +3078,7 @@ function func_create_camera_graph( $gdata, $divname, $camera_addr )
     printf( "document.getElementById('%s'),", $divname );
     
     printf( "[" );
+    $partname = "";
     $count = 0;
     foreach ( $gdata as $data )
     {
@@ -2388,7 +3088,9 @@ function func_create_camera_graph( $gdata, $divname, $camera_addr )
         $hour = substr( $data['file'], 17, 2 );
         $min = substr( $data['file'], 19, 2 );
         $sec = substr( $data['file'], 21, 2 );
+        $msec = 0;
         printf( "[new Date('%d-%02d-%02dT%02d:%02d:%02d'),1]", $year, $mon, $day, $hour, $min, $sec );
+        
                 
         $count += 1;
         if ( $count < count($gdata) )

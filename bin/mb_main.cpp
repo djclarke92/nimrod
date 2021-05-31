@@ -34,6 +34,7 @@ bool gbTerminateNow = false;
 bool gbReadConfig = false;
 char gszHostname[HOST_NAME_MAX+1] = "";
 RS485_CONNECTION_TYPE gRS485 = { 9600, 'N', 8, 1 };
+CThreadMsg gThreadMsg;
 
 
 void InitSSL(void);
@@ -60,11 +61,12 @@ int main( int argc, char *argv[] )
 	bool bRun = false;
 	bool bShutdownNimrod = false;
 	bool bThreadRunning[MAX_THREADS];
+	bool bAllDevicesDead[MAX_THREADS];
 	int i;
 	int err;
     int status;
     int iThreads = MAX_THREADS;
-    int iComPorts;
+    int iTotalComPorts;
     time_t tLastUpgradeCheck = 0;
     time_t tConfigTime = 0;
     time_t tUpdated = 0;
@@ -75,6 +77,7 @@ int main( int argc, char *argv[] )
 	char szComPortList[MAX_DEVICES][MAX_COMPORT_LEN+1];
 	CDeviceList myDevices;
 	CInOutLinks myIOLinks;
+	CPlcStates myPlcStates;
 	pthread_mutexattr_t attr;
 	struct stat statbuf;
 	CThread* myThread[MAX_THREADS];
@@ -85,6 +88,7 @@ int main( int argc, char *argv[] )
 		threadId[i] = 0;
 		myThread[i] = NULL;
 		bThreadRunning[i] = false;
+		bAllDevicesDead[i] = false;
 	}
 
 	signal( SIGINT, SigIntHandler );
@@ -179,8 +183,8 @@ int main( int argc, char *argv[] )
 	myDevices.ReadDeviceConfig( myDB );
 	myIOLinks.ReadIOLinks( myDB );
 
-	iComPorts = myDevices.GetTotalComPorts( szComPortList );
-	LogMessage( E_MSG_INFO, "Total com ports: %d", iComPorts );
+	iTotalComPorts = myDevices.GetTotalComPorts( szComPortList );
+	LogMessage( E_MSG_INFO, "Total com ports: %d", iTotalComPorts );
 
 	// check if com ports have been swapped
 	myDevices.GetComPortsOnHost( myDB, szComPortList );
@@ -200,9 +204,13 @@ int main( int argc, char *argv[] )
 		tUpdated = myDB.ReadConfigUpdateTime();
 		if ( tUpdated > tConfigTime )
 		{	// config has changed
+			pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
+
 			myDevices.ReadDeviceConfig( myDB );
 			myIOLinks.ReadIOLinks( myDB );
 			tConfigTime = time(NULL);
+
+			pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
 		}
 
 	    if ( tLastUpgradeCheck + 5 < time(NULL) )
@@ -216,6 +224,12 @@ int main( int argc, char *argv[] )
 	    	}
 	    }
 
+	    if ( iTotalComPorts == 0 )
+	    {
+	    	bRun = true;
+	    	break;
+	    }
+
 		if ( iCount < 10 )
 			usleep( 2000000 );
 		else
@@ -227,22 +241,26 @@ int main( int argc, char *argv[] )
 	if ( bRun )
 	{
 
-		iThreads = iComPorts + 2;
+		iThreads = iTotalComPorts + 3;
 
 		int iPort = 0;
 		for ( i = 0; i < iThreads; i++ )
 		{
 			if ( i == 0 )
 			{
-				myThread[i] = new CThread( "", &myDevices, &myIOLinks, E_TT_TCPIP, &bThreadRunning[i] );
+				myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_TCPIP, &bThreadRunning[i], &bAllDevicesDead[i] );
 			}
 			else if ( i == 1 )
 			{
-				myThread[i] = new CThread( "", &myDevices, &myIOLinks, E_TT_TIMER, &bThreadRunning[i] );
+				myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_TIMER, &bThreadRunning[i], &bAllDevicesDead[i] );
+			}
+			else if ( i == 2 )
+			{
+				myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_WEBSOCKET, &bThreadRunning[i], &bAllDevicesDead[i] );
 			}
 			else
 			{
-				myThread[i] = new CThread( szComPortList[iPort], &myDevices, &myIOLinks, E_TT_COMPORT, &bThreadRunning[i] );
+				myThread[i] = new CThread( szComPortList[iPort], &myDevices, &myIOLinks, &myPlcStates, E_TT_COMPORT, &bThreadRunning[i], &bAllDevicesDead[i] );
 				iPort += 1;
 			}
 
@@ -280,6 +298,26 @@ int main( int argc, char *argv[] )
 					LogMessage( E_MSG_WARN, "waitpid() failed for pid %d, errno %d", pidChild, errno );
 				}
 		    }
+
+			// check if all com ports are dead
+			int iDead = 0;
+			for ( i = 2; i < iThreads; i++ )
+			{
+				if ( bAllDevicesDead[i] )
+				{
+					iDead += 1;
+				}
+			}
+			if ( iDead + 3 == iThreads && iTotalComPorts != 0 )
+			{	// all com port devices are dead, restart
+				LogMessage( E_MSG_INFO, "All com port devices are dead, restarting" );
+				if ( CreateRestartScript( NULL ) )
+				{
+					gbTerminateNow = true;
+					gbRestartNow = true;
+					break;
+				}
+			}
 
 		    if ( tLastUpgradeCheck + 5 < time(NULL) )
 		    {
@@ -534,3 +572,85 @@ const char* GetMyHostname()
 	return gszHostname;
 }
 
+
+
+//***********************************************************************************************************************
+//
+//	CThrteadMsg class
+//
+//***********************************************************************************************************************
+CThreadMsg::CThreadMsg()
+{
+	Init();
+}
+
+CThreadMsg::~CThreadMsg()
+{
+
+}
+
+void CThreadMsg::Init()
+{
+	for ( int i = 0; i < MAX_THREAD_MESSAGES; i++ )
+	{
+		m_szMsg[i][0] = '\0';
+	}
+}
+
+void CThreadMsg::PutMessage( const char* szFmt, ... )
+{
+	bool found = false;
+	int i;
+	va_list args;
+	char szBuf[100];
+
+	pthread_mutex_lock( &mutexLock[E_LT_WEBSOCKET] );
+
+	va_start( args, szFmt );
+
+	vsnprintf( szBuf, sizeof(szBuf), szFmt, args );
+
+	va_end( args );
+
+	for ( i = 0; i < MAX_THREAD_MESSAGES; i++ )
+	{
+		if ( m_szMsg[i][0] == '\0' )
+		{	// found an empty slot
+			found = true;
+			snprintf( m_szMsg[i], sizeof(m_szMsg[i]), "%s", szBuf );
+			break;
+		}
+	}
+
+	pthread_mutex_unlock( &mutexLock[E_LT_WEBSOCKET] );
+
+	if ( !found )
+	{
+		LogMessage( E_MSG_ERROR, "Failed to put ws message" );
+	}
+}
+
+const bool CThreadMsg::GetMessage( char* szMsg, const size_t uLen )
+{
+	bool found = false;
+	int i;
+
+	szMsg[0] = '\0';
+
+	pthread_mutex_lock( &mutexLock[E_LT_WEBSOCKET] );
+
+	for ( i = 0; i < MAX_THREAD_MESSAGES; i++ )
+	{
+		if ( m_szMsg[i][0] != '\0' )
+		{	// found a message
+			found = true;
+			snprintf( szMsg, uLen, "%s", m_szMsg[i] );
+			m_szMsg[i][0] = '\0';
+			break;
+		}
+	}
+
+	pthread_mutex_unlock( &mutexLock[E_LT_WEBSOCKET] );
+
+	return found;
+}

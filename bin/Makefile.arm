@@ -5,40 +5,55 @@ CFLAGS=-Wall -g -I$${HOME}/raspberrypi/rootfs/usr/include/modbus -I$${HOME}/rasp
 	-I$${HOME}/raspberrypi/rootfs/usr/include -I$${HOME}/raspberrypi/rootfs/usr/include/arm-linux-gnueabihf \
 	-fmessage-length=0 -grecord-gcc-switches -D_FORTIFY_SOURCE=2 -fstack-protector -funwind-tables -fasynchronous-unwind-tables \
 	-DOPENSSL_LOAD_CONF -DPIC -fPIC -fno-strict-aliasing -g -O -DNDEBUG -MMD -MP
-LDFLAGS=-L$${HOME}/raspberrypi/rootfs/usr/lib -lz -lm -lssl -lcrypto -ldl -lmodbus -lmariadbclient -lrt -lpthread
+LDFLAGS=-L$${HOME}/raspberrypi/rootfs/usr/lib -lz -lm -lssl -lcrypto -ldl -lmodbus -lmariadbclient -lrt -lpthread -lwebsockets
 EXE=nimrod-arm7
 SAEXE=set-address-arm7
-SRCS=mb_main.cpp mb_utils.cpp mb_devices.cpp mb_mysql.cpp mb_thread.cpp
+CLEXE=nimrod-msg-arm7
+SRCS=websockets.cpp cameras.cpp plcstates.cpp mb_main.cpp mb_utils.cpp mb_devices.cpp mb_mysql.cpp mb_thread.cpp
 SASRCS=set-address.cpp
-BUILD_NUMBER_FILE=build-number
-OBJS=$(SRCS:.cpp=.o) build-number.o
-SAOBJS=$(SASRCS:.cpp=.o)
+CLSRCS=nimrod-msg.cpp
+BNSRCS=build-number.c
+OBJDIR=objarm
+OBJS=$(SRCS:%.cpp=$(OBJDIR)/%.o)
+SAOBJS=$(SASRCS:%.cpp=$(OBJDIR)/%.o)
+CLOBJS=$(CLSRCS:%.cpp=$(OBJDIR)/%.o)
 DEP=$(SRCS:.cpp=.d)
 SADEP=$(SASRCS:.cpp=.d)
+CLDEP=$(CLSRCS:.cpp=.d)
 -include $(DEP)
 -include $(SADEP)
+-include $(CLDEP)
 
+.DEFAULT_GOAL := all
 
-all: clean $(SRCS) $(SASRCS) $(SAEXE) $(EXE)
+all: $(SRCS) $(SASRCS) $(CLSRCS) $(EXE) $(SAEXE) $(CLEXE)
 
-$(EXE): $(OBJS) $(BUILD_NUMBER_FILE).c
-	$(CPP) -Wl,-rpath-link=$${HOME}/raspberrypi/rootfs/usr/lib --sysroot=$${HOME}/raspberrypi/rootfs $(OBJS) -o $(EXE) $(LDFLAGS)
-#	scp $(EXE) pi@nimrod:~/nimrod
+$(EXE): $(OBJS)
+	$(CPP) $(CFLAGS) -c build-number.c -o $(OBJDIR)/build-number.o
+	$(CPP) $(CFLAGS) -Wl,-rpath-link=$${HOME}/raspberrypi/rootfs/usr/lib --sysroot=$${HOME}/raspberrypi/rootfs $(OBJS) $(OBJDIR)/build-number.o -o $(EXE) $(LDFLAGS)
 
 $(SAEXE): $(SAOBJS)
-	$(CPP) -Wl,-rpath-link=$${HOME}/raspberrypi/rootfs/usr/lib --sysroot=$${HOME}/raspberrypi/rootfs $(SAOBJS) -o $(SAEXE) $(LDFLAGS) 
+	$(CPP) $(CFLAGS) -Wl,-rpath-link=$${HOME}/raspberrypi/rootfs/usr/lib --sysroot=$${HOME}/raspberrypi/rootfs $(SAOBJS) -o $(SAEXE) $(LDFLAGS) 
 
-.cpp.o: 
+$(CLEXE): $(CLOBJS)
+	$(CPP) $(CFLAGS) -Wl,-rpath-link=$${HOME}/raspberrypi/rootfs/usr/lib --sysroot=$${HOME}/raspberrypi/rootfs $(CLOBJS) -o $(CLEXE) $(LDFLAGS) 
+
+$(OBJS): $(OBJDIR)/%.o: %.cpp
 	$(CPP) $(CFLAGS) -c $< -o $@
-	
-$(BUILD_NUMBER_FILE).o: $(BUILD_NUMBER_FILE).c
-	bash -c "../scripts/build-num.sh"
-	$(CC) $(CFLAGS) -c $(BUILD_NUMBER_FILE).c
-
     
+$(SAOBJS): $(OBJDIR)/%.o: %.cpp
+	$(CPP) $(CFLAGS) -c $< -o $@
+    
+$(CLOBJS): $(OBJDIR)/%.o: %.cpp
+	$(CPP) $(CFLAGS) -c $< -o $@
+
 clean:
 	rm -rf *.o
+	rm -rf $(OBJDIR)/*.o
 	rm -rf $(DEP)
+	rm -rf $(SADEP)
+	rm -rf $(CLDEP)
 	rm -rf $(EXE)
 	rm -rf $(SAEXE)
+	rm -rf $(CLEXE)
 	

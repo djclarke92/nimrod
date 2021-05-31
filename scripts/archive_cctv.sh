@@ -25,8 +25,12 @@ for DIR in $LIST; do
                 cd $DIR/*/record
                 if [ ! -d archive ]; then
                         mkdir archive
+                        chmod g+w archive
                 fi
 
+				NUM=`find . -maxdepth 1 -daystart -mtime +1 -type f | wc -l`
+				echo "  archiving $NUM files"
+				
                 # move files into archive directory
                 find . -maxdepth 1 -daystart -mtime +1 -type f -exec mv {} archive \;
 

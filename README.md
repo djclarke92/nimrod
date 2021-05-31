@@ -17,7 +17,9 @@ What can you do with it ?
 * Input switch events can be a click, double click or long click, each can trigger different output actions
 * Input events can be chained together, e.g. if time is 6:30am and temperature sensor #2 is < 15 deg then turn on output #7 for 30 minutes
 
-Communication with each modbus device is polled.  All digital inputs are active low, i.e. connect to 0V / Gnd to activate.  All digital outputs are active low  open collector outputs.
+Communication with each modbus device is polled.  All digital inputs are active low, i.e. connect to 0V / Gnd to activate.  All digital outputs are active low open collector outputs.
+
+On a Pi4, we recommend that you move the /var file system onto a USB3 hard drive otherwise the Pi's uSDHC card will die quite soon due to the number of writes. 
 
 The Nimrod web page also supports displaying CCTV camera images and video streams, to do this you need the mount the CCTV image storage filesystem onto the Pi (edit /etc/fstab and 
 create /etc/.smbpwd).  The camera definitions are in the file/site_config.conf file.
@@ -118,6 +120,8 @@ Wellpro modbus devices
 * ./scripts/archive_cctv.sh			Script to delete old cctv files
 * ./sounds/alerts.mp3
 * ./sounds/warning1.mp3
+* ./cctv -> /var/cctv				Symlink to your cctv images storage directory
+* ./uploads							Create this directory manually and change the owner:group to www-data:www-data
 
 
 # Raspberry Pi Model 2 B+
@@ -159,30 +163,6 @@ We recommend 16GB SD cards are used, an 8GB card is likely to run out of space i
 - apt-get upgrade
 - Reboot
 
-## Install additional packages required by Nimrod on the Pi
-
-- cmd line: sudo apt-get update (update list of available packages)
-- gui: sudo aptitude
-- example to install curl
-	- apt-cache search curl
-	- apt-get install curl
-
-Raspbian buster
-- apache2 libapache2-mod-php php php-mysql php-gd
-- libmodbus5 libmodbus-dev
-- libssl-dev libusb-dev ntpddate
-- mariadb-client libmariadb-dev
-- (old mysql-client libmysqlclient-dev)
-- ssmtp mailutils mpack 
-
-- Enable mod-ssl in apache using a self signed certificate
-> sudo a2enmod ssl
-> sudo a2ensite default-ssl
-> sudo systemctl restart apache2
-
-- Remove the default index.html file
-> sudo rm /var/www/html/index.html
-
 ## Create the nimrod user on the Pi
 
 It is recommended that you use the same uid/gid for each user/group across your installation. The useradd/groupadd 
@@ -197,20 +177,130 @@ commands have options for this.
 	> ssh-keygen -t rsa
 	- copy the public key to nimrod@<database_server>:~/.ssh/authorized_keys
 
-## Setup ssmtp mail on the Pi
+## Install additional packages required by Nimrod on the Pi
 
-> sudo vi /etc/ssmtp/ssmtp.conf
-	rewriteDomain=<your_domain_name>
-	mailhub=<your_mail_server>:<port>
-	hostname=nimrod@<your_domain_name>
-	AuthUser=nimrod@<your_domain_name>
-	AuthPass=PASSWORD
-	useSTARTTLS=YES
+- cmd line: sudo apt-get update (update list of available packages)
+- gui: sudo aptitude
+- example to install curl
+	- apt-cache search curl
+	- apt-get install curl
+
+Raspbian buster
+- apache2 libapache2-mod-php php php-mysql php-gd
+- libmodbus5 libmodbus-dev
+- libssl-dev libusb-dev ntpddate
+- mariadb-server
+- mariadb-client libmariadb-dev
+- (old mysql-client libmysqlclient-dev)
+- msmtp msmtp-mta mailutils
+- libwebsockets8 libwebsockets-dev libwebsockets-test-server
+
+- Secure the mariadb installation
+> sudo mysql_secure_installation
+
+- Enable mod-ssl in apache using a self signed certificate
+> sudo a2enmod ssl
+> sudo a2ensite default-ssl
+> sudo systemctl restart apache2
+
+- Remove the default index.html file
+> sudo rm /var/www/html/index.html
+
+- make apache a member of the nimrod group
+> sudo adduser www-data nimrod
+
+- create the web uploads directory
+> sudo mkdir /var/www/html/uploads
+> sudo chown nimrod:nimrod /var/www/html/uploads
+> sudo chmod g+w /var/www/html/uploads
+
+## Setup msmtp mail on the Pi
+
+> sudo vi /etc/msmtprc
+	# Set default values for all following accounts.
+	defaults
+	#logfile /home/pi/msmtp.log
+
+	# Use the mail submission port 587 instead of the SMTP port 25.
+	port 465
+
+	# Always use TLS.
+	tls on
+	tls_starttls off
+
+	# Set a list of trusted CAs for TLS. The default is to use system settings, but
+	# you can select your own file.
+	tls_trust_file /etc/ssl/certs/ca-certificates.crt
+
+	# If you select your own file, you should also use the tls_crl_file command to
+	# check for revoked certificates, but unfortunately getting revocation lists and
+	# keeping them up to date is not straightforward.
+	#tls_crl_file ~/.tls-crls
+
+	# Mail account
+	# TODO: Use the users username, e.g. root for system and pi for your raspbian user
+	account pi
+
+	# Host name of the SMTP server
+	# TODO: Use the host of your own mail account
+	host <your_isp_mail_host>
+
+	# As an alternative to tls_trust_file/tls_crl_file, you can use tls_fingerprint
+	# to pin a single certificate. You have to update the fingerprint when the
+	# server certificate changes, but an attacker cannot trick you into accepting
+	# a fraudulent certificate. Get the fingerprint with
+	# $ msmtp --serverinfo --tls --tls-certcheck=off --host=smtp.freemail.example
+	#tls_fingerprint 00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33
 	
-You also need to create the 'nimrod' email account on your mail server.
+	# Envelope-from address
+	# TODO: Use your own mail address
+	from <pi_hostname>@<your_domain>
+	
+	# Authentication. The password is given using one of five methods, see below.
+	auth on
+	
+	# TODO: Use your own user name fpr the mail account
+	user pi@<your_domain>
+	
+	# Password method 1: Add the password to the system keyring, and let msmtp get
+	# it automatically. To set the keyring password using Gnome's libsecret:
+	# $ secret-tool store --label=msmtp \
+	#   host smtp.freemail.example \
+	#   service smtp \
+	#   user joe.smith
+	
+	# Password method 2: Store the password in an encrypted file, and tell msmtp
+	# which command to use to decrypt it. This is usually used with GnuPG, as in
+	# this example. Usually gpg-agent will ask once for the decryption password.
+	#passwordeval gpg2 --no-tty -q -d ~/.msmtp-password.gpg
+	
+	# Password method 3: Store the password directly in this file. Usually it is not
+	# a good idea to store passwords in plain text files. If you do it anyway, at
+	# least make sure that this file can only be read by yourself.
+	# TODO: Use the password of your own mail account
+	password <email_password>
+	
+	# Password method 4: Store the password in ~/.netrc. This method is probably not
+	# relevant anymore.
+	
+	# Password method 5: Do not specify a password. Msmtp will then prompt you for
+	# it. This means you need to be able to type into a terminal when msmtp runs.
+	
+	# Set a default account
+	# TODO: Use the same account you've configured under account, e.g. root or pi
+	account default: pi
+	
+	# Map local users to mail addresses (for crontab)
+	aliases /etc/aliases
+	
+>sudo chown pi:pi /etc/msmtp
 
-Note: On Jessie 4.4.38-v7+ logging in with ssh will send a "Security" email. Something to do with having
-set a password for the nimrod user. See Google.
+> sudo vi /etc/aliases
+	root: pi@<your_domain>
+	default: pi@<your_domain>
+	
+> sudo vi /etc/mail.rc
+	set sendmail="/usr/bin/msmtp -t"
 
 ## Create a certificate so NodeMCU (ESP8266) WiFi devices can connect
 
@@ -273,7 +363,7 @@ the ssh keys for all nimrod hosts
 
 > sudo vi /etc/apache2/apache2.conf
 	<Directory "/var/www/html">
-        Options +FollowSymLinks +Multiviews +Indexes
+        Options +FollowSymLinks +Multiviews -Indexes
         AllowOverride None
         AuthType basic
         AuthName "Nimrod - restricted site"
@@ -300,8 +390,26 @@ the ssh keys for all nimrod hosts
 > ssh nimrod@REMOTE_DB_HOST
 > yes
 > ctrl-d		
+
+4.	Apache2 setup
+> Create the cctv symlink
+	cd /var/www/html
+	sudo ln -s /var/cctv cctv
+> Add apache to the guest group
+	sudo adduser www-data guest
+> Restart apache
+	sudo service apache2 restart
+
+5.	Move the nimrod.log file onto /var
+> cd /home/nimrod
+> sudo touch /var/tmp/nimrod.log
+> sudo chown nimrod:nimrod /var/tmp/nimrod.log
+> sudo ln -s /var/tmp/nimrod.log .
 			
-4.	Set nimrod to start automatically as the pi user
+6.	Add nimrod to the guest group
+> sudo usermod -a -G guest nimrod
+
+6.	Set nimrod to start automatically
 > ssh pi@nimrod
 > cd /var/www/html
 > sudo cp scripts/nimrod.service /lib/systemd/system/.
@@ -309,7 +417,7 @@ the ssh keys for all nimrod hosts
 > sudo systemctl enable nimrod.service
 > sudo systemctl start nimrod
 
-5.	Nimrod should now be running
+6.	Nimrod should now be running
 
 See the log in /home/nimrod/nimrod.log.  Point your browser to https://nimrod/index.php
 	

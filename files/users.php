@@ -22,6 +22,8 @@ function func_clear_us_array( &$us_array )
 	$us_array['us_Password2'] = "";
 	$us_array['us_AuthLevel'] = "0";
 	$us_array['us_UF_Cameras'] = "N";
+	$us_array['us_UF_Upgrade'] = "N";
+	$us_array['us_UF_HomeCameras'] = "N";
 	$us_array['error_msg'] = "";
 	$us_array['info_msg'] = "";
 }
@@ -86,7 +88,67 @@ if ( isset( $_POST['us_AuthLevel']) )
     $us_array['us_AuthLevel'] = substr($_POST['us_AuthLevel'],0,1);
 if ( isset( $_POST['us_UF_Cameras']) )
     $us_array['us_UF_Cameras'] = "Y";
-	    
+if ( isset( $_POST['us_UF_Upgrade']) )
+    $us_array['us_UF_Upgrade'] = "Y";
+if ( isset( $_POST['us_UF_HomeCameras']) )
+    $us_array['us_UF_HomeCameras'] = "Y";
+        
+if ( isset( $_FILES['us_FileName']) )        
+{
+    $us_array['info_msg'] = "set";
+    if ( isset($_FILES['us_FileName']['error']) )
+    {
+        $ok = false;
+        switch ($_FILES['us_FileName']['error']) 
+        {
+        case UPLOAD_ERR_OK:
+            $ok = true;
+            break;
+        case UPLOAD_ERR_NO_FILE:
+            $us_array['error_msg'] = sprintf('No file sent.');
+            break;
+        case UPLOAD_ERR_INI_SIZE:
+            $us_array['error_msg'] = sprintf('Exceeded ini filesize limit.');
+            break;
+        case UPLOAD_ERR_FORM_SIZE:
+            $us_array['error_msg'] = sprintf('Exceeded form filesize limit.');
+            break;
+        default:
+            $us_array['error_msg'] = sprintf("Unknown error");
+            break;
+        }
+        
+        if ( $ok )
+        {
+            $name = basename($_FILES['us_FileName']['name']);
+            $dest = sprintf( "/var/www/html/uploads/%s", $name );
+            $type = mime_content_type($_FILES['us_FileName']['tmp_name']);
+            $us_array['info_msg'] = sprintf( "File uploaded: '%s', %d bytes, type '%s'", $_FILES['us_FileName']['tmp_name'], $_FILES['us_FileName']['size'], $type );
+            
+            if ( $type == "application/x-gzip" && strstr($name,"nimrod") !== false )
+            {
+                if ( move_uploaded_file( $_FILES['us_FileName']['tmp_name'], $dest ) )
+                {   // success
+                    $us_array['info_msg'] = sprintf( "Uploaded file moved to '%s'", $dest );
+                    
+                    chmod( $dest, 0666 );
+                }
+                else
+                {
+                    $us_array['error_msg'] = sprintf( "Failed to move uploaded file '%s' to '%s'", $_FILES['us_FileName']['tmp_name'], $dest );
+                }
+            }
+            else
+            {
+                $us_array['error_msg'] = sprintf( "Invalid upload file type '%s'", $type );
+            }
+        }
+    }
+    else
+    {
+        $us_array['error_msg'] = sprintf( "File upload error" );
+    }
+}
 
 
 if ( isset($_GET['Username']) )
@@ -97,6 +159,8 @@ if ( isset($_GET['Username']) )
 		$us_array['us_Name'] = stripslashes($line[1]);
 		$us_array['us_AuthLevel'] = $line[2];
 		$us_array['us_UF_Cameras'] = substr( $line[3], E_UF_CAMERAS, 1 );
+		$us_array['us_UF_Upgrade'] = substr( $line[3], E_UF_UPGRADE, 1 );
+		$us_array['us_UF_HomeCameras'] = substr( $line[3], E_UF_HOMECAMERAS, 1 );
 	}
 	else
 	{
@@ -122,6 +186,10 @@ else if ( isset($_GET['AddNewUser']) )
     func_clear_us_array( $us_array );
     $new_user = true;
 }
+else if ( isset($_POST['UploadFile']) )
+{
+    $us_array['info_msg'] .= sprintf( "UploadFile" );   
+}
 else if ( isset($_POST['NewUser']) || isset($_POST['UpdateUser']) )
 {
 	if ( isset($_POST['NewUser']) )
@@ -139,12 +207,20 @@ else if ( isset($_POST['NewUser']) || isset($_POST['UpdateUser']) )
 	}
 	else if ( func_check_us_array( $us_array ) )
 	{
-	    $features = $us_array['us_UF_Cameras'];
-	    $features .= "NNNNNNNNN";
+	    $features = "";
+	    $features .= $us_array['us_UF_Cameras'];
+	    $features .= $us_array['us_UF_Upgrade'];
+	    $features .= $us_array['us_UF_HomeCameras'];
+	    $features .= "NNNNNNN";
 		if ( $db->UpdateUserTable( $new_user, $us_array['us_Username'], $us_array['us_Name'], $us_array['us_Password'], $us_array['us_AuthLevel'], $features ) )
 		{	// success
-			func_clear_us_array( $us_array );
+			//func_clear_us_array( $us_array );
 			
+		    if ( $us_array['us_Username'] == $_SESSION['us_Username'] )
+		    { // update the auth details
+		        $_SESSION['us_Features'] = $features;
+		    }
+
 			$us_array['info_msg'] = "User details saved successfully.";
 			$new_user = false;
 		}
@@ -293,8 +369,6 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
 
     		printf( "<div class='form-row'>" );
-    		//printf( "<div class='col'>" );
-    		//printf( "</div>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_UF_Cameras' id='us_UF_Cameras' %s> ", ($us_array['us_UF_Cameras'] == "Y" ? "checked" : "") );
@@ -302,7 +376,33 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
-			printf( "<div class='form-row mb-2 mt-2'>" ); 
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col form-check'>" );
+    		printf( "<label class='form-check-label'>" );
+    		printf( "<input type='checkbox' class='form-check-input' name='us_UF_HomeCameras' id='us_UF_HomeCameras' %s> ", ($us_array['us_UF_HomeCameras'] == "Y" ? "checked" : "") );
+    		printf( "Show Cameras on Home Page</label>" );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col form-check'>" );
+    		printf( "<label class='form-check-label'>" );
+    		printf( "<input type='checkbox' class='form-check-input' name='us_UF_Upgrade' id='us_UF_Upgrade' %s> ", ($us_array['us_UF_Upgrade'] == "Y" ? "checked" : "") );
+    		printf( "Software Upgrade</label>" );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		if ( $us_array['us_UF_Upgrade'] == 'Y' )
+    		{
+        		printf( "<div class='form-row'>" );
+        		printf( "<div class='col'>" );
+        		printf( "'<input type='hidden' name='MAX_FILE_SIZE' value='4096000'>" );
+        		printf( "<input type='file' class='form-control-file border' name='us_FileName' id='us_FileName'>" );
+        		printf( "</div>" );
+        		printf( "</div>" );
+    		}
+        		
+    		printf( "<div class='form-row mb-2 mt-2'>" ); 
 			printf( "<p>" );
             printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateUser' id='UpdateUser' value='Update' %s>Update</button>", ($us_array['us_Username'] == "" ? "disabled" : "") );
             printf( "&nbsp;&nbsp;&nbsp;" );
@@ -313,7 +413,12 @@ $user_list = $db->ReadUsers();
                 ($us_array['us_Username'] == "" || func_disabled_non_admin() != "" || $us_array['us_Username'] == $_SESSION['us_Username'] ? "disabled" : "") );
             printf( "&nbsp;&nbsp;&nbsp;" );
             printf( "<button type='submit' class='btn btn-outline-dark' name='ClearUser' id='ClearUser' value='Clear'>Clear</button>" );
-    		printf( "</p>" );
+            if ( $us_array['us_UF_Upgrade'] == "Y" )
+            {
+                printf( "&nbsp;&nbsp;&nbsp;" );
+                printf( "<button type='submit' class='btn btn-outline-dark' name='UploadFile' id='UploadFile' value='Upload File'>Upload File</button>" );
+            }
+            printf( "</p>" );
     		printf( "</div>" );
             ?>
 

@@ -15,7 +15,7 @@
 #include <pthread.h>
 #include <sys/wait.h>
 
-#include <modbus.h>
+#include <modbus/modbus.h>
 
 
 int gRS485_iBaud = 9600;
@@ -110,11 +110,22 @@ int main( int argc, char** argv )
 		printf( "                       1 Digital Output devices\n" );
 		printf( "                       2 Voltage device and temperature devices\n" );
 		printf( "                       3 Thermocouple devices PD3064\n" );
+		printf( "                       4 HDL300 water level sensor\n" );
 	}
 
 	return 0;
 }
 
+
+// HDL300 water level sensor
+// function code 0x03 = read
+// Register 0x00 = modbus address
+// Register 0x01 = baud rate
+// Register 0x04 = depth in mm
+// Cable red = +12V
+//       black = 0V
+//       white = rs485A
+//       blue = rs485B
 
 // PD30xx sereies devices (thermocouple)
 // function code 0x03 = read, 0x06 = write
@@ -139,10 +150,11 @@ int main( int argc, char** argv )
 void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int newBaud, int type )
 {
 	bool bBaudOk = true;
-	bool bReset = false;
 	int modBaud = 2;
 	int modBaud2 = 0;
 	int modBaud3 = 0;
+	int modBaud4 = 0;
+	int reg;
 
 	// check the baud rate
 	switch ( newBaud )
@@ -153,14 +165,17 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 	case 4800:
 		modBaud = 1;
 		modBaud2 = 3;
+		modBaud4 = 2;
 		break;
 	case 9600:		// no baud rate change
 		modBaud = 2;
 		modBaud2 = 0;
+		modBaud4 = 3;
 		break;
 	case 19200:
 		modBaud = 3;
 		modBaud2 = 6;
+		modBaud4 = 4;
 		break;
 	}
 
@@ -207,13 +222,13 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 			{
 				printf( "Setting new address 0x%02x -> 0x%02x\n", oldAddr, newAddr );
 
-				if ( modbus_write_register( ctx, 0x0064, newAddr ) == -1 )
+				reg = 0x64;
+				if ( modbus_write_register( ctx, reg, newAddr ) == -1 )
 				{
-					printf( "Error: modbus_write_register(0x64) failed: %s\n", modbus_strerror(errno) );
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
 				}
 				else
 				{
-					bReset = true;
 					printf( "New slave address 0x%02x set\n", newAddr );
 
 					if ( modbus_set_slave( ctx, newAddr ) == -1 )
@@ -231,10 +246,10 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 			{
 				printf( "Setting new baud rate %d -> %d (%d)\n", oldBaud, newBaud, modBaud );
 
-				if ( modbus_write_register( ctx, 0x0065, modBaud ) == -1 )
+				reg = 0x65;
+				if ( modbus_write_register( ctx, reg, modBaud ) == -1 )
 				{
-					bReset = true;
-					printf( "Error: modbus_write_register(0x65) failed: %s\n", modbus_strerror(errno) );
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
 				}
 				else
 				{
@@ -246,20 +261,19 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 		{	// thermocouple
 			if ( newAddr != oldAddr )
 			{
-
 				int val = modBaud3;	// 0x00 = 9600 baud in low byte
 
 				val += (newAddr << 8);
 
 				printf( "Setting new address 0x%02x -> 0x%02x (0x%x)\n", oldAddr, newAddr, val );
 
-				if ( modbus_write_register( ctx, 0x0010, val ) == -1 )
+				reg = 0x10;
+				if ( modbus_write_register( ctx, reg, val ) == -1 )
 				{
-					printf( "Error: modbus_write_register(0x10) failed: %s\n", modbus_strerror(errno) );
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
 				}
 				else
 				{
-					bReset = true;
 					printf( "New slave address 0x%02x set\n", newAddr );
 
 					if ( modbus_set_slave( ctx, newAddr ) == -1 )
@@ -280,10 +294,52 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 
 				printf( "Setting new baud rate %d -> %d (%d,0x%x)\n", oldBaud, newBaud, modBaud2, val );
 
-				if ( modbus_write_register( ctx, 0x0010, val ) == -1 )
+				reg = 0x10;
+				if ( modbus_write_register( ctx, reg, val ) == -1 )
 				{
-					bReset = true;
-					printf( "Error: modbus_write_register(0x65) failed: %s\n", modbus_strerror(errno) );
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New baud rate %d set\n", newBaud );
+				}
+			}
+		}
+		else if ( type == 4 )
+		{
+			if ( newAddr != oldAddr )
+			{
+				printf( "Setting new address 0x%02x -> 0x%02x\n", oldAddr, newAddr );
+
+				// HDL300 modbus address is in register 0x00
+				reg = 0x00;
+				if ( modbus_write_register( ctx, reg, newAddr ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New slave address 0x%02x set\n", newAddr );
+
+					if ( modbus_set_slave( ctx, newAddr ) == -1 )
+					{
+						printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+					}
+				}
+			}
+			else
+			{
+				printf( "Warning: skip setting module address\n" );
+			}
+
+			if ( newBaud != oldBaud )
+			{
+				printf( "Setting new baud rate %d -> %d (%d)\n", oldBaud, newBaud, modBaud4 );
+
+				reg = 0x1;
+				if ( modbus_write_register( ctx, reg, modBaud4 ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
 				}
 				else
 				{
@@ -296,20 +352,6 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 			printf( "Error: invalid type = %d\n", type );
 		}
 
-		if ( bReset )
-		{	// reset the slave
-/*
-			if ( modbus_write_register( ctx, 0x0001, modBaud ) == -1 )
-			{
-				bReset = true;
-				printf( "Error: modbus_write_register(1) failed: %s\n", modbus_strerror(errno) );
-			}
-			else
-			{
-				printf( "New baud rate %d set\n", newBaud );
-			}
-*/
-		}
 	}
 
 	usleep( 30000 );
@@ -435,6 +477,41 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type )
 		{
 			printf( "Read registers: %u %u %u %u %u %u %u %u\n", ulInputs[0], ulInputs[1], ulInputs[2], ulInputs[3], ulInputs[4], ulInputs[5], ulInputs[6], ulInputs[7] );
 		}
+	}
+	else if ( type == 4 )
+	{	// hdl300 water level
+		printf( "Setting slave addr to %d\n", newAddr );
+		if ( modbus_set_slave( ctx, newAddr ) == -1 )
+		{
+			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+		}
+
+		addr = 0x04;
+		uint16_t ulInputs[iLen];
+
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: %u %u %u %u %u %u %u %u\n", ulInputs[0], ulInputs[1], ulInputs[2], ulInputs[3], ulInputs[4], ulInputs[5], ulInputs[6], ulInputs[7] );
+			printf( "Depth = %d mm\n", ulInputs[0] + (ulInputs[1]>>8) );
+		}
+
+/*		for ( addr = 0x00; addr < 17 ; addr += 8 )
+		{
+			rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+			if ( rc == -1 )
+			{
+				printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+			}
+			else
+			{
+				printf( "Read registers 0x%x: %X %X %X %X %X %X %X %X\n", addr, ulInputs[0], ulInputs[1], ulInputs[2], ulInputs[3], ulInputs[4], ulInputs[5], ulInputs[6], ulInputs[7] );
+			}
+		} */
 	}
 
 }

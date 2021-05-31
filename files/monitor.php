@@ -96,6 +96,7 @@ if ( $monitor_date != "" && $monitor_time != "" )
 
 $temperatures = $db->GetLatestTemperatures( $monitor_period, $datetime ); // previous 2 hours data
 $voltages = $db->GetLatestVoltages( $monitor_period, $datetime ); // previous 2 hours data
+$levels = $db->GetLatestLevels( $_SESSION['GraphHours'], $datetime );
 //printf( "voltages(%d,%d,%s)", count($voltages),count($voltages[0]['data']),$voltages[0]['di_AnalogType']);
 
 $f1_devices = $db->GetMonitorDevices( sprintf( "%dF1", $monitor_page ) );
@@ -108,47 +109,47 @@ else
     $l1_devices = $db->GetMonitorDevices( sprintf( "%dL1", $monitor_page ) );
     $r1_devices = $db->GetMonitorDevices( sprintf( "%dR1", $monitor_page ) );
 
-    $l1_data = func_get_graph_data( $temperatures, $voltages, $l1_devices );
-    $r1_data = func_get_graph_data( $temperatures, $voltages, $r1_devices );
+    $l1_data = func_get_graph_data( $temperatures, $voltages, $levels, $l1_devices );
+    $r1_data = func_get_graph_data( $temperatures, $voltages, $levels, $r1_devices );
 }
 $f2_devices = $db->GetMonitorDevices( sprintf( "%dF2", $monitor_page ) );
 if ( count($f2_devices) != 0 )
 {
-    $f2_data = func_get_graph_data( $temperatures, $voltages, $f2_devices );
+    $f2_data = func_get_graph_data( $temperatures, $voltages, $levels, $f2_devices );
 }
 else
 {
     $l2_devices = $db->GetMonitorDevices( sprintf( "%dL2", $monitor_page ) );
     $r2_devices = $db->GetMonitorDevices( sprintf( "%dR2", $monitor_page ) );
     
-    $l2_data = func_get_graph_data( $temperatures, $voltages, $l2_devices );
-    $r2_data = func_get_graph_data( $temperatures, $voltages, $r2_devices );
+    $l2_data = func_get_graph_data( $temperatures, $voltages, $levels, $l2_devices );
+    $r2_data = func_get_graph_data( $temperatures, $voltages, $levels, $r2_devices );
 }
 $f3_devices = $db->GetMonitorDevices( sprintf( "%dF3", $monitor_page ) );
 if ( count($f3_devices) != 0 )
 {
-    $f3_data = func_get_graph_data( $temperatures, $voltages, $f3_devices );
+    $f3_data = func_get_graph_data( $temperatures, $voltages, $levels, $f3_devices );
 }
 else
 {
     $l3_devices = $db->GetMonitorDevices( sprintf( "%dL3", $monitor_page ) );
     $r3_devices = $db->GetMonitorDevices( sprintf( "%dR3", $monitor_page ) );
     
-    $l3_data = func_get_graph_data( $temperatures, $voltages, $l3_devices );
-    $r3_data = func_get_graph_data( $temperatures, $voltages, $r3_devices );
+    $l3_data = func_get_graph_data( $temperatures, $voltages, $levels, $l3_devices );
+    $r3_data = func_get_graph_data( $temperatures, $voltages, $levels, $r3_devices );
 }
 $f4_devices = $db->GetMonitorDevices( sprintf( "%dF4", $monitor_page ) );
 if ( count($f4_devices) != 0 )
 {
-    $f4_data = func_get_graph_data( $temperatures, $voltages, $f4_devices );
+    $f4_data = func_get_graph_data( $temperatures, $voltages, $levels, $f4_devices );
 }
 else
 {
     $l4_devices = $db->GetMonitorDevices( sprintf( "%dL4", $monitor_page ) );
     $r4_devices = $db->GetMonitorDevices( sprintf( "%dR4", $monitor_page ) );
     
-    $l4_data = func_get_graph_data( $temperatures, $voltages, $l4_devices );
-    $r4_data = func_get_graph_data( $temperatures, $voltages, $r4_devices );
+    $l4_data = func_get_graph_data( $temperatures, $voltages, $levels, $l4_devices );
+    $r4_data = func_get_graph_data( $temperatures, $voltages, $levels, $r4_devices );
 }
 
 

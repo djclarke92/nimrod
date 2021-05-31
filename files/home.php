@@ -14,6 +14,7 @@ if ( !isset($_SESSION['us_AuthLevel']) )
 	return;
 }
 
+
 function func_find_graph_device( $de_no, $ch )
 {
 	$rc = false;
@@ -92,7 +93,7 @@ function func_get_graph_datetime()
 	}
 }
 
-function func_get_graph_devices( $temperatures, $voltages )
+function func_get_graph_devices( $temperatures, $voltages, $levels )
 {
     $g_devices = array();
     foreach ( $_SESSION['GraphDevices'] as $gg )
@@ -112,6 +113,18 @@ function func_get_graph_devices( $temperatures, $voltages )
         if ( $found == false )
         {
             foreach ( $voltages as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            foreach ( $levels as $tt )
             {
                 if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
                 {
@@ -299,6 +312,7 @@ $datetime = func_get_graph_datetime();
 
 $temperatures = $db->GetLatestTemperatures( $_SESSION['GraphHours'], $datetime );
 $voltages = $db->GetLatestVoltages( $_SESSION['GraphHours'], $datetime );
+$levels = $db->GetLatestLevels( $_SESSION['GraphHours'], $datetime );
 
 $db_size = $db->GetDatabaseSize();
 
@@ -331,12 +345,13 @@ foreach ( $devices as $device )
 
 
 $now = getdate();
+$camera_list = $db->ReadCameraList();
 $camera_files = array();
-foreach ( $_SESSION['camera_list'] as $camera )
+foreach ( $camera_list as $camera )
 {
-	if ( $_SESSION['ShowCameraNo'] == $camera['addr'] )
+	if ( $_SESSION['ShowCameraNo'] == $camera['ca_IPAddress'] )
 	{
-		$camera_files = func_read_camera_files( $camera['directory'], $now['year'], $now['mon'], $now['mday'] );
+		$camera_files = func_read_camera_files( $camera['ca_Directory'], $now['year'], $now['mon'], $now['mday'] );
 		break;
 	}
 }
@@ -362,6 +377,9 @@ foreach ( $_SESSION['camera_list'] as $camera )
 	</div>
 
     <?php
+    if ( count($devices) > 1 || (count($devices) == 1 && $devices[0]['de_Type'] != E_DT_TIMER) )
+    {   // only display device details if there are more devices than just the timer
+
     $show_row_dvt = "";
     if ( $_SESSION['ShowCameraFile'] == "" && $_SESSION['ShowCameraNo'] == "" && count($_SESSION['GraphDevices']) == 0 )
     {
@@ -413,7 +431,18 @@ foreach ( $_SESSION['camera_list'] as $camera )
 		<!-- *************************************************************************** -->
         <div class="col-sm-4">
 		<div id="row_dvt" class="collapse  <?php echo $show_row_dvt; ?>">
-            <h3>Voltages</h3>
+			<?php
+			$title = "Voltages";
+			foreach ( $voltages as $tt )
+			{
+			    if ( $tt['di_AnalogType'] == 'A' )
+			    {
+			        $title = "Voltage &amp; Current";
+			        break;
+			    }
+			}
+			printf( "<h3>%s</h3>", $title );
+			?>
             
             <table class='table table-striped'>
             <thead class="thead-light">
@@ -454,6 +483,56 @@ foreach ( $_SESSION['camera_list'] as $camera )
             ?>
             
             </table>
+            
+
+			<?php
+			if ( count($levels) > 0 )
+			{
+			$title = "Levels";
+			printf( "<h3>%s</h3>", $title );
+			?>
+            
+            <table class='table table-striped'>
+            <thead class="thead-light">
+              <tr>
+              <th>Name</th>
+              <th>Value</th>
+              <th>Date</th>
+              <th>Graph</th>
+              </tr>
+            </thead>
+    
+    		<?php         
+            foreach ( $levels as $tt )
+            {
+                $val = 0;
+                if ( count($tt['data']) > 0 )
+                    $val = func_calc_level( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                $class = "";
+                if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
+                    $class = "table-danger";
+                printf( "<tr class='%s'>", $class );
+            	printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
+            	printf( "<td>%s%s</td>", $val, "%" );
+            	if ( count($tt['data']) > 0 )
+                	printf( "<td><div class='timestamp text-nowrap'>%s</div></td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+            	else
+            	    printf( "<td><div class='timestamp text-nowrap'>?</div></td>" );
+            	
+            	$img = "&nbsp;&nbsp;&nbsp;";
+            	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
+            	{
+            		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
+            	}
+            	printf( "<td>%s</td>", $img );
+            	
+            	printf( "</tr>" );
+            }
+            
+            printf( "</table>" );
+            }
+            ?>
+            
         </div>
         </div>
 
@@ -516,7 +595,8 @@ foreach ( $_SESSION['camera_list'] as $camera )
 	</div> <!-- row -->
 	
 	
-	<?php 
+	<?php
+    
 	if ( $_SESSION['ShowCameraNo'] == "" )
 	{	// show graph
 	    
@@ -537,10 +617,11 @@ foreach ( $_SESSION['camera_list'] as $camera )
         
         $temperatures = $db->GetLatestTemperatures( $_SESSION['GraphHours'], $datetime );
         $voltages = $db->GetLatestVoltages( $_SESSION['GraphHours'], $datetime );
+        $levels = $db->GetLatestLevels( $_SESSION['GraphHours'], $datetime );
         
-        $g_devices = func_get_graph_devices( $temperatures, $voltages );
+        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels );
         
-        $g_data = func_get_graph_data( $temperatures, $voltages, $g_devices );
+        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $g_devices );
         func_draw_graph_div( true, "graphdiv", 1, $alert_width, $graph_bgcolor, $alert_okcolor, $alert_ngcolor, $g_data );
         func_create_graph( $g_data, "graphdiv" );
         ?>
@@ -680,16 +761,18 @@ foreach ( $_SESSION['camera_list'] as $camera )
 
             <?php 
             $printed = false;
-            foreach ( $devices as $dd )
+            $devices2 = $devices;
+            $devices2[] = array( 'de_DeviceNo'=>-3, 'de_Name'=>'Failed Logins' );
+            foreach ( $devices2 as $dd )
             {
-            	$failures = $db->GetDeviceFailures( $dd['de_DeviceNo'] );
-            	
+                $failures = $db->GetDeviceFailures( $dd['de_DeviceNo'] );
+                
             	if ( count($failures) > 0 )
             	{
             		$printed = true;
             		printf( "<tr>" );
             		
-            		printf( "<td><b>%s</b></td>", $dd['de_Name'] );
+            		printf( "<td><b>%s %d</b></td>", $dd['de_Name'], count($failures) );
             		
             		$onclick = sprintf( "return confirm(\"Are you sure you want to delete this event ?\")" );
             		printf( "<td>" );
@@ -748,7 +831,44 @@ foreach ( $_SESSION['camera_list'] as $camera )
 	
 	
     <?php 
-    if ( count($_SESSION['camera_list']) > 0 )
+    }   // end of if ( count($devices) == 0 )
+
+    if ( count($camera_list) > 0 && func_user_feature_enabled(E_UF_CAMERAS) && func_user_feature_enabled(E_UF_HOMECAMERAS) )
+    {
+        printf( "<!-- *************************************************************************** -->" );
+    	printf( "<div class='row'>" );
+    	printf( "<h3>Cameras</h3><br>" );
+    	printf( "</div> <!-- row -->" );
+
+    	printf( "<!-- *************************************************************************** -->" );
+    	printf( "<div class='row'>" );
+    	
+        foreach( $camera_list as $camera )
+        {
+            printf( "<div class='col'>" );
+            
+            $file = sprintf( "%s/latest_snapshot.jpg", func_make_camera_web_dir( "", $camera['ca_Directory'] ) );
+            
+            $stat = stat( sprintf( "%s/latest_snapshot.jpg", $camera['ca_Directory'] ) );
+            if ( $stat !== false )
+            {
+                $class = "";
+                if ($stat['mtime'] + 60*3 < time() )
+                {
+                    $class = "text-danger";
+                }
+                $date = getdate( $stat['mtime'] );
+                printf( "%s: <span class='%s'>%02d/%02d/%d %02d:%02d:%02d</span><br>", $camera['ca_Name'], $class, 
+                    $date['mday'], $date['mon'], $date['year'], $date['hours'], $date['minutes'], $date['seconds'] );
+            }
+            printf( "<img src='%s' width='400px' alt='No snapshot from %s'>", $file, $camera['ca_Name'] );
+        
+		    printf( "</div>" );
+        }
+    	printf( "</div> <!-- row -->" );
+    }
+    
+    if ( count($camera_list) > 0 )
     {
     ?>
 	<!-- *************************************************************************** -->
@@ -768,17 +888,17 @@ foreach ( $_SESSION['camera_list'] as $camera )
 
             <?php 
             $camera_dir = "";
-            foreach ( $_SESSION['camera_list'] as $camera )
+            foreach ( $camera_list as $camera )
             {
                 printf( "<tr>" );
                 if ( $_SESSION['us_AuthLevel'] == SECURITY_LEVEL_ADMIN )    
-                    printf( "<td><a href='?CameraNo=%s'>%s</a></td>", $camera['addr'], $camera['name'] );
+                    printf( "<td><a href='?CameraNo=%s'>%s</a></td>", $camera['ca_IPAddress'], $camera['ca_Name'] );
                 else
-                    printf( "<td><div class='text-muted'>%s</div></td>", $camera['name'] );
+                    printf( "<td><div class='text-muted'>%s</div></td>", $camera['ca_Name'] );
                 $img = "&nbsp;&nbsp;&nbsp;";
-                if ( $_SESSION['ShowCameraNo'] == $camera['addr'] )
+                if ( $_SESSION['ShowCameraNo'] == $camera['ca_IPAddress'] )
                 {
-                    $camera_dir = $camera['directory'];
+                    $camera_dir = $camera['ca_Directory'];
                     $img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
                 }
                 printf( "<td>%s</td>", $img );
@@ -805,20 +925,21 @@ foreach ( $_SESSION['camera_list'] as $camera )
                 if ( $_SESSION['ShowCameraFile'] != "" )
                 {
                     printf( "%s <div class='small'>(%s)</div><br>", func_get_date_from_video($_SESSION['ShowCameraFile']), $_SESSION['ShowCameraFile'] );
-                    $filemkv = sprintf( "%s%s/%s%s", CAMERA_FS_ROOT, $camera_dir, $camera_files[0]['dir'], $_SESSION['ShowCameraFile'] );
+                    $filemkv = sprintf( "%s/%s%s", $camera_dir, $camera_files[0]['dir'], $_SESSION['ShowCameraFile'] );
                     $expl = explode(".", $_SESSION['ShowCameraFile'] );
                     $basemp4 = sprintf( "%s.mp4", $expl[0] );
-                    $filemp4 = sprintf( "%s%s/%s%s", CAMERA_WEB_ROOT, $camera_dir, $camera_files[0]['dir'], $basemp4 );
+                    $camera_webdir = func_make_camera_web_dir( $_SERVER['DOCUMENT_ROOT'], $camera_dir );
+                    $filemp4 = sprintf( "%s/%s%s", $camera_webdir, $camera_files[0]['dir'], $basemp4 );
                     if ( !file_exists($filemp4) )
                     {
                         $cmd = sprintf( "ffmpeg -hide_banner -loglevel warning -i %s -codec copy %s", $filemkv, $filemp4 );
                         system( $cmd );
                         //printf( $cmd );
                     }
-                    $filemp4x = sprintf( "%s/%s/%s%s", dirname($_SERVER['PHP_SELF']), $camera_dir, $camera_files[0]['dir'], $basemp4 );
+                    $filemp4x = sprintf( "%s/%s%s", substr($camera_webdir,strlen($_SERVER['DOCUMENT_ROOT'])), $camera_files[0]['dir'], $basemp4 );
                     
                     printf( "<video width='400' height='225' controls type='video/mp4'>" );
-        		    printf( "<source src='../../../%s'>", $filemp4x );
+        		    printf( "<source src='./%s'>", $filemp4x );
         		    printf( "</video>" );
                 }
     		}
