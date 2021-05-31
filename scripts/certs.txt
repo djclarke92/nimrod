@@ -1,0 +1,27 @@
+#Installing a signed ssl cert for apache2
+
+#https://peppe8o.com/use-lets-encrypt-and-certbot-to-secure-raspberry-pi-hosted-websites-automatically/
+
+sudo apt update
+sudo apt install snapd
+
+sudo reboot
+
+##sudo snap install certbot --classic
+
+sudo snap install core; sudo snap refresh core
+
+# remove certbot if it is already installed
+sudo apt remove certbot
+
+sudo snap install --classic certbot
+
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+
+sudo certbot --apache -d <your_domain_name> -d www.<your_domain_name>
+ 
+
+
+
+
+
