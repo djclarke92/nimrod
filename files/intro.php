@@ -54,7 +54,7 @@ if ( $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL_NONE )
 		
 			<h2>About Nimrod</h2>
 			<div><img class='img-fluid' src="./images/raspberry-pi-b.jpg"></div>
-			<p>A home automation project based on the Raspberry Pi, Modbus IO devices and NodeMCU modules. The control software is written in C++ and the web configuration is in
+			<p>A home automation project based on the Raspberry Pi, Modbus IO devices and ESP32 modules. The control software is written in C++ and the web configuration is in
 			PHP7, Bootstrap and JQuery and uses MySQL/MariaDB as the database</p>
 			<h3>Some Links</h3>
 			<p>The <a class="" target='_blank' href="https://github.com/djclarke92/nimrod">Nimrod source</a> is available on Github.</p>
@@ -82,7 +82,7 @@ if ( $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL_NONE )
 			<div class='col'><img class='img-fluid' src="./images/esp8266.png"></div>
 			</div>
 			<p>A number of rs-485 Modbus RTU devices are supported to interface with digital inputs and outputs, voltage, current and temperature.
-			NodeMCU ESP8266 WiFi devices are also supported.</p>
+			ESP32 WiFi devices are also supported.</p>
 	
 			<h2>What can you do with it ?</h2>
 			<ul>

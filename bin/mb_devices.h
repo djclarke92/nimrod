@@ -13,8 +13,8 @@
 #define MAX_IO_PORTS				16		// max channels per modbus io device
 #define MAX_IO_LINKS				100		// across all pi's
 #define MAX_CONDITIONS				10		// per each iolink
-#define MCU_MSG_SIZE				20
-#define MAX_MCU_QUEUE				4
+#define ESP_MSG_SIZE				22
+#define MAX_ESP_QUEUE				4
 #define MAX_DATA_BUFFER				10
 #define MAX_TEMPERATURE_DIFF		5.0		// max temperature value change between readings
 
@@ -299,14 +299,14 @@ public:
 
 class CDeviceList {
 private:
-	int m_iMcuMessageCount;
+	int m_iEspMessageCount;
 	bool m_bHostComPortModbus[MAX_DEVICES];
 	enum E_DAY_NIGHT_STATE m_eDayNightState;
 	CMyDevice m_Device[MAX_DEVICES];
 	char m_szDummy[2];
 	char m_szHostComPort[MAX_DEVICES][MAX_COMPORT_LEN+1];
-	char m_szMcuResponseMsg[MAX_MCU_QUEUE][MCU_MSG_SIZE+1];	// TODO: handle multiple messages
-	char m_szMcuName[MAX_MCU_QUEUE][MAX_DEVICE_NAME_LEN+1];
+	char m_szEspResponseMsg[MAX_ESP_QUEUE][ESP_MSG_SIZE+1];	// TODO: handle multiple messages
+	char m_szEspName[MAX_ESP_QUEUE][MAX_DEVICE_NAME_LEN+1];
 	modbus_t* m_pHostCtx[MAX_DEVICES];
 
 public:
@@ -315,7 +315,7 @@ public:
 
 	void Init();
 	bool InitContext();
-	const int GetMcuMessageCount();
+	const int GetEspMessageCount();
 	const bool IsShared( const int idx );
 	const bool IsSharedWithNext( const int idx );
 	void FreeAllContexts();
@@ -344,7 +344,7 @@ public:
 	const char* GetComPort( const int idx );
 	const char* GetDeviceName( const int idx );
 	const char* GetDeviceHostname( const int idx );
-	void GetMcuResponseMsg( char* szMcuName, size_t uNameLen, char* szMcuResponseMsg, size_t uMsgLen );
+	void GetEspResponseMsg( char* szEspName, size_t uNameLen, char* szEspResponseMsg, size_t uMsgLen );
 	const int GetAddress( const int idx );
 	const int GetTimeoutCount( const int idx );
 	const enum E_DEVICE_TYPE GetDeviceType( const int idx );
@@ -386,14 +386,14 @@ public:
 	const enum E_DAY_NIGHT_STATE GetDayNightState() { return m_eDayNightState; };
 	const double GetDayNightVoltage( const enum E_DAY_NIGHT_STATE eState );
 	const char* GetDayNightStateName();
-	const bool IsMcuDevice( const int idx );
+	const bool IsEspDevice( const int idx );
 
 	void SetContext( const int idx, modbus_t* pCtx );
 	void SetDeviceNo( const int idx, const int iDeviceNo );
 	void SetComPort( const int idx, const char* szPort );
 	void SetDeviceName( const int idx, const char* szName );
 	void SetDeviceHostname( const int idx, const char* szHostname );
-	void SetMcuResponseMsg( const char* szMcuName, const char* szResponseMsg );
+	void SetEspResponseMsg( const char* szEspName, const char* szResponseMsg );
 	void SetDeviceType( const int idx, const enum E_DEVICE_TYPE eType );
 	bool SetDeviceStatus( const int idx, const enum E_DEVICE_STATUS eStatus );
 	void SetAddress( const int idx, const int iAddr );

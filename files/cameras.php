@@ -501,8 +501,8 @@ if ( isset($_GET['MoveCamera']) )
 		    $parms2 = sprintf( "cmd=%s&usr=%s&pwd=%s", "ptzStopRun", $camera['ca_UserId'], $camera['ca_Password'] );
 		    $uparms2 = urlencode( $parms2 );
 		    $cmd = sprintf( "(curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" > /dev/null 2>&1;
-						sleep 1 > /dev/null 2>&1;	curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?=%s\" > /dev/null 2>&1; sleep 0.2) > /dev/null 2>&1 &", 
-			            $camera['ca_IPAddress'], $parms, $camera['ca_IPAddress'], $parms2 );
+						sleep 1 > /dev/null 2>&1;	curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" > /dev/null 2>&1; sleep 0.2) > /dev/null 2>&1 &", 
+			            $camera['ca_IPAddress'], $uparms, $camera['ca_IPAddress'], $uparms2 );
 		    //$cmd = sprintf( "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" > /dev/null 2>&1",
 		    //    $camera['ca_IPAddress'], $uparms );
 		}

@@ -17,16 +17,17 @@ OBJDIR=objarm
 OBJS=$(SRCS:%.cpp=$(OBJDIR)/%.o)
 SAOBJS=$(SASRCS:%.cpp=$(OBJDIR)/%.o)
 CLOBJS=$(CLSRCS:%.cpp=$(OBJDIR)/%.o)
-DEP=$(SRCS:.cpp=.d)
-SADEP=$(SASRCS:.cpp=.d)
-CLDEP=$(CLSRCS:.cpp=.d)
--include $(DEP)
--include $(SADEP)
--include $(CLDEP)
+DEP=$(SRCS:%.cpp=$(OBJDIR)/%.d)
+SADEP=$(SASRCS:%.cpp=$(OBJDIR)/%.d)
+CLDEP=$(CLSRCS:%.cpp=$(OBJDIR)/%.d)
 
 .DEFAULT_GOAL := all
 
 all: $(SRCS) $(SASRCS) $(CLSRCS) $(EXE) $(SAEXE) $(CLEXE)
+
+-include $(DEP)
+-include $(SADEP)
+-include $(CLDEP)
 
 $(EXE): $(OBJS)
 	$(CPP) $(CFLAGS) -c build-number.c -o $(OBJDIR)/build-number.o

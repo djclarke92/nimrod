@@ -7,6 +7,10 @@
 Nimrod Release Notes and History
 
 
+Version 0.2.0		June 2021
+1.	
+
+
 Version 0.1.8		May 2021
 1.	Added the events page so you can view data from the events table for all or a specific device for a selected period.
 2.	Schema changes to the deviceinfo table: di_Temperature and di_Voltage columns have been removed and functionality moved 

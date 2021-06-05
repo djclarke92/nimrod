@@ -16,7 +16,7 @@
 #define VOLTAGE_CHECK_PERIOD				2		// seconds
 #define LEVEL_CHECK_PERIOD					5		// seconds
 #define MAX_TCPIP_SOCKETS					16
-#define MCU_PING_TIMEOUT					90
+#define ESP_PING_TIMEOUT					90
 #define CAMERA_SNAPSHOT_PERIOD				60	// seconds
 
 
@@ -24,7 +24,7 @@
 enum E_LOCK_TYPES {
 	E_LT_LOGGING = 0,
 	E_LT_MODBUS,
-	E_LT_NODEMCU,
+	E_LT_NODEESP,
 	E_LT_WEBSOCKET,
 	E_LT_MAX_LOCKS
 };
@@ -195,8 +195,8 @@ private:
 	int m_Sockfd;
 	char m_szComBuffer[100];
 	char m_szMyComPort[MAX_COMPORT_LEN+1];
-	char m_szMcuResponseMsg[MCU_MSG_SIZE+1];
-	char m_szClientMcuName[MAX_TCPIP_SOCKETS][MAX_DEVICE_NAME_LEN+1];
+	char m_szEspResponseMsg[ESP_MSG_SIZE+1];
+	char m_szClientEspName[MAX_TCPIP_SOCKETS][MAX_DEVICE_NAME_LEN+1];
 	time_t m_tClientLastMsg[MAX_TCPIP_SOCKETS];
 	time_t m_tConfigTime;
 	time_t m_tPlcStatesTime;
@@ -235,7 +235,7 @@ public:
 	void CreateListenerSocket();
 	void AcceptTcpipClient();
 	void CloseSocket( int& fd, const int fdx );
-	void SendMcuMessage();
+	void SendEspMessage();
 	void ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB );
 	size_t ReadTcpipMsgBytes( SSL* ssl, const int newfd, NIMROD_MSGBUF_TYPE& msgBuf, const bool bBlock );
 	bool SendTcpipChangeOutputToHost( const char* szHostname, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel,
@@ -245,7 +245,7 @@ public:
 	void HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
-	void ProcessMcuSwitchEvent( CMysql& myDB, const char* szName, const int iButton );
+	void ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int iButton );
 	void CheckForTimerOffTime( CMysql& myDB, const int idx );
 	void HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPrompt, bool& bAllDead );
 	void GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList );

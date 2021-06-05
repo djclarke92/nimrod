@@ -59,7 +59,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_sslServerCtx = NULL;
 	m_sslClientCtx = NULL;
 	m_Sockfd = -1;
-	m_szMcuResponseMsg[0] = '\0';
+	m_szEspResponseMsg[0] = '\0';
 
 	m_WSContext = NULL;
 
@@ -71,7 +71,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 		m_iClientFd[i] = -1;
 		m_xClientSSL[i] = NULL;
 		m_tClientLastMsg[i] = 0;
-		bzero( m_szClientMcuName[i], sizeof(m_szClientMcuName[i]) );
+		bzero( m_szClientEspName[i], sizeof(m_szClientEspName[i]) );
 		bzero( (char*)&m_xClientInAddr[i], sizeof( m_xClientInAddr[i]) );
 	}
 }
@@ -209,7 +209,7 @@ void CThread::Worker()
 	time_t tLastLevelK02Prompt = 0;
 	time_t tLastTimerDeviceCheck = 0;
 	const char* pszCertFile = "/home/nimrod/nimrod-cert.pem";
-	const char* pszKeyFile = "/home/nimrod/nimrod-cert.pem";
+	const char* pszKeyFile = "/home/nimrod/nimrod-cert.key";
 	struct tm tm;
 	struct timeval old_response_to_tv;
 	CMysql myDB;
@@ -229,7 +229,7 @@ void CThread::Worker()
 	{	// create listener socket
 		m_sslServerCtx = InitServerCTX();
 
-		// openssl req -x509 -nodes -days 3650 -newkey rsa:1024 -keyout nimrod-cert.pem -out nimrod-cert.pem
+		// openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout nimrod-cert.key -out nimrod-cert.pem
 		LoadCertificates( m_sslServerCtx, pszCertFile, pszKeyFile );
 
 		CreateListenerSocket();
@@ -303,7 +303,7 @@ void CThread::Worker()
 		{
 			AcceptTcpipClient();
 			ReadTcpipMessage( m_pmyDevices, myDB );
-			SendMcuMessage();
+			SendEspMessage();
 
 			usleep( 50000 );
 		}
@@ -357,8 +357,8 @@ void CThread::Worker()
 							myDB.CleanupEventsTable();
 						}
 					}
-					else if ( m_pmyDevices->IsMcuDevice(idx) )
-					{	// handle timer off event for nodemcu devices
+					else if ( m_pmyDevices->IsEspDevice(idx) )
+					{	// handle timer off event for ESP devices
 						pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
 
 						CheckForTimerOffTime( myDB, idx );
@@ -765,10 +765,10 @@ void CThread::HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPr
 void CThread::CheckForTimerOffTime( CMysql& myDB, const int idx )
 {
 	bool bError;
-	bool bIsMcu;
+	bool bIsEsp;
 	int j;
 
-	bIsMcu = m_pmyDevices->IsMcuDevice(idx);
+	bIsEsp = m_pmyDevices->IsEspDevice(idx);
 
 	// check for timer off time
 	for ( j = 0; j < MAX_IO_PORTS; j++ )
@@ -785,7 +785,7 @@ void CThread::CheckForTimerOffTime( CMysql& myDB, const int idx )
 				myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), j, E_ET_TIMER, 0, "Time to turn '%s' output off, device %d channel %d", m_pmyDevices->GetOutIOName(idx,j), idx, j+1 );
 
 				bError = false;
-				if ( !bIsMcu )
+				if ( !bIsEsp )
 				{
 					if ( !m_pmyDevices->WriteOutputBit( idx, j, false ) )
 						bError = true;
@@ -834,8 +834,8 @@ const char* CThread::GetTcpipMsgType( const enum E_MESSAGE_TYPE eMT )
 	case E_MT_CHANGE_OUTPUT:
 		return "E_MT_CHANGE_OUTPUT";
 		break;
-	case E_MT_MCU_MSG:
-		return "E_MT_MCU_MSG";
+	case E_MT_ESP_MSG:
+		return "E_MT_ESP_MSG";
 		break;
 	}
 
@@ -1009,7 +1009,7 @@ void CThread::CloseSocket( int& fd, const int fdx )
 
 		if ( fdx >= 0 && fdx < MAX_TCPIP_SOCKETS )
 		{
-			m_szClientMcuName[fdx][0] = '\0';
+			m_szClientEspName[fdx][0] = '\0';
 			m_tClientLastMsg[fdx] = 0;
 			bzero( (char*)&m_xClientInAddr[fdx], sizeof(m_xClientInAddr[fdx]) );
 			if ( m_iClientCount > 0 )
@@ -1043,50 +1043,51 @@ size_t CThread::ReadTcpipMsgBytes( SSL* ssl, const int newfd, NIMROD_MSGBUF_TYPE
 		uMsgSize = rc;
 		uLen = uMsgSize;
 
-		// handle nodemcu msg
-		if ( uMsgSize == sizeof(msgBuf.msg.mcu.szBuf) && uLen == sizeof(msgBuf.msg.mcu.szBuf) )
+		// handle esp msg
+		if ( uMsgSize == sizeof(msgBuf.msg.esp.szBuf) && uLen == sizeof(msgBuf.msg.esp.szBuf) )
 		{
 			unsigned int i;
-			char szMcu[sizeof(msgBuf.msg.mcu.szBuf)+1];
+			char szEsp[sizeof(msgBuf.msg.esp.szBuf)+1];
 
 			uLen = sizeof(msgBuf);
-			bzero( szMcu, sizeof(szMcu) );
+			bzero( szEsp, sizeof(szEsp) );
 
 			// move the data
 			for ( i = 0; i < uMsgSize; i++ )
 			{
-				szMcu[i] = msgBuf.szBuf[i];
+				szEsp[i] = msgBuf.szBuf[i];
 			}
 
-			LogMessage( E_MSG_INFO, "Got NodeMCU msg '%s'", szMcu );
+			LogMessage( E_MSG_INFO, "Got ESP msg '%s'", szEsp );
 
 			bzero( &msgBuf, sizeof(msgBuf) );
-			msgBuf.msg.eMsgType = E_MT_MCU_MSG;
+			msgBuf.msg.eMsgType = E_MT_ESP_MSG;
 			for ( i = 0; i < uMsgSize; i++ )
 			{
-				msgBuf.msg.mcu.szBuf[i] = szMcu[i];
+				msgBuf.msg.esp.szBuf[i] = szEsp[i];
 			}
 
 			// check the msg format
 			// 012345678901234
-			// MCUxxxCLKx
-			// MCUxxxCIDyyyyyyyyyy
-			if ( szMcu[0] == 'M' && szMcu[1] == 'C' && szMcu[2] == 'U' )
+			// ESPxxxCLKx
+			// ESPxxxCIDyyyyyyyyyy
+			if ( szEsp[0] == 'E' && szEsp[1] == 'S' && szEsp[2] == 'P' )
 			{	// valid
-				strncpy( msgBuf.msg.mcu.szMcuName, szMcu, sizeof(msgBuf.msg.mcu.szMcuName)-1 );
-				msgBuf.msg.mcu.szMcuName[sizeof(msgBuf.msg.mcu.szMcuName)-1] = '\0';
+				strncpy( msgBuf.msg.esp.szEspName, szEsp, sizeof(msgBuf.msg.esp.szEspName)-1 );
+				msgBuf.msg.esp.szEspName[sizeof(msgBuf.msg.esp.szEspName)-1] = '\0';
 
 				// same the msg type
-				strncpy( msgBuf.msg.mcu.szEvent, &szMcu[6], sizeof(msgBuf.msg.mcu.szEvent)-1 );
-				msgBuf.msg.mcu.szEvent[sizeof(msgBuf.msg.mcu.szEvent)-1] = '\0';
+				strncpy( msgBuf.msg.esp.szEvent, &szEsp[6], sizeof(msgBuf.msg.esp.szEvent)-1 );
+				msgBuf.msg.esp.szEvent[sizeof(msgBuf.msg.esp.szEvent)-1] = '\0';
 
-				if ( strcmp( msgBuf.msg.mcu.szEvent, "CLK" ) == 0 )
+				if ( strcmp( msgBuf.msg.esp.szEvent, "CLK" ) == 0 )
 				{
-					msgBuf.msg.mcu.iButton = (int)(szMcu[9] - '0');
+					msgBuf.msg.esp.iButton = (int)(szEsp[9] - '0');
 				}
-				else if ( strcmp( msgBuf.msg.mcu.szEvent, "CID" ) == 0 )
-				{
-					msgBuf.msg.mcu.lChipId = atol( &szMcu[9] );
+				else if ( strcmp( msgBuf.msg.esp.szEvent, "CID" ) == 0 )
+				{	// mac address
+					strncpy( msgBuf.msg.esp.szChipMac, &szEsp[9], 12 );
+					msgBuf.msg.esp.szChipMac[12] = '\0';
 				}
 			}
 			else
@@ -1174,8 +1175,8 @@ void CThread::AcceptTcpipClient()
 					if ( rc <= 0 )   // perform the connection
 					{
 						int ret = 0;
-						SSL_get_error( m_xClientSSL[i], ret );
-						LogMessage( E_MSG_ERROR, "AcceptTcpipClient(): SSL_accept failed, %d %d", rc, ret );
+						int rc1 = SSL_get_error( m_xClientSSL[i], ret );
+						LogMessage( E_MSG_ERROR, "AcceptTcpipClient(): SSL_accept failed, %d %d, %d %d", rc, ret, rc1, errno );
 
 						LogSSLError();
 
@@ -1206,37 +1207,37 @@ void CThread::AcceptTcpipClient()
 	}
 }
 
-void CThread::SendMcuMessage()
+void CThread::SendEspMessage()
 {
 	int fdx;
-	char szMcuResponseMsg[MCU_MSG_SIZE+1];
-	char szMcuName[MAX_DEVICE_NAME_LEN+1];
+	char szEspResponseMsg[ESP_MSG_SIZE+1];
+	char szEspName[MAX_DEVICE_NAME_LEN+1];
 	NIMROD_MSGBUF_TYPE replyBuf;
 
-	while ( m_pmyDevices->GetMcuMessageCount() > 0 )
+	while ( m_pmyDevices->GetEspMessageCount() > 0 )
 	{
-		pthread_mutex_lock( &mutexLock[E_LT_NODEMCU] );
+		pthread_mutex_lock( &mutexLock[E_LT_NODEESP] );
 
-		m_pmyDevices->GetMcuResponseMsg( szMcuName, sizeof(szMcuName), szMcuResponseMsg, sizeof(szMcuResponseMsg) );
+		m_pmyDevices->GetEspResponseMsg( szEspName, sizeof(szEspName), szEspResponseMsg, sizeof(szEspResponseMsg) );
 
-		pthread_mutex_unlock( &mutexLock[E_LT_NODEMCU] );
+		pthread_mutex_unlock( &mutexLock[E_LT_NODEESP] );
 
-		replyBuf.msg.eMsgType = E_MT_MCU_MSG;
-		snprintf( replyBuf.msg.mcu.szBuf, sizeof(replyBuf.msg.mcu.szBuf), "%s", szMcuResponseMsg );
+		replyBuf.msg.eMsgType = E_MT_ESP_MSG;
+		snprintf( replyBuf.msg.esp.szBuf, sizeof(replyBuf.msg.esp.szBuf), "%s", szEspResponseMsg );
 
-		LogMessage( E_MSG_INFO, "Find MCU with name '%s'", szMcuName );
+		LogMessage( E_MSG_INFO, "Find ESP with name '%s'", szEspName );
 
 		// find the correct client socket
 		for ( fdx = 0; fdx < MAX_TCPIP_SOCKETS; fdx++ )
 		{
-			LogMessage( E_MSG_INFO, "checking %d %d '%s'", fdx, m_iClientFd[fdx], m_szClientMcuName[fdx] );
-			if ( m_iClientFd[fdx] != -1 && strcmp( szMcuName, m_szClientMcuName[fdx] ) == 0 )
+			LogMessage( E_MSG_INFO, "checking %d %d '%s'", fdx, m_iClientFd[fdx], m_szClientEspName[fdx] );
+			if ( m_iClientFd[fdx] != -1 && strcmp( szEspName, m_szClientEspName[fdx] ) == 0 )
 			{
 				int rc;
-				size_t uMsgSize = strlen(replyBuf.msg.mcu.szBuf );
+				size_t uMsgSize = strlen(replyBuf.msg.esp.szBuf );
 
 				// TODO: handle write being interrupted
-				rc = SSL_write( m_xClientSSL[fdx], replyBuf.msg.mcu.szBuf, uMsgSize );
+				rc = SSL_write( m_xClientSSL[fdx], replyBuf.msg.esp.szBuf, uMsgSize );
 				if ( rc != (int)uMsgSize )
 				{
 					LogMessage( E_MSG_ERROR, "Failed to send reply to client, errno %d", errno );
@@ -1251,18 +1252,18 @@ void CThread::SendMcuMessage()
 				}
 
 
-				szMcuResponseMsg[0] = '\0';
+				szEspResponseMsg[0] = '\0';
 				break;
 			}
 		}
 
-		if ( szMcuResponseMsg[0] != '\0' )
+		if ( szEspResponseMsg[0] != '\0' )
 		{
-			LogMessage( E_MSG_ERROR, "Failed to find MCU client socket" );
+			LogMessage( E_MSG_ERROR, "Failed to find ESP client socket" );
 		}
 
-		szMcuResponseMsg[0] = '\0';
-		szMcuName[0] = '\0';
+		szEspResponseMsg[0] = '\0';
+		szEspName[0] = '\0';
 	}
 
 }
@@ -1355,40 +1356,40 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 					}
 					break;
 
-				case E_MT_MCU_MSG:
-					if ( strcmp( msgBuf.msg.mcu.szEvent, "CLK" ) == 0 )
-						LogMessage( E_MSG_INFO, "MCU button %d click from '%s'", msgBuf.msg.mcu.iButton, msgBuf.msg.mcu.szMcuName );
-					else if ( strcmp( msgBuf.msg.mcu.szEvent, "CID" ) == 0 )
-						LogMessage( E_MSG_INFO, "MCU chip id from '%s'", msgBuf.msg.mcu.szMcuName );
+				case E_MT_ESP_MSG:
+					if ( strcmp( msgBuf.msg.esp.szEvent, "CLK" ) == 0 )
+						LogMessage( E_MSG_INFO, "ESP button %d click from '%s'", msgBuf.msg.esp.iButton, msgBuf.msg.esp.szEspName );
+					else if ( strcmp( msgBuf.msg.esp.szEvent, "CID" ) == 0 )
+						LogMessage( E_MSG_INFO, "ESP chip id from '%s'", msgBuf.msg.esp.szEspName );
 					else
-						LogMessage( E_MSG_INFO, "MCU '%s' message from '%s'", msgBuf.msg.mcu.szEvent, msgBuf.msg.mcu.szMcuName );
+						LogMessage( E_MSG_INFO, "ESP '%s' message from '%s'", msgBuf.msg.esp.szEvent, msgBuf.msg.esp.szEspName );
 
 					// dummy do nothing message
-					replyBuf.msg.eMsgType = E_MT_MCU_MSG;
-					snprintf( replyBuf.msg.mcu.szBuf, sizeof(replyBuf.msg.mcu.szBuf), "OK000000" );
+					replyBuf.msg.eMsgType = E_MT_ESP_MSG;
+					snprintf( replyBuf.msg.esp.szBuf, sizeof(replyBuf.msg.esp.szBuf), "OK000000" );
 
-					// save the mcu name
-					snprintf( m_szClientMcuName[fdx], sizeof(m_szClientMcuName[fdx]), "%s", msgBuf.msg.mcu.szMcuName );
-					//LogMessage( E_MSG_INFO, "MCU name set to '%s'", m_szClientMcuName[fdx] );
+					// save the esp name
+					snprintf( m_szClientEspName[fdx], sizeof(m_szClientEspName[fdx]), "%s", msgBuf.msg.esp.szEspName );
+					//LogMessage( E_MSG_INFO, "ESP name set to '%s'", m_szClientEspName[fdx] );
 
-					if ( msgBuf.msg.mcu.iButton != 0 )
+					if ( msgBuf.msg.esp.iButton != 0 )
 					{
 						pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
 
-						m_szMcuResponseMsg[0] = '\0';
-						ProcessMcuSwitchEvent( myDB, msgBuf.msg.mcu.szMcuName, msgBuf.msg.mcu.iButton - 1 );
+						m_szEspResponseMsg[0] = '\0';
+						ProcessEspSwitchEvent( myDB, msgBuf.msg.esp.szEspName, msgBuf.msg.esp.iButton - 1 );
 
-						if ( strlen(m_szMcuResponseMsg) > 0 )
+						if ( strlen(m_szEspResponseMsg) > 0 )
 						{
-							snprintf( replyBuf.msg.mcu.szBuf, sizeof(replyBuf.msg.mcu.szBuf), "%s", m_szMcuResponseMsg );
-							m_szMcuResponseMsg[0] = '\0';
+							snprintf( replyBuf.msg.esp.szBuf, sizeof(replyBuf.msg.esp.szBuf), "%s", m_szEspResponseMsg );
+							m_szEspResponseMsg[0] = '\0';
 						}
 
 						pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
 					}
-					else if ( strcmp( msgBuf.msg.mcu.szEvent, "CID" ) == 0 )
+					else if ( strcmp( msgBuf.msg.esp.szEvent, "CID" ) == 0 )
 					{	// check the device name
-						if ( strcmp( msgBuf.msg.mcu.szMcuName, "MCU000" ) == 0 )
+						if ( strcmp( msgBuf.msg.esp.szEspName, "ESP000" ) == 0 )
 						{	// default name - we must change it
 							int iNum = 1;
 							int iNumFields;
@@ -1396,7 +1397,7 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 							char szNewName[7] = "";
 							MYSQL_ROW row;
 
-							if ( myDB.RunQuery( "select de_Name from devices where de_ComPort='MCU%ld' order by de_Name desc limit 1", msgBuf.msg.mcu.lChipId ) )
+							if ( myDB.RunQuery( "select de_Name from devices where de_ComPort='ESP%s' order by de_Name desc limit 1", msgBuf.msg.esp.szChipMac ) )
 							{
 								LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
 							}
@@ -1407,7 +1408,7 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 
 								iNum = atoi( &szData[3] );
 
-								LogMessage( E_MSG_INFO, "Found matching MCU chip id for %s", szData );
+								LogMessage( E_MSG_INFO, "Found matching ESP chip id for %s", szData );
 
 								myDB.FreeResult();
 							}
@@ -1415,12 +1416,12 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 							{
 								myDB.FreeResult();
 
-								if ( myDB.RunQuery( "select de_Name from devices where de_ComPort='MCU' order by de_Name desc limit 1" ) )
+								if ( myDB.RunQuery( "select de_Name from devices where de_ComPort='ESP' order by de_Name desc limit 1" ) )
 								{
 									LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
 								}
 								else
-								{	// get the last MCU device from the database devices table
+								{	// get the last ESP device from the database devices table
 
 									if ( (row = myDB.FetchRow( iNumFields )) )
 									{
@@ -1429,6 +1430,10 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 
 										iNum = atoi( &szData[3] ) + 1;
 									}
+									else
+									{
+										LogMessage( E_MSG_INFO, "ESP device not found in the database" );
+									}
 
 									myDB.FreeResult();
 								}
@@ -1436,20 +1441,20 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 
 							if ( iNum > 0 && iNum <= 999 )
 							{
-								snprintf( szNewName, sizeof(szNewName), "MCU%03d", iNum );
+								snprintf( szNewName, sizeof(szNewName), "ESP%03d", iNum );
 
-								LogMessage( E_MSG_INFO, "New MCU device name is '%s'", szNewName );
+								LogMessage( E_MSG_INFO, "New ESP device name is '%s'", szNewName );
 
-								// save the mcu name
-								snprintf( m_szClientMcuName[fdx], sizeof(m_szClientMcuName[fdx]), "%s", szNewName );
-								LogMessage( E_MSG_INFO, "New MCU name set to '%s'", m_szClientMcuName[fdx] );
+								// save the esp name
+								snprintf( m_szClientEspName[fdx], sizeof(m_szClientEspName[fdx]), "%s", szNewName );
+								LogMessage( E_MSG_INFO, "New ESP name set to '%s'", m_szClientEspName[fdx] );
 
 								// tell the device it's new name
-								snprintf( replyBuf.msg.mcu.szBuf, sizeof(replyBuf.msg.mcu.szBuf), "NN%s", szNewName );
+								snprintf( replyBuf.msg.esp.szBuf, sizeof(replyBuf.msg.esp.szBuf), "NN%s", szNewName );
 							}
 							else
 							{
-								LogMessage( E_MSG_ERROR, "Cannot allocate new MCU device name, num is %d", iNum );
+								LogMessage( E_MSG_ERROR, "Cannot allocate new ESP device name, num is %d", iNum );
 							}
 
 						}
@@ -1461,25 +1466,25 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 						{
 							if ( m_iClientFd[fdx2] != -1 && fdx2 != fdx )
 							{	// different slot is in use
-								if ( strcmp( m_szClientMcuName[fdx2], m_szClientMcuName[fdx] ) == 0 )
-								{	// same mcu name
-									LogMessage( E_MSG_WARN, "Extra socket %d for mcu device %s, ping scheduled", fdx2, m_szClientMcuName[fdx] );
-									m_tClientLastMsg[fdx2] = time(NULL) - MCU_PING_TIMEOUT + 2;
+								if ( strcmp( m_szClientEspName[fdx2], m_szClientEspName[fdx] ) == 0 )
+								{	// same esp name
+									LogMessage( E_MSG_WARN, "Extra socket %d for esp device %s, ping scheduled", fdx2, m_szClientEspName[fdx] );
+									m_tClientLastMsg[fdx2] = time(NULL) - ESP_PING_TIMEOUT + 2;
 								}
 							}
 
 						}
 					}
 
-					uMsgSize = strlen(replyBuf.msg.mcu.szBuf);
+					uMsgSize = strlen(replyBuf.msg.esp.szBuf);
 					break;
 				}
 
 
 				// TODO: handle write being interrupted
-				if ( eMsgType == E_MT_MCU_MSG )
+				if ( eMsgType == E_MT_ESP_MSG )
 				{
-					rc = SSL_write( m_xClientSSL[fdx], replyBuf.msg.mcu.szBuf, uMsgSize );
+					rc = SSL_write( m_xClientSSL[fdx], replyBuf.msg.esp.szBuf, uMsgSize );
 				}
 				else
 				{
@@ -1495,11 +1500,11 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 				{
 					char *ip = inet_ntoa( m_xClientInAddr[fdx] );
 
-					LogMessage( E_MSG_INFO, "Sent reply msg type %s to %s, socket %d", CThread::GetTcpipMsgType(replyBuf.msg.eMsgType), (ip == NULL ? "unknown" : ip), fdx );
+					LogMessage( E_MSG_INFO, "Sent reply msg type %s to %s, len %d, socket %d", CThread::GetTcpipMsgType(replyBuf.msg.eMsgType), (ip == NULL ? "unknown" : ip), (int)uMsgSize, fdx );
 				}
 
 				// close the socket if it is from nimrod pi
-				if ( eMsgType != E_MT_MCU_MSG )
+				if ( eMsgType != E_MT_ESP_MSG )
 				{
 					CloseSocket( m_iClientFd[fdx], fdx );
 				}
@@ -1511,15 +1516,15 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 					LogMessage( E_MSG_ERROR, "Msg data missing, %u bytes", uLen );
 				}
 
-				if ( m_tClientLastMsg[fdx] + MCU_PING_TIMEOUT < time(NULL) )
+				if ( m_tClientLastMsg[fdx] + ESP_PING_TIMEOUT < time(NULL) )
 				{	// last client message was more than 30 sec ago
-					replyBuf.msg.eMsgType = E_MT_MCU_MSG;
-					snprintf( replyBuf.msg.mcu.szBuf, sizeof(replyBuf.msg.mcu.szBuf), "PG000000" );
+					replyBuf.msg.eMsgType = E_MT_ESP_MSG;
+					snprintf( replyBuf.msg.esp.szBuf, sizeof(replyBuf.msg.esp.szBuf), "PG000000" );
 
 
-					rc = SSL_write( m_xClientSSL[fdx], replyBuf.msg.mcu.szBuf, strlen(replyBuf.msg.mcu.szBuf) );
-					//rc = write( m_iClientFd[fdx], replyBuf.msg.mcu.szBuf, strlen(replyBuf.msg.mcu.szBuf) );
-					if ( rc != (int)strlen(replyBuf.msg.mcu.szBuf) )
+					rc = SSL_write( m_xClientSSL[fdx], replyBuf.msg.esp.szBuf, strlen(replyBuf.msg.esp.szBuf) );
+					//rc = write( m_iClientFd[fdx], replyBuf.msg.esp.szBuf, strlen(replyBuf.msg.esp.szBuf) );
+					if ( rc != (int)strlen(replyBuf.msg.esp.szBuf) )
 					{
 						int r1, r2 = 0;
 						r1 = SSL_get_error(m_xClientSSL[fdx], r2 );
@@ -1544,7 +1549,7 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 	}
 }
 
-void CThread::ProcessMcuSwitchEvent( CMysql& myDB, const char* szName, const int i )
+void CThread::ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int i )
 {
 	enum E_EVENT_TYPE eType = E_ET_CLICK;
 	int idx = -1;
@@ -1991,7 +1996,7 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 					{	// 5 mm change
 						bLogit = true;
 
-						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_LEVEL, (int)dVal, "" );
+						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_LEVEL, (int)(dVal*10), "" );
 						//LogMessage( E_MSG_INFO, "Event Level '%s' %d %d", m_pmyDevices->GetInIOName(idx,i), iVal, (int16_t)(m_pmyDevices->GetNewData( idx, i )) );
 
 						m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
@@ -2080,7 +2085,7 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 					double dVal;
 
 					dVal = m_pmyDevices->CalcLevel(idx,iChannel,true);
-					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_VOLTAGE, (int)dVal, "" );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_LEVEL, (int)(dVal*10), "" );
 
 					m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
 					m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
@@ -2619,15 +2624,15 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 			{
 				ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
 
-				if ( m_szMcuResponseMsg[0] != '\0' && !IsTcpipThread() )
-				{	// send msg to mcu device via the tcpip thread
-					pthread_mutex_lock( &mutexLock[E_LT_NODEMCU] );
+				if ( m_szEspResponseMsg[0] != '\0' && !IsTcpipThread() )
+				{	// send msg to esp device via the tcpip thread
+					pthread_mutex_lock( &mutexLock[E_LT_NODEESP] );
 
-					m_pmyDevices->SetMcuResponseMsg( szOutDeviceName, m_szMcuResponseMsg );
+					m_pmyDevices->SetEspResponseMsg( szOutDeviceName, m_szEspResponseMsg );
 
-					pthread_mutex_unlock( &mutexLock[E_LT_NODEMCU] );
+					pthread_mutex_unlock( &mutexLock[E_LT_NODEESP] );
 
-					m_szMcuResponseMsg[0] = '\0';
+					m_szEspResponseMsg[0] = '\0';
 				}
 			}
 		}
@@ -2643,7 +2648,7 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel,
 		const uint8_t uState, const enum E_IO_TYPE eSwType, int iOutOnPeriod )
 {
-	bool bIsMcu = false;
+	bool bIsEsp = false;
 	bool bState;
 	bool bError = false;
 	int iLoop;
@@ -2651,13 +2656,13 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 	int iInOnPeriod;
 	time_t tStart;
 
-	bIsMcu = m_pmyDevices->IsMcuDevice(iOutIdx);
+	bIsEsp = m_pmyDevices->IsEspDevice(iOutIdx);
 
-	LogMessage( E_MSG_INFO, "ChangeOutputState: mcu=%d", bIsMcu );
+	LogMessage( E_MSG_INFO, "ChangeOutputState: esp=%d", bIsEsp );
 	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
 	{
 		bError = false;
-		if ( bIsMcu )
+		if ( bIsEsp )
 		{
 		}
 		else if ( modbus_set_slave( m_pmyDevices->GetContext(iOutIdx), iOutAddress ) == -1 )
@@ -2681,14 +2686,14 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 				case E_IO_ON_OFF:
 				case E_IO_TEMP_HIGH:
 				case E_IO_TEMP_LOW:
-					if ( !bIsMcu )
+					if ( !bIsEsp )
 					{
 						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
 							bError = true;
 					}
 					else
-					{	// format the response message to the mcu device
-						snprintf( m_szMcuResponseMsg, sizeof(m_szMcuResponseMsg), "OK%d%05d", iOutChannel+1, (uState ? iOutOnPeriod : 0) );
+					{	// format the response message to the esp device
+						snprintf( m_szEspResponseMsg, sizeof(m_szEspResponseMsg), "OK%d%05d", iOutChannel+1, (uState ? iOutOnPeriod : 0) );
 					}
 
 					if ( !bError )
@@ -2736,14 +2741,14 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 					}
 					else
 					{
-						if ( !bIsMcu )
+						if ( !bIsEsp )
 						{
 							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, true ) )
 								bError = true;
 						}
 						else
-						{	// format the response message to the mcu device
-							snprintf( m_szMcuResponseMsg, sizeof(m_szMcuResponseMsg), "OK%d%05d", iOutChannel+1, (uState ? iOutOnPeriod : 0) );
+						{	// format the response message to the esp device
+							snprintf( m_szEspResponseMsg, sizeof(m_szEspResponseMsg), "OK%d%05d", iOutChannel+1, (uState ? iOutOnPeriod : 0) );
 						}
 
 						if ( !bError )
@@ -2770,14 +2775,14 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						bState = false;
 					}
 
-					if ( !bIsMcu )
+					if ( !bIsEsp )
 					{
 						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, bState ) )
 							bError = true;
 					}
 					else
-					{	// format the response message to the mcu device
-						snprintf( m_szMcuResponseMsg, sizeof(m_szMcuResponseMsg), "OK%d%05d", iOutChannel+1, (bState ? iOutOnPeriod : 0) );
+					{	// format the response message to the esp device
+						snprintf( m_szEspResponseMsg, sizeof(m_szEspResponseMsg), "OK%d%05d", iOutChannel+1, (bState ? iOutOnPeriod : 0) );
 					}
 
 					if ( !bError )
@@ -2815,14 +2820,14 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						bState = false;
 					}
 
-					if ( !bIsMcu )
+					if ( !bIsEsp )
 					{
 						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, bState ) )
 							bError = true;
 					}
 					else
-					{	// format the response message to the mcu device
-						snprintf( m_szMcuResponseMsg, sizeof(m_szMcuResponseMsg), "OK%d%05d", iOutChannel+1, (bState ? iOutOnPeriod : 0) );
+					{	// format the response message to the esp device
+						snprintf( m_szEspResponseMsg, sizeof(m_szEspResponseMsg), "OK%d%05d", iOutChannel+1, (bState ? iOutOnPeriod : 0) );
 					}
 
 					if ( !bError )
@@ -2858,14 +2863,14 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 				case E_IO_ON_OFF:
 				case E_IO_TEMP_HIGH:
 				case E_IO_TEMP_LOW:
-					if ( !bIsMcu )
+					if ( !bIsEsp )
 					{
 						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
 							bError = true;
 					}
 					else
-					{	// format the response message to the mcu device
-						snprintf( m_szMcuResponseMsg, sizeof(m_szMcuResponseMsg), "OK%d%05d", iOutChannel+1, (uState ? iOutOnPeriod : 0) );
+					{	// format the response message to the esp device
+						snprintf( m_szEspResponseMsg, sizeof(m_szEspResponseMsg), "OK%d%05d", iOutChannel+1, (uState ? iOutOnPeriod : 0) );
 					}
 
 					if ( !bError )
@@ -3200,7 +3205,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 					pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
 
-					// TODO: handle MCU devices
+					// TODO: handle ESP devices
 					// TODO: handle sending to another pi
 					ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
 

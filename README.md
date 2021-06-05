@@ -9,13 +9,14 @@ motorbike glove heater 30 minutes before my morning alarm went off if the outsid
 The Nimrod software is compiled on your standard linux desktop PC, then cross compiled for the Pi version your are using.  In theory you could compile everything on the Pi and 
 do away with the cross compiler step.
 
-Uses dygraph.js from http://dygraphs.com for displaying graphs.
+Uses dygraph.js from http://dygraphs.com for displaying graphs. Websocket suport comes from https://libwebsockets.org/.
 
 What can you do with it ?
 * Input events can be switches, temperature values, voltage levels or time of day
 * Turn on one or more output ports when an input event occurs
 * Input switch events can be a click, double click or long click, each can trigger different output actions
 * Input events can be chained together, e.g. if time is 6:30am and temperature sensor #2 is < 15 deg then turn on output #7 for 30 minutes
+* Complex processes can be managed by the integratd PLC State Machine
 
 Communication with each modbus device is polled.  All digital inputs are active low, i.e. connect to 0V / Gnd to activate.  All digital outputs are active low open collector outputs.
 
@@ -66,7 +67,7 @@ Now that you have defined the inputs and outputs you need to tell Nimrod how to 
 
 ## Supported Modbus devices
 
-Wellpro modbus devices
+Modbus RS485 devices from Wellpro and others
 
 ![WP8028ADAM device](/images/WP8028ADAM.jpg)
 
@@ -78,6 +79,7 @@ Wellpro modbus devices
 * WP8027ADAM		16DO - 16x digital outputs
 * WP8028ADAM		8DI/8DO - 8x digital outputs, 8x digital inputs
 * PD3064			8KT - 8 K Thermocouples
+* HDL300			Submersible water level sensor
 
 ## Supported WiFi devices
 

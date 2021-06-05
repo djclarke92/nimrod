@@ -35,12 +35,12 @@ function func_check_de_array( &$de_array )
 	
 	if ( $de_array['de_ComPort'] == "" )
 	{
-		$de_array['error_msg'] = "You must enter the Com Port (e.g. /dev/ttyUSB0 or Timer or MCU).";
+		$de_array['error_msg'] = "You must enter the Com Port (e.g. /dev/ttyUSB0 or Timer or ESP).";
 		return false;
 	}
 	else if ( $de_array['de_Address'] == "" || ($de_array['de_Address'] < 2 && $de_array['de_Address'] != 0) || $de_array['de_Address'] > 0xfe ||
-	    ($de_array['de_Address'] == 0 && $de_array['de_ComPort'] != 'Timer' && strncmp( $de_array['de_ComPort'], 'MCU', 3 ) != 0) )
-	{  // address is required except for time and MCU devices
+	    ($de_array['de_Address'] == 0 && $de_array['de_ComPort'] != 'Timer' && strncmp( $de_array['de_ComPort'], 'ESP', 3 ) != 0) )
+	{  // address is required except for time and ESP devices
 		$de_array['error_msg'] = "You must enter an Address in the range 0x02 - 0xfe.";
 		return false;
 	}
@@ -150,13 +150,13 @@ else if ( isset($_POST['NewDevice']) || isset($_POST['UpdateDevice']) )
 		$de_array['de_DeviceNo'] = 0;
 	}
 	
-	if ( strncmp( $de_array['de_ComPort'], "MCU", 3 ) == 0 && ($info = $db->ReadDeviceWithName( $de_array['de_Name'] )) !== false && $info['de_DeviceNo'] != $de_array['de_DeviceNo'] )
+	if ( strncmp( $de_array['de_ComPort'], "ESP", 3 ) == 0 && ($info = $db->ReadDeviceWithName( $de_array['de_Name'] )) !== false && $info['de_DeviceNo'] != $de_array['de_DeviceNo'] )
 	{
-	    $de_array['error_msg'] = sprintf( "An MCU device with name %s @ %s already exists in the database.", $de_array['de_Name'], $de_array['de_Hostname'] );
+	    $de_array['error_msg'] = sprintf( "An ESP device with name %s @ %s already exists in the database.", $de_array['de_Name'], $de_array['de_Hostname'] );
 	}
-	else if ( strncmp( $de_array['de_ComPort'], "MCU", 3 ) != 0 && 
+	else if ( strncmp( $de_array['de_ComPort'], "ESP", 3 ) != 0 && 
 	    ($info = $db->ReadDeviceWithAddress( $de_array['de_Address'] )) !== false && $info['de_DeviceNo'] != $de_array['de_DeviceNo'] )
-	{  // not MCU device
+	{  // not ESP device
 		$de_array['error_msg'] = sprintf( "A device with address %d @ %s already exists in the database.", $de_array['de_Address'], $de_array['de_Hostname'] );
 	}
 	else if ( func_check_de_array( $de_array ) )
@@ -291,7 +291,7 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<label for='de_Address'>Modbus Address: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
-  			$tip = sprintf( "MCU and Level devices still need a unique address to be entered event though they do not use Modbus." );
+  			$tip = sprintf( "ESP and Level devices still need a unique address to be entered event though they do not use Modbus." );
   			printf( "<input type='text' class='form-control' name='de_Address' id='de_Address' size='4' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $de_array['de_Address'], $tip );
   			printf( "</div>" );
   			printf( "</div>" );
@@ -334,7 +334,7 @@ $devices_list = $db->ReadDevicesTable();
   			
   			
   			printf( "<div class='form-row'>" );
-  			printf( "<p class='small'><i>COM port is 'MCU' plus chip id for NodeMCU devices</i></p>" );
+  			printf( "<p class='small'><i>COM port is 'ESP' plus chip mac address for ESP32 devices</i></p>" );
   			printf( "</div>" );
   			
   			printf( "<div class='form-row mb-2 mt-2'>" );

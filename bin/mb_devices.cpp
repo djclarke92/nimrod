@@ -622,7 +622,7 @@ void CDeviceList::Init()
 
 	//m_DB.Connect();
 
-	m_iMcuMessageCount = 0;
+	m_iEspMessageCount = 0;
 	m_eDayNightState = E_DN_UNKNOWN;
 	for ( i = 0; i < MAX_DEVICES; i++ )
 	{
@@ -756,8 +756,8 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 		{	// device is not on this host
 			continue;
 		}
-		else if ( strncmp( GetComPort(idx), "MCU", 3 ) == 0 )
-		{	// nodemcu device
+		else if ( strncmp( GetComPort(idx), "ESP", 3 ) == 0 )
+		{	// esp32 device
 			continue;
 		}
 		else if ( GetDeviceType(idx) == E_DT_LEVEL_K02 )
@@ -846,8 +846,8 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 		{	// device is not on this host
 			continue;
 		}
-		else if ( strncmp( GetComPort(idx), "MCU", 3 ) == 0 )
-		{	// nodemcu device
+		else if ( strncmp( GetComPort(idx), "ESP", 3 ) == 0 )
+		{	// esp32 device
 			continue;
 		}
 		else if ( GetDeviceType(idx) == E_DT_LEVEL_K02 )
@@ -947,10 +947,10 @@ bool CDeviceList::InitContext()
 			iSuccess += 1;
 			LogMessage( E_MSG_INFO, "skip ctx for timer DeviceNo %d on '%s'", m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
 		}
-		else if ( strncmp( m_Device[idx].GetComPort(), "MCU", 3 ) == 0 )
-		{	// nodemcu
+		else if ( strncmp( m_Device[idx].GetComPort(), "ESP", 3 ) == 0 )
+		{	// esp32
 			iSuccess += 1;
-			LogMessage( E_MSG_INFO, "skip ctx for MCU DeviceNo %d on '%s'", m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
+			LogMessage( E_MSG_INFO, "skip ctx for ESP DeviceNo %d on '%s'", m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
 		}
 		else if ( m_Device[idx].GetDeviceType() == E_DT_LEVEL_K02 )
 		{	// level K02 device
@@ -1153,30 +1153,30 @@ const char* CDeviceList::GetDeviceHostname( const int idx )
 	return m_szDummy;
 }
 
-// calling function must get E_LT_NODEMCU lock first
-void CDeviceList::GetMcuResponseMsg( char* szMcuName, size_t uNameLen, char* szMcuResponseMsg, size_t uMsgLen )
+// calling function must get E_LT_NODEESP lock first
+void CDeviceList::GetEspResponseMsg( char* szEspName, size_t uNameLen, char* szEspResponseMsg, size_t uMsgLen )
 {
 	int i;
 
-	szMcuName[0] = '\0';
-	szMcuResponseMsg[0] = '\0';
+	szEspName[0] = '\0';
+	szEspResponseMsg[0] = '\0';
 
-	if ( m_iMcuMessageCount > 0 )
+	if ( m_iEspMessageCount > 0 )
 	{
-		snprintf( szMcuName, uNameLen, m_szMcuName[0] );
-		snprintf( szMcuResponseMsg, uMsgLen, m_szMcuResponseMsg[0] );
+		snprintf( szEspName, uNameLen, m_szEspName[0] );
+		snprintf( szEspResponseMsg, uMsgLen, m_szEspResponseMsg[0] );
 
-		m_iMcuMessageCount -= 1;
-		m_szMcuName[0][0] = '\0';
-		m_szMcuResponseMsg[0][0] = '\0';
+		m_iEspMessageCount -= 1;
+		m_szEspName[0][0] = '\0';
+		m_szEspResponseMsg[0][0] = '\0';
 
 		// remove the hole in the list
-		for ( i = 1; i < MAX_MCU_QUEUE && m_iMcuMessageCount > 0; i++ )
+		for ( i = 1; i < MAX_ESP_QUEUE && m_iEspMessageCount > 0; i++ )
 		{
-			strcpy( m_szMcuName[i-1], m_szMcuName[i] );
-			strcpy( m_szMcuResponseMsg[i-1], m_szMcuResponseMsg[i] );
-			m_szMcuName[i][0] = '\0';
-			m_szMcuResponseMsg[i][0] = '\0';
+			strcpy( m_szEspName[i-1], m_szEspName[i] );
+			strcpy( m_szEspResponseMsg[i-1], m_szEspResponseMsg[i] );
+			m_szEspName[i][0] = '\0';
+			m_szEspResponseMsg[i][0] = '\0';
 		}
 	}
 }
@@ -1687,18 +1687,18 @@ void CDeviceList::SetDeviceHostname( const int idx, const char* szHostname )
 	}
 }
 
-// calling function must get E_LT_NODEMCU lock first
-void CDeviceList::SetMcuResponseMsg( const char* szMcuName, const char* szMcuResponseMsg )
+// calling function must get E_LT_NODEESP lock first
+void CDeviceList::SetEspResponseMsg( const char* szEspName, const char* szEspResponseMsg )
 {
-	if ( m_iMcuMessageCount <= 0 && m_iMcuMessageCount < MAX_MCU_QUEUE )
+	if ( m_iEspMessageCount <= 0 && m_iEspMessageCount < MAX_ESP_QUEUE )
 	{	// found an empty slot
-		snprintf( m_szMcuResponseMsg[m_iMcuMessageCount], sizeof(m_szMcuResponseMsg[m_iMcuMessageCount]), "%s", szMcuResponseMsg );
-		snprintf( m_szMcuName[m_iMcuMessageCount], sizeof(m_szMcuName[m_iMcuMessageCount]), "%s", szMcuName );
-		m_iMcuMessageCount += 1;
+		snprintf( m_szEspResponseMsg[m_iEspMessageCount], sizeof(m_szEspResponseMsg[m_iEspMessageCount]), "%s", szEspResponseMsg );
+		snprintf( m_szEspName[m_iEspMessageCount], sizeof(m_szEspName[m_iEspMessageCount]), "%s", szEspName );
+		m_iEspMessageCount += 1;
 	}
 	else
 	{
-		LogMessage( E_MSG_ERROR, "No slot for Mcu response message" );
+		LogMessage( E_MSG_ERROR, "No slot for ESP response message" );
 	}
 }
 
@@ -1902,9 +1902,9 @@ const long CDeviceList::GetEventTimeDiff( const int idx, const int j, const stru
 	return lDiff;
 }
 
-const int CDeviceList::GetMcuMessageCount()
+const int CDeviceList::GetEspMessageCount()
 {
-	return m_iMcuMessageCount;
+	return m_iEspMessageCount;
 }
 
 const bool CDeviceList::IsShared( const int idx )
@@ -1955,7 +1955,7 @@ const int CDeviceList::GetTotalComPorts( char szPort[MAX_DEVICES][MAX_COMPORT_LE
 
 	for ( i = 0; i < MAX_DEVICES; i++ )
 	{
-		if ( m_Device[i].GetAddress() > 0 && strncmp( m_Device[i].GetComPort(), "MCU", 3 ) != 0 &&
+		if ( m_Device[i].GetAddress() > 0 && strncmp( m_Device[i].GetComPort(), "ESP", 3 ) != 0 &&
 				m_Device[i].GetDeviceNo() > 0 && m_Device[i].GetComPort()[0] != '\0' &&
 				IsMyHostname(m_Device[i].GetDeviceHostname())  )
 		{	// this com port is one of ours
@@ -2213,13 +2213,13 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 	return bRet;
 }
 
-const bool CDeviceList::IsMcuDevice( const int idx )
+const bool CDeviceList::IsEspDevice( const int idx )
 {
 	bool bRet = false;
 
 	if ( idx >=0 && idx < MAX_DEVICES )
 	{
-		if ( strncmp( m_Device[idx].GetComPort(), "MCU", 3 ) == 0 )
+		if ( strncmp( m_Device[idx].GetComPort(), "ESP", 3 ) == 0 )
 		{
 			bRet = true;
 		}

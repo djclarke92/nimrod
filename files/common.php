@@ -1965,7 +1965,7 @@ function func_calc_level( $cc )
         $temp = "N/A";
     }
     else
-    {	// value is a percentage x 10: 0 - 1000 
+    {	// value is a percentage x 10
         $temp = sprintf( "%.1f", $cc/10 );
     }
     
