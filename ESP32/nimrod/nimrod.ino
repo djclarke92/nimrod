@@ -7,7 +7,7 @@
 #include <Preferences.h>  // WiFi storage
 
 
-const char* test_root_ca= \
+const char* gszNimrodRootCA= \
 "-----BEGIN CERTIFICATE-----\n" \
 "MIIECTCCAvGgAwIBAgIULPJ1Z9nziVj6H0pcv4Sc981YAo8wDQYJKoZIhvcNAQEL\n" \
 "BQAwgZMxCzAJBgNVBAYTAk5aMQ8wDQYDVQQIDAZCdWxsZXIxEzARBgNVBAcMCkNo\n" \
@@ -33,25 +33,22 @@ const char* test_root_ca= \
 "zMwM0EuD+iasPmY0N0bgwgk4IqbYweDq+hfksDQ=\n" \
 "-----END CERTIFICATE-----\n";
 
-const char* test_client_key = "";
-
-const char* test_client_cert = "";
+const char* gszNimrodCertKey = "";
+const char* gszNimrodCert = "";
 
      
-const char* rssiSSID;  // NO MORE hard coded set AP, all SmartConfig
-const char* password;
-String PrefSSID, PrefPassword;  // used by preferences storage
+const char* gszSSID = NULL;  
+const char* gszPassword = NULL;
+String gsPrefSSID;
+String gsPrefPassword;
+int giWFstatus = WL_IDLE_STATUS;
+int giWiFiUpCount = 0;
+int32_t giRssi = 0;  
+String gsGetSsid;
+String gsGetPass;
+String gsMAC;
+Preferences gPrefStorage;
 
-int WFstatus;
-int UpCount = 0;
-int32_t rssi;  // store WiFi signal strength here
-String getSsid;
-String getPass;
-String MAC;
-
-// SSID storage
-Preferences preferences;  // declare class object
-// END SSID storage
 
 // nimrod definitions
 #define NIMROD_PORT  54011
@@ -69,12 +66,11 @@ Preferences preferences;  // declare class object
 #define OUTPUT_4_PIN  19
 #define OUTPUT_ON     1
 #define OUTPUT_OFF    0
-String sMY_NAME = "ESP000"; // default to 000 - nimrod will allocate a unique number for us
+String sEspName = "ESP000"; // default to 000 - nimrod will allocate a unique number for us
 int iLedState = 0;
-int iConnected = -1;
+int iSocketConnected = -1;
 int iSecSinceLastSend = 0;
 int iSecSinceLastRecv = 0;
-int iRssi = 0;
 int iLedTimer = 20;
 int iOutput1Timer = -1;
 int iOutput2Timer = -1;
@@ -111,8 +107,8 @@ void setup()
   nimrodSetup();
 
   wifiInit();  // get WiFi connected
-  IP_info();
-  MAC = getMacAddress();
+  PrintIPinfo();
+  gsMAC = getMacAddress();
 
   delay(2000);
 }  //  END setup()
@@ -121,99 +117,83 @@ void loop()
 {
   nimrodLoop();
 
-  if (WiFi.status() == WL_CONNECTED)  // Main connected loop
-  {
-    // ANY MAIN LOOP CODE HERE
-
-
-    
-
-  }       // END Main connected loop()
-  else 
+  if ( WiFi.status() != WL_CONNECTED ) 
   {  // WiFi DOWN
+    giWFstatus = getWifiStatus();
 
-    //  wifi down start LED flasher here
-
-    WFstatus = getWifiStatus(WFstatus);
-
-    WiFi.begin(PrefSSID.c_str(), PrefPassword.c_str());
+    WiFi.begin(gsPrefSSID.c_str(), gsPrefPassword.c_str());
     int WLcount = 0;
     while (WiFi.status() != WL_CONNECTED && WLcount < 200) 
     {
       delay(100);
       Serial.printf(".");
 
-      if (UpCount >= 60)  // keep from scrolling sideways forever
+      if (giWiFiUpCount >= 60)  // keep from scrolling sideways forever
       {
-        UpCount = 0;
+        giWiFiUpCount = 0;
         Serial.printf("\n");
       }
-      ++UpCount;
+      ++giWiFiUpCount;
       ++WLcount;
     }
 
-    if (getWifiStatus(WFstatus) == 3)  // wifi returns
+    if (getWifiStatus() != WL_CONNECTED)  // wifi returns
     {
-      // stop LED flasher, wifi going up
+      Serial.printf("WiFi stilll not connected\n");
     }
-  }  // END WiFi down
+  }  
 
   delay(100);
-}  // END loop()
+}  
 
-void wifiInit()  //
+void wifiInit() 
 {
   WiFi.mode(WIFI_AP_STA);  // required to read NVR before WiFi.begin()
 
   // load credentials from NVR, a little RTOS code here
   wifi_config_t conf;
   esp_wifi_get_config(WIFI_IF_STA, &conf);  // load wifi settings to struct comf
-  rssiSSID = reinterpret_cast<const char*>(conf.sta.ssid);
-  password = reinterpret_cast<const char*>(conf.sta.password);
-
-  //  Serial.printf( "%s\n", rssiSSID );
-  //  Serial.printf( "%s\n", password );
+  gszSSID = reinterpret_cast<const char*>(conf.sta.ssid);
+  gszPassword = reinterpret_cast<const char*>(conf.sta.password);
 
   // Open Preferences with "wifi" namespace. Namespace is limited to 15 chars
-  preferences.begin("wifi", false);
-  PrefSSID = preferences.getString("ssid", "none");  // NVS key ssid
-  PrefPassword = preferences.getString("password", "none");  // NVS key password
-  preferences.end();
+  gPrefStorage.begin("wifi", false);
+  gsPrefSSID = gPrefStorage.getString("ssid", "none");  // NVS key ssid
+  gsPrefPassword = gPrefStorage.getString("password", "none");  // NVS key password
+  gPrefStorage.end();
 
   // keep from rewriting flash if not needed
-  if (!checkPrefsStore())    // see is NV and Prefs are the same
-  {                          // not the same, setup with SmartConfig
-    if (PrefSSID == "none")  // New...setup wifi
-    {
+  if (!checkPrefsStore())    
+  { // NV and Prefs are different, setup with SmartConfig
+    if (gsPrefSSID == "none")
+    { // new wifi config
       initSmartConfig();
+      
       delay(3000);
-      ESP.restart();  // reboot with wifi configured
+      
+      ESP.restart();  // reboot with new wifi configuration
     }
   }
 
-  // I flash LEDs while connecting here
 
-  WiFi.begin(PrefSSID.c_str(), PrefPassword.c_str());
+  WiFi.begin(gsPrefSSID.c_str(), gsPrefPassword.c_str());
 
   int WLcount = 0;
-  while (WiFi.status() != WL_CONNECTED &&
-         WLcount < 200)  // can take > 100 loops depending on router settings
-  {
+  while (WiFi.status() != WL_CONNECTED && WLcount < 200)  
+  { // can take a couple of seconds
     delay(100);
     Serial.printf(".");
     ++WLcount;
   }
+  
   delay(3000);
-
-  //  stop the led flasher here
-
-}  // END wifiInit()
+}  
 
 // match WiFi IDs in NVS to Pref store,  assumes WiFi.mode(WIFI_AP_STA);  was
 // executed
 bool checkPrefsStore() 
 {
-  bool val = false;
+  bool bRet = false;
   String NVssid, NVpass, prefssid, prefpass;
 
   NVssid = getSsidPass("ssid");
@@ -221,24 +201,22 @@ bool checkPrefsStore()
 
   // Open Preferences with my-app namespace. Namespace name is limited to 15
   // chars
-  preferences.begin("wifi", false);
-  prefssid = preferences.getString("ssid", "none");  // NVS key ssid
-  prefpass = preferences.getString("password", "none");  // NVS key password
-  preferences.end();
+  gPrefStorage.begin("wifi", false);
+  prefssid = gPrefStorage.getString("ssid", "none");  // NVS key ssid
+  prefpass = gPrefStorage.getString("password", "none");  // NVS key password
+  gPrefStorage.end();
 
   if (NVssid.equals(prefssid) && NVpass.equals(prefpass)) 
   {
-    val = true;
+    bRet = true;
   }
 
-  return val;
+  return bRet;
 }
 
-// optionally call this function any way you want in your own code
-// to remap WiFi to another AP using SmartConfig mode.   Button, condition etc..
+// call this function any time to force a new wifi config
 void initSmartConfig() 
 {
-  // start LED flasher
   int loopCounter = 0;
 
   WiFi.mode(WIFI_AP_STA);  // Init WiFi, start SmartConfig
@@ -248,110 +226,109 @@ void initSmartConfig()
 
   while (!WiFi.smartConfigDone()) 
   {
-    // flash led to indicate not configured
     Serial.printf(".");
-    if (loopCounter >= 40)  // keep from scrolling sideways forever
+    if (loopCounter >= 30) 
     {
       loopCounter = 0;
       Serial.printf("\n");
     }
-    delay(600);
+    delay(500);
     ++loopCounter;
   }
   loopCounter = 0;
 
-  // stopped flasher here
 
-  Serial.printf("\nSmartConfig received.\n Waiting for WiFi\n\n");
+  Serial.printf("SmartConfig received.\nWaiting for WiFi\n\n");
   delay(2000);
 
-  while (WiFi.status() != WL_CONNECTED)  // check till connected
-  {
+  while (WiFi.status() != WL_CONNECTED)  
+  { // wait forever until connected
     delay(500);
   }
-  IP_info();  // connected lets see IP info
 
-  preferences.begin("wifi", false);  // put it in storage
-  preferences.putString("ssid", getSsid);
-  preferences.putString("password", getPass);
-  preferences.end();
+  PrintIPinfo();
+
+  // save the new wifi credentials
+  gPrefStorage.begin("wifi", false);
+  gPrefStorage.putString("ssid", gsGetSsid);
+  gPrefStorage.putString("password", gsGetPass);
+  gPrefStorage.end();
 
   delay(300);
-}  // END SmartConfig()
+} 
 
-void IP_info() 
+void PrintIPinfo() 
 {
-  getSsid = WiFi.SSID();
-  getPass = WiFi.psk();
-  rssi = getRSSI(rssiSSID);
-  WFstatus = getWifiStatus(WFstatus);
-  MAC = getMacAddress();
+  gsGetSsid = WiFi.SSID();
+  gsGetPass = WiFi.psk();
+  giRssi = getRSSI(gszSSID);
+  giWFstatus = getWifiStatus();
+  gsMAC = getMacAddress();
 
-  Serial.printf("\n\nSSID\t%s, ", getSsid.c_str());
-  Serial.print(rssi);
-  Serial.printf(" dBm\n");  // printf??
-  Serial.print("IP address:\t");
-  Serial.print(WiFi.localIP());
-  Serial.print(" / ");
-  Serial.println(WiFi.subnetMask());
-  Serial.print("Gateway IP:\t");
-  Serial.println(WiFi.gatewayIP());
-  Serial.print("1st DNS:\t");
-  Serial.println(WiFi.dnsIP());
-  Serial.printf("MAC:\t\t%s\n", MAC.c_str());
+  Serial.printf("SSID '%s', %d dbm\n", gsGetSsid.c_str(), giRssi );
+  Serial.printf("IP address: %s / %s\n", WiFi.localIP(), WiFi.subnetMask() );
+  Serial.printf("Gateway IP: %s\n", WiFi.gatewayIP() );
+  Serial.printf("DNS: %s\n", WiFi.dnsIP() );
+  Serial.printf("MAC: %s\n", gsMAC.c_str() );
 }
 
-int getWifiStatus(int WiFiStatus) 
+int getWifiStatus() 
 {
+  int WiFiStatus;
+  
   WiFiStatus = WiFi.status();
   Serial.printf("Status %d", WiFiStatus);
   switch (WiFiStatus) 
   {
-    case WL_IDLE_STATUS:  // WL_IDLE_STATUS     = 0,
-      Serial.printf(", WiFi IDLE \n");
-      break;
-    case WL_NO_SSID_AVAIL:  // WL_NO_SSID_AVAIL   = 1,
-      Serial.printf(", NO SSID AVAIL \n");
-      break;
-    case WL_SCAN_COMPLETED:  // WL_SCAN_COMPLETED  = 2,
-      Serial.printf(", WiFi SCAN_COMPLETED \n");
-      break;
-    case WL_CONNECTED:  // WL_CONNECTED       = 3,
-      Serial.printf(", WiFi CONNECTED \n");
-      break;
-    case WL_CONNECT_FAILED:  // WL_CONNECT_FAILED  = 4,
-      Serial.printf(", WiFi WL_CONNECT FAILED\n");
-      break;
-    case WL_CONNECTION_LOST:  // WL_CONNECTION_LOST = 5,
-      Serial.printf(", WiFi CONNECTION LOST\n");
-      WiFi.persistent(false);  // don't write FLASH
-      break;
-    case WL_DISCONNECTED:  // WL_DISCONNECTED    = 6
-      Serial.printf(", WiFi DISCONNECTED ==\n");
-      WiFi.persistent(false);  // don't write FLASH when reconnecting
-      break;
+  default:
+    Serial.printf(", WiFi UNKNOWN \n");
+    break;
+  case WL_IDLE_STATUS:     // 0
+    Serial.printf(", WiFi IDLE \n");
+    break;
+  case WL_NO_SSID_AVAIL:    // 1
+    Serial.printf(", NO SSID AVAIL \n");
+    break;
+  case WL_SCAN_COMPLETED:   // 2
+    Serial.printf(", WiFi SCAN_COMPLETED \n");
+    break;
+  case WL_CONNECTED:        // 3
+    Serial.printf(", WiFi CONNECTED \n");
+    break;
+  case WL_CONNECT_FAILED:   // 4
+    Serial.printf(", WiFi WL_CONNECT FAILED\n");
+    break;
+  case WL_CONNECTION_LOST:  // 5
+    Serial.printf(", WiFi CONNECTION LOST\n");
+    WiFi.persistent(false);  // don't write FLASH
+    break;
+  case WL_DISCONNECTED:     // 6
+    Serial.printf(", WiFi DISCONNECTED ==\n");
+    WiFi.persistent(false);  // don't write FLASH when reconnecting
+    break;
   }
+  
   return WiFiStatus;
 }
-// END getWifiStatus()
+
 
 // Get the station interface MAC address.
 // @return String MAC
 String getMacAddress(void) 
 {
-  WiFi.mode(WIFI_AP_STA);  // required to read NVR before WiFi.begin()
   uint8_t baseMac[6];
-  esp_read_mac(baseMac, ESP_MAC_WIFI_STA);  // Get MAC address for WiFi station
   char macStr[18] = {0};
+
+  WiFi.mode(WIFI_AP_STA);  // required to read NVR before WiFi.begin()
+  
+  esp_read_mac(baseMac, ESP_MAC_WIFI_STA);  // Get MAC address for WiFi station
   sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X", baseMac[0], baseMac[1],
           baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
+
   return String(macStr);
 }
-// END getMacAddress()
 
 // Return RSSI or 0 if target SSID not found
-// const char* SSID = "YOUR_SSID";  // declare in GLOBAL space
-// call:  int32_t rssi = getRSSI( SSID );
 int32_t getRSSI(const char* target_ssid) 
 {
   byte available_networks = WiFi.scanNetworks();
@@ -363,33 +340,39 @@ int32_t getRSSI(const char* target_ssid)
       return WiFi.RSSI(network);
     }
   }
+  
   return 0;
-}  //  END  getRSSI()
+}  
 
-// Requires; #include <esp_wifi.h>
-// Returns String NONE, ssid or pass arcording to request
-// ie String var = getSsidPass( "pass" );
-String getSsidPass(String s) 
+// Returns String NONE, ssid or pass according to request
+// return "NONE" if wrong key sent
+String getSsidPass(String sKey) 
 {
-  String val = "NONE";  // return "NONE" if wrong key sent
-  s.toUpperCase();
-  if (s.compareTo("SSID") == 0) 
+  String sVal = "NONE";  
+  
+  sKey.toUpperCase();
+  if (sKey.compareTo("SSID") == 0) 
   {
     wifi_config_t conf;
     esp_wifi_get_config(WIFI_IF_STA, &conf);
-    val = String(reinterpret_cast<const char*>(conf.sta.ssid));
+    sVal = String(reinterpret_cast<const char*>(conf.sta.ssid));
   }
-  if (s.compareTo("PASS") == 0) 
+  
+  if (sKey.compareTo("PASS") == 0) 
   {
     wifi_config_t conf;
     esp_wifi_get_config(WIFI_IF_STA, &conf);
-    val = String(reinterpret_cast<const char*>(conf.sta.password));
+    sVal = String(reinterpret_cast<const char*>(conf.sta.password));
   }
-  return val;
+  
+  return sVal;
 }
 
+
 //**********************************************************************************************************
+//
 //  nimrod functions
+//
 //**********************************************************************************************************
 
 // callbacks for button debounce
@@ -456,11 +439,13 @@ void nimrodSetup()
   //timerAttachInterrupt( timer3, &button3Changed, false );
   //timerAttachInterrupt( timer4, &button4Changed, false );
 
-  client.setCACert(test_root_ca);
-//  client.setCertificate(test_client_key); // for client verification
-//  client.setPrivateKey(test_client_cert);  // for client verification
+  client.setCACert(gszNimrodRootCA);
+//  client.setCertificate(gszNimrodCertKey); // for client verification
+//  client.setPrivateKey(gszNimrodCert);  // for client verification
 }
 
+
+// called form the main loop() function
 void nimrodLoop()
 {
   if ( client.connected() )
@@ -468,7 +453,7 @@ void nimrodLoop()
     if ( client.available() == 8 )
     {
       iSecSinceLastRecv = 0;
-      printf( "msg is available, %d bytes\n", client.available() );
+      Serial.printf( "msg is available, %d bytes\n", client.available() );
 
       int i;
       char szMsg[MSG_LENGTH+1];
@@ -478,30 +463,25 @@ void nimrodLoop()
       }
       szMsg[i] = '\0';
       
-      printf( "received '%s'\n", szMsg );
+      Serial.printf( "received '%s'\n", szMsg );
 
-      activate_output( szMsg );
+      HandleMessage( szMsg );
     }
   }
 
-  timer_cb();
-}
 
-void timer_cb()
-{
-  //-- flash the led
-  if ( iConnected <= 0 )
-  { //-- wifi is disconnected
+  // flash the led
+  if ( iSocketConnected <= 0 )
+  { // wifi is disconnected
     if ( iLedState == 0 )
       digitalWrite( OUTPUT_LED_PIN, OUTPUT_ON );
     else
       digitalWrite( OUTPUT_LED_PIN, OUTPUT_OFF );
-    
   }
   else
-  { //-- wifi is connected
+  { // wifi is connected
     if ( iLedTimer == 0 )
-    { //      -- stop blinking the led after 30 seconds
+    { // stop blinking the led after 30 seconds
       digitalWrite( OUTPUT_LED_PIN, OUTPUT_OFF ) ; 
     }
     else if ( iLedState == 0 or iLedState == 2 )
@@ -516,18 +496,18 @@ void timer_cb()
   
   iLedState = iLedState + 1;
   if ( iLedState >= 10 )
-  { //-- every second
+  { // every second
     iLedState = 0;
     iSecSinceLastSend = iSecSinceLastSend + 1;
     iSecSinceLastRecv = iSecSinceLastRecv + 1;
     
     
-    //-- check wifi
-    if ( iConnected == 1 )
+    // check wifi
+    if ( iSocketConnected == 1 )
     {
       if ( WiFi.status() != WL_CONNECTED )
       {
-        iConnected = -1;
+        iSocketConnected = -1;
         iLedTimer = 20;
       }
       else if ( iLedTimer > 0 )
@@ -537,77 +517,75 @@ void timer_cb()
     }
     else
     { // try to connect our socket
-      printf( "Try to connect the socket\n" );
+      Serial.printf( "Try to connect the socket\n" );
       if (!client.connect(NIMROD_IP, NIMROD_PORT)) 
       {
-        printf("Connection to %s:%d failed\n", NIMROD_IP, NIMROD_PORT );
+        Serial.printf("Connection to %s:%d failed\n", NIMROD_IP, NIMROD_PORT );
       }
       else
       {
-        iConnected = 1;
+        iSocketConnected = 1;
       
-        printf( "Connected to %s:%d\n", NIMROD_IP, NIMROD_PORT );
-  
-        byte mac[6];
-        WiFi.macAddress(mac);
+        Serial.printf( "Connected to %s:%d\n", NIMROD_IP, NIMROD_PORT );
   
         char szMsg[MSG_LENGTH+1];
         // 01234567890123456789
         // ESP001CLK1
         // ESPxxxCIDyyyyyyyy
-        sprintf( szMsg, "%sCID%02x%02x%02x%02x%02x%02x", sMY_NAME, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5] );
+        sprintf( szMsg, "%sCID%02x%02x%02x%02x%02x%02x", sEspName, gsMAC[0], gsMAC[1], gsMAC[2], gsMAC[3], gsMAC[4], gsMAC[5] );
         socket_send( szMsg );
       }      
     }
 
     
-    if ( iConnected == 1 )
+    if ( iSocketConnected == 1 )
     {
       if ( iSecSinceLastRecv >= PING_PERIOD+5 )  
       { // socket is dead
         iSecSinceLastRecv = 0;
-        printf( "socket is dead\n" );
+        
+        Serial.printf( "socket is dead\n" );
         client.stop();
-        iConnected = -1;
+        iSocketConnected = -1;
       }
       else if ( iSecSinceLastSend >= PING_PERIOD )
-      { // -- send a ping
+      { // send a ping
         char szMsg[MSG_LENGTH+1];
-        sprintf( szMsg, "%sPG", sMY_NAME );
+        sprintf( szMsg, "%sPG", sEspName );
         socket_send( szMsg );
       }
 
       if ( iBtn1Count != iBtn1LastCount )
       {
         iBtn1LastCount = iBtn1Count;
-        printf( "Btn1Count %d\n", iBtn1Count );
+        Serial.printf( "Btn1Count %d\n", iBtn1Count );
       }
       if ( iBtn2Count != iBtn2LastCount )
       {
         iBtn2LastCount = iBtn2Count;
-        printf( "Btn2Count %d\n", iBtn2Count );
+        Serial.printf( "Btn2Count %d\n", iBtn2Count );
       }
       if ( iBtn3Count != iBtn3LastCount )
       {
         iBtn3LastCount = iBtn3Count;
-        printf( "Btn3Count %d\n", iBtn3Count );
+        Serial.printf( "Btn3Count %d\n", iBtn3Count );
       }
       if ( iBtn4Count != iBtn4LastCount )
       {
         iBtn4LastCount = iBtn4Count;
-        printf( "Btn4Count %d\n", iBtn4Count );
+        Serial.printf( "Btn4Count %d\n", iBtn4Count );
       }
     }
     
     
-    //-- check output timers
+    // check output timers
     if ( iOutput1Timer > 0 )
-    { // -- timer is active
+    { // timer is active
       iOutput1Timer = iOutput1Timer - 1;
       
       if ( iOutput1Timer == 0 )
-      { // -- expired, turn off output
-        printf( "output 1 now off\n" );
+      { // expired, turn off output
+        Serial.printf( "output 1 now off\n" );
         iOutput1Timer = -1;
         iOutput1State = OUTPUT_OFF;
         digitalWrite( OUTPUT_1_PIN, iOutput1State );
@@ -615,12 +593,12 @@ void timer_cb()
     }
     
     if ( iOutput2Timer > 0 )
-    { // -- timer is active
+    { // timer is active
       iOutput2Timer = iOutput2Timer - 1;
       
       if ( iOutput2Timer == 0 )
-      { // -- expired, turn off output
-        printf( "output 2 now off\n" );
+      { // expired, turn off output
+        Serial.printf( "output 2 now off\n" );
         iOutput2Timer = -1;
         iOutput2State = OUTPUT_OFF;
         digitalWrite( OUTPUT_2_PIN, iOutput2State );
@@ -628,12 +606,12 @@ void timer_cb()
     }
     
     if ( iOutput3Timer > 0 )
-    { // -- timer is active
+    { // timer is active
       iOutput3Timer = iOutput3Timer - 1;
       
       if ( iOutput3Timer == 0 )
-      { // -- expired, turn off output
-        printf( "output 3 now off\n" );
+      { // expired, turn off output
+        Serial.printf( "output 3 now off\n" );
         iOutput3Timer = -1;
         iOutput3State = OUTPUT_OFF;
         digitalWrite( OUTPUT_3_PIN, iOutput3State );
@@ -641,12 +619,12 @@ void timer_cb()
     }
     
     if ( iOutput4Timer > 0 )
-    { // -- timer is active
+    { // timer is active
       iOutput4Timer = iOutput4Timer - 1;
       
       if ( iOutput4Timer == 0 )
-      { //-- expired, turn off output
-        printf( "output 4 now off\n" );
+      { // expired, turn off output
+        Serial.printf( "output 4 now off\n" );
         iOutput4Timer = -1;
         iOutput4State = OUTPUT_OFF;
         digitalWrite( OUTPUT_4_PIN, iOutput4State );
@@ -664,7 +642,7 @@ void socket_send( char* msg )
     strcat( msg, "." );
   }
 
-  printf( "skt send: %s\n", msg );
+  Serial.printf( "skt send: %s\n", msg );
 
   client.print( msg );
   
@@ -673,22 +651,22 @@ void socket_send( char* msg )
 
 void button1Changed()
 {
-  return buttonChanged(INPUT_1_PIN);
+  buttonChanged(INPUT_1_PIN);
 }
 
 void button2Changed()
 {
-  return buttonChanged(INPUT_2_PIN);
+  buttonChanged(INPUT_2_PIN);
 }
 
 void button3Changed()
 {
-  return buttonChanged(INPUT_3_PIN);
+  buttonChanged(INPUT_3_PIN);
 }
 
 void button4Changed()
 {
-  return buttonChanged(INPUT_4_PIN);
+  buttonChanged(INPUT_4_PIN);
 }
 
 void buttonChanged( int pin )
@@ -698,17 +676,17 @@ void buttonChanged( int pin )
   int val = digitalRead(pin);
   
   iLedTimer = 20;
-  printf("Pin %d val now %d\n", pin, val );
+  Serial.printf("Pin %d val now %d\n", pin, val );
   
   if ( val == 0 )
   { // do nothing
   }
   else if ( pin == INPUT_1_PIN )
-  { // -- button 1 is pressed
-    if  ( iConnected > 0 )
+  { // button 1 is pressed
+    if  ( iSocketConnected > 0 )
     {
-      printf( "send CLK1\n" );
-      sprintf( szMsg, "%sCLK1", sMY_NAME );
+      Serial.printf( "send CLK1\n" );
+      sprintf( szMsg, "%sCLK1", sEspName );
       socket_send( szMsg );
     }
     else
@@ -720,11 +698,11 @@ void buttonChanged( int pin )
     }
   }    
   else if ( pin == INPUT_2_PIN )
-  { //   -- button 2 is pressed
-    if ( iConnected > 0 )
+  { // button 2 is pressed
+    if ( iSocketConnected > 0 )
     {
-      printf( "send CLK2\n" );
-      sprintf( szMsg, "%sCLK2", sMY_NAME );
+      Serial.printf( "send CLK2\n" );
+      sprintf( szMsg, "%sCLK2", sEspName );
       socket_send( szMsg );
     }
     else
@@ -736,11 +714,11 @@ void buttonChanged( int pin )
     }
   }
   else if ( pin == INPUT_3_PIN )
-  { // -- button 3 is pressed
-    if ( iConnected > 0 )
+  { // button 3 is pressed
+    if ( iSocketConnected > 0 )
     {
-      printf( "send CLK3\n" );
-      sprintf( szMsg, "%sCLK3", sMY_NAME );
+      Serial.printf( "send CLK3\n" );
+      sprintf( szMsg, "%sCLK3", sEspName );
       socket_send( szMsg );
     }
     else
@@ -752,11 +730,11 @@ void buttonChanged( int pin )
     }
   }
   else if ( pin == INPUT_4_PIN )
-  { //  -- button 4 is pressed
-    if ( iConnected > 0 )
+  { //  button 4 is pressed
+    if ( iSocketConnected > 0 )
     {
-      printf( "send CLK4\n" );
-      sprintf( szMsg, "%sCLK4", sMY_NAME );
+      Serial.printf( "send CLK4\n" );
+      sprintf( szMsg, "%sCLK4", sEspName );
       socket_send( szMsg );
     }
     else
@@ -769,12 +747,12 @@ void buttonChanged( int pin )
   }
 }
 
-void activate_output( const char* c )
+void HandleMessage( const char* c )
 {
-  //  -- 0123456789012
-  //  -- OKyxxxxx   output control
-  //  -- PG000000   ping from nimrod
-  //  -- NNESPxxx   our new name
+  // 0123456789012
+  // OKyxxxxx   output control
+  // PG000000   ping from nimrod
+  // NNESPxxx   our new name
   if ( strncmp(c,"OK",2) == 0 )
   {
     int iOutput = (int)(c[2] - '0');
@@ -787,20 +765,20 @@ void activate_output( const char* c )
   } 
   else if ( strncmp(c,"NN",2) == 0 )
   {
-    sMY_NAME = &c[2];
+    sEspName = &c[2];
     
-    printf( "New name %s\n", sMY_NAME );
+    Serial.printf( "New name %s\n", sEspName );
   } 
 }
 
 void activate_output2( int iOutput, int iPeriod )
 {
-  printf( "Output %d on for %d sec\n", iOutput, iPeriod );
+  Serial.printf( "Output %d on for %d sec\n", iOutput, iPeriod );
     
   if ( iOutput == 1 )
   {      
     if ( iPeriod == 0 )
-    { //  -- turn off
+    { // turn off
       iOutput1Timer = -1;
       iOutput1State = OUTPUT_OFF;
     }   
@@ -816,12 +794,12 @@ void activate_output2( int iOutput, int iPeriod )
     }
 
     digitalWrite( OUTPUT_1_PIN, iOutput1State );
-    printf( "tmr 1 set to %d\n", iOutput1Timer );
+    Serial.printf( "tmr 1 set to %d\n", iOutput1Timer );
   }    
   else if ( iOutput == 2 )
   {
     if ( iPeriod == 0 )
-    { //  -- turn off
+    { // turn off
       iOutput2Timer = -1;
       iOutput2State = OUTPUT_OFF;
     }
@@ -837,12 +815,12 @@ void activate_output2( int iOutput, int iPeriod )
     }
 
     digitalWrite( OUTPUT_2_PIN, iOutput2State );
-    printf( "tmr 2 set to %d\n", iOutput2Timer );
+    Serial.printf( "tmr 2 set to %d\n", iOutput2Timer );
   }
   else if ( iOutput == 3 )
   {
     if ( iPeriod == 0 )
-    { //  -- turn off
+    { // turn off
       iOutput3Timer = -1;
       iOutput3State = OUTPUT_OFF;
     }
@@ -858,12 +836,12 @@ void activate_output2( int iOutput, int iPeriod )
     }
 
     digitalWrite( OUTPUT_3_PIN, iOutput3State );
-    printf( "tmr 3 set to %d\n", iOutput3Timer );
+    Serial.printf( "tmr 3 set to %d\n", iOutput3Timer );
   }
   else if ( iOutput == 4 )
   {
     if ( iPeriod == 0 )
-    { //  -- turn off
+    { // turn off
       iOutput4Timer = -1;
       iOutput4State = OUTPUT_OFF;
     }
@@ -879,7 +857,7 @@ void activate_output2( int iOutput, int iPeriod )
     }
 
     digitalWrite( OUTPUT_4_PIN, iOutput4State );
-    printf( "tmr 4 set to %d\n", iOutput4Timer );
+    Serial.printf( "tmr 4 set to %d\n", iOutput4Timer );
       
   }
 }
