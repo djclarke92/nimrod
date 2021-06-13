@@ -41,7 +41,7 @@ const char* gszSSID = NULL;
 const char* gszPassword = NULL;
 String gsPrefSSID;
 String gsPrefPassword;
-int giWFstatus = WL_IDLE_STATUS;
+int giWFstatus = 255; //WL_IDLE_STATUS;
 int giWiFiUpCount = 0;
 int32_t giRssi = 0;  
 String gsGetSsid;
@@ -102,44 +102,35 @@ WiFiClientSecure client;
 void setup() 
 {
   Serial.begin(115200);
-  Serial.printf("WiFi Setup\n");
+  Serial.printf("\nNimrod ESP32 starting\n");
 
   nimrodSetup();
 
-  wifiInit();  // get WiFi connected
-  PrintIPinfo();
-  gsMAC = getMacAddress();
-
-  delay(2000);
-}  //  END setup()
+} 
 
 void loop() 
 {
   nimrodLoop();
 
+  if ( giWFstatus != WiFi.status() )
+  { // wifi status has changed
+    giWFstatus = getWifiStatus();
+  }
+  
   if ( WiFi.status() != WL_CONNECTED ) 
   {  // WiFi DOWN
-    giWFstatus = getWifiStatus();
-
-    WiFi.begin(gsPrefSSID.c_str(), gsPrefPassword.c_str());
-    int WLcount = 0;
-    while (WiFi.status() != WL_CONNECTED && WLcount < 200) 
+    if ( giWiFiUpCount == 0 )
     {
-      delay(100);
-      Serial.printf(".");
-
-      if (giWiFiUpCount >= 60)  // keep from scrolling sideways forever
-      {
-        giWiFiUpCount = 0;
-        Serial.printf("\n");
-      }
+      Serial.printf("Starting Wifi...\n" );
+      
+      WiFi.begin(gsPrefSSID.c_str(), gsPrefPassword.c_str());
       ++giWiFiUpCount;
-      ++WLcount;
     }
-
-    if (getWifiStatus() != WL_CONNECTED)  // wifi returns
-    {
-      Serial.printf("WiFi stilll not connected\n");
+    else if ( giWiFiUpCount > 200 )
+    { // try again
+      giWiFiUpCount = 0;
+      
+      Serial.printf("WiFi still not connected\n");
     }
   }  
 
@@ -184,6 +175,10 @@ void wifiInit()
     delay(100);
     Serial.printf(".");
     ++WLcount;
+    if ( (WLcount % 60) == 0 )  
+    { // keep from scrolling sideways forever
+      Serial.printf("\n");
+    }
   }
   
   delay(3000);
@@ -378,8 +373,8 @@ String getSsidPass(String sKey)
 // callbacks for button debounce
 void button1_cb()
 {
-//  timerAlarmWrite( timer1, 50000, false );
-//  timerAlarmEnable( timer1 );
+  timerAlarmWrite( timer1, 50000, false );
+  timerAlarmEnable( timer1 );
   iBtn1Count += 1;
 }
 
@@ -429,12 +424,12 @@ void nimrodSetup()
   digitalWrite( OUTPUT_4_PIN, iOutput4State ); 
 
 
-  //timer1 = timerBegin(0, 80, true);
-  //timer2 = timerBegin(1, 80, true);
-  //timer3 = timerBegin(2, 80, true);
-  //timer4 = timerBegin(3, 80, true);
+  timer1 = timerBegin(0, 80, true);
+  timer2 = timerBegin(1, 80, true);
+  timer3 = timerBegin(2, 80, true);
+  timer4 = timerBegin(3, 80, true);
 
-  //timerAttachInterrupt( timer1, &button1Changed, false );
+  timerAttachInterrupt( timer1, &button1Changed, false );
   //timerAttachInterrupt( timer2, &button2Changed, false );
   //timerAttachInterrupt( timer3, &button3Changed, false );
   //timerAttachInterrupt( timer4, &button4Changed, false );
@@ -500,7 +495,8 @@ void nimrodLoop()
     iLedState = 0;
     iSecSinceLastSend = iSecSinceLastSend + 1;
     iSecSinceLastRecv = iSecSinceLastRecv + 1;
-    
+
+    //Serial.printf("n\n" );
     
     // check wifi
     if ( iSocketConnected == 1 )
@@ -515,7 +511,7 @@ void nimrodLoop()
         iLedTimer = iLedTimer - 1;
       }
     }
-    else
+    else if ( giWFstatus == WL_CONNECTED )
     { // try to connect our socket
       Serial.printf( "Try to connect the socket\n" );
       if (!client.connect(NIMROD_IP, NIMROD_PORT)) 
