@@ -153,6 +153,7 @@ void CPlcStates::Init()
 	{
 		m_iInputDeviceNo[i] = 0;
 		m_iInputIOChannel[i] = 0;
+		m_iInputValue[i] = 0;
 	}
 }
 
@@ -240,6 +241,7 @@ const bool CPlcStates::FindInputDevice( const int iDeviceNo, const int iIOChanne
 	for ( int i = 0; i < m_iStateCount; i++ )
 	{
 		if ( strcmp( m_State[i].GetOperation(), m_State[m_iActiveStateIdx].GetOperation() ) == 0 &&
+			strcmp( m_State[i].GetStateName(), m_State[m_iActiveStateIdx].GetStateName() ) == 0 &&
 			m_State[i].GetDeviceNo() == iDeviceNo && m_State[i].GetIOChannel() == iIOChannel && m_State[i].GetRuleType()[0] == 'E' )
 		{
 			rc = true;
@@ -250,7 +252,7 @@ const bool CPlcStates::FindInputDevice( const int iDeviceNo, const int iIOChanne
 	return rc;
 }
 
-void CPlcStates::AddInputEvent( const int iDeviceNo, const int iIOChannel )
+void CPlcStates::AddInputEvent( const int iDeviceNo, const int iIOChannel, const int iValue )
 {
 	bool bFound = false;
 	int i;
@@ -262,17 +264,20 @@ void CPlcStates::AddInputEvent( const int iDeviceNo, const int iIOChannel )
 			bFound = true;
 			m_iInputDeviceNo[i] = iDeviceNo;
 			m_iInputIOChannel[i] = iIOChannel;
+			m_iInputValue[i] = iValue;
+
+			LogMessage( E_MSG_INFO, "AddInputEvent %d %d %d", iDeviceNo, iIOChannel, iValue );
 			break;
 		}
 	}
 
 	if ( !bFound )
 	{
-		LogMessage( E_MSG_ERROR, "PLC no empty slot for input event %d,%d", iDeviceNo, iIOChannel );
+		LogMessage( E_MSG_ERROR, "PLC no empty slot for input event %d,%d,%d", iDeviceNo, iIOChannel, iValue );
 	}
 }
 
-const int CPlcStates::ReadInputEvent( int& iDeviceNo, int& iIOChannel )
+const int CPlcStates::ReadInputEvent( int& iDeviceNo, int& iIOChannel, int& iValue )
 {
 	int iStateNo = 0;
 	int i;
@@ -286,9 +291,11 @@ const int CPlcStates::ReadInputEvent( int& iDeviceNo, int& iIOChannel )
 		{	// found a new event
 			iDeviceNo = m_iInputDeviceNo[i];
 			iIOChannel = m_iInputIOChannel[i];
+			iValue = m_iInputValue[i];
 
 			m_iInputDeviceNo[i] = 0;
 			m_iInputIOChannel[i] = 0;
+			m_iInputValue[i] = 0;
 			break;
 		}
 	}
@@ -299,9 +306,11 @@ const int CPlcStates::ReadInputEvent( int& iDeviceNo, int& iIOChannel )
 		{
 			m_iInputDeviceNo[i] = m_iInputDeviceNo[i+1];
 			m_iInputIOChannel[i] = m_iInputIOChannel[i+1];
+			m_iInputValue[i] = m_iInputValue[i+1];
 		}
 		m_iInputDeviceNo[i] = 0;
 		m_iInputIOChannel[i] = 0;
+		m_iInputValue[i] = 0;
 
 		// find the matching StateNo if this device.channel is valid for this state
 		for ( i = m_iActiveStateIdx; i < m_iStateCount; i++ )

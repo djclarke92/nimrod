@@ -159,7 +159,9 @@ if ( isset( $_POST['pl_DeviceNo']) )
 if ( isset( $_POST['pl_IOChannel']) )
     $pl_array['pl_IOChannel'] = $_POST['pl_IOChannel'];
 if ( isset( $_POST['pl_Value']) )
-    $pl_array['pl_Value'] = $_POST['pl_Value'];
+{
+    $pl_array['pl_Value'] = (intval($_POST['pl_Value']) != 0 ? $_POST['pl_Value'] * 10 : 0);
+}
 if ( isset( $_POST['pl_Test']) )
     $pl_array['pl_Test'] = $_POST['pl_Test'];
 if ( isset( $_POST['pl_NextStateName']) )
@@ -211,7 +213,7 @@ else if ( isset($_GET['StateNo']) )
             $pl_array['pl_RuleType'] = $info[0]['pl_RuleType'];
             $pl_array['pl_DeviceNo'] = $info[0]['pl_DeviceNo'];
             $pl_array['pl_IOChannel'] = $info[0]['pl_IOChannel'];
-            $pl_array['pl_Value'] = $info[0]['pl_Value'];
+            $pl_array['pl_Value'] = (intval($info[0]['pl_Value']) != 0 ? intval($info[0]['pl_Value']) / 10 : 0);
             $pl_array['pl_Test'] = $info[0]['pl_Test'];
             $pl_array['pl_NextStateName'] = $info[0]['pl_NextStateName'];
             $pl_array['pl_Order'] = $info[0]['pl_Order'];
@@ -253,6 +255,8 @@ else if ( isset($_POST['UpdateState']) || isset($_POST['NewState']) )
             $pl_array['pl_Test'], $pl_array['pl_NextStateName'], $pl_array['pl_Order'], $pl_array['pl_DelayTime'] ) )
         {	// success
             //func_clear_pl_array( $pl_array );
+            
+            $pl_array['pl_Value'] = (intval($pl_array['pl_Value']) != 0 ? $pl_array['pl_Value'] / 10 : 0);
             
             $pl_array['info_msg'] = "State details saved successfully.";
             $new_state = false;
@@ -457,7 +461,7 @@ if ( $pl_array['op_filter'] == "" )
                 else
                     printf( "<td>%s</td>", $state['pl_NextStateName'] );
                 
-                printf( "<td>%d</td>", $state['pl_Value'] );
+                printf( "<td>%s</td>", (intval($state['pl_Value']) != 0 ? sprintf( "%.1f", $state['pl_Value'] / 10) : "0") );
                 
                 printf( "<td>%s</td>", ($state['pl_StateIsActive'] == "Y" ? "Yes" : "") );
                 

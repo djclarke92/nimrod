@@ -186,7 +186,7 @@ static int callback_nimrod( struct lws *wsi, enum lws_callback_reasons reason, v
 				uzData = myWsi.GetMessage( idx, send_len );
 				if ( uzData != NULL )
 				{
-					LogMessage( E_MSG_INFO, "ws lws_write: len %d", send_len );
+					LogMessage( E_MSG_DEBUG, "ws lws_write: len %d", send_len );
 
 					bytes = lws_write( wsi, uzData, send_len, LWS_WRITE_TEXT );
 					if ( bytes < 0 )

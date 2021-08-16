@@ -5,8 +5,10 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <Preferences.h>  // WiFi storage
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
-
+// TODO: replace this with your own certificate
 const char* gszNimrodRootCA= \
 "-----BEGIN CERTIFICATE-----\n" \
 "MIIECTCCAvGgAwIBAgIULPJ1Z9nziVj6H0pcv4Sc981YAo8wDQYJKoZIhvcNAQEL\n" \
@@ -49,10 +51,19 @@ String gsGetPass;
 String gsMAC;
 Preferences gPrefStorage;
 
+// GPIO where the DS18B20 is connected to
+const int oneWireBus = 4;     
+
+// Setup a oneWire instance to communicate with any OneWire devices
+OneWire oneWire(oneWireBus);
+
+// Pass our oneWire reference to Dallas Temperature sensor 
+DallasTemperature sensors(&oneWire);
+
 
 // nimrod definitions
-#define NIMROD_PORT  54011
-#define NIMROD_IP  "192.168.0.1"   // connect to the nimrod host
+#define NIMROD_PORT  54011          // TODO: replace this with your own port number
+#define NIMROD_IP  "192.168.0.1"    // TODO: replace this with the IP address of your nimrod server
 #define PING_PERIOD   30
 #define MSG_LENGTH   22
 #define INPUT_1_PIN  25
@@ -64,14 +75,21 @@ Preferences gPrefStorage;
 #define OUTPUT_2_PIN  17
 #define OUTPUT_3_PIN  18
 #define OUTPUT_4_PIN  19
-#define OUTPUT_ON     1
-#define OUTPUT_OFF    0
+#define MAX_DEVICES   4
 String sEspName = "ESP000"; // default to 000 - nimrod will allocate a unique number for us
-int iLedState = 0;
-int iSocketConnected = -1;
-int iSecSinceLastSend = 0;
-int iSecSinceLastRecv = 0;
-int iLedTimer = 20;
+int giStartup = -1;
+int giButton1Changed = -1;
+int giButton2Changed = -1;
+int giButton3Changed = -1;
+int giButton4Changed = -1;
+int giLedState = 0;
+int giSocketConnected = -1;
+int giSecSinceLastSend = 0;
+int giSecSinceLastRecv = 0;
+int giSecSinceLastTemp[MAX_DEVICES] = { 0, 0, 0, 0 };
+int giLedTimer = 20;
+int giNumDevices = 0;
+int giTempCount = 0;
 int iOutput1Timer = -1;
 int iOutput2Timer = -1;
 int iOutput3Timer = -1;
@@ -80,23 +98,25 @@ int iOutput1Period = 10;  // seconds
 int iOutput2Period = 30;  // seconds
 int iOutput3Period = 30;  // seconds
 int iOutput4Period = 30;  // seconds
-int iOutput1State = OUTPUT_OFF;
-int iOutput2State = OUTPUT_OFF;
-int iOutput3State = OUTPUT_OFF;
-int iOutput4State = OUTPUT_OFF;
-int iBtn1Count = 0;
-int iBtn2Count = 0;
-int iBtn3Count = 0;
-int iBtn4Count = 0;
-int iBtn1LastCount = 0;
-int iBtn2LastCount = 0;
-int iBtn3LastCount = 0;
-int iBtn4LastCount = 0;
+int iOutput1State = LOW;
+int iOutput2State = LOW;
+int iOutput3State = LOW;
+int iOutput4State = LOW;
+int giBtn1Active = 0;
+int giBtn2Active = 0;
+int giBtn3Active = 0;
+int giBtn4Active = 0;
+unsigned long gulBtn1Time = 0;
+unsigned long gulBtn2Time = 0;
+unsigned long gulBtn3Time = 0;
+unsigned long gulBtn4Time = 0;
+float gfLastTemp[MAX_DEVICES] = { 0.0, 0.0, 0.0, 0.0 };
 hw_timer_t * timer1 = NULL;
 hw_timer_t * timer2 = NULL;
 hw_timer_t * timer3 = NULL;
 hw_timer_t * timer4 = NULL;
 WiFiClientSecure client;
+DeviceAddress wDeviceAddr;
 // end nimrod definitions
 
 void setup() 
@@ -104,8 +124,12 @@ void setup()
   Serial.begin(115200);
   Serial.printf("\nNimrod ESP32 starting\n");
 
+  // Start the DS18B20 sensor
+  sensors.begin();
+  
   nimrodSetup();
 
+  wifiInit();
 } 
 
 void loop() 
@@ -124,13 +148,17 @@ void loop()
       Serial.printf("Starting Wifi...\n" );
       
       WiFi.begin(gsPrefSSID.c_str(), gsPrefPassword.c_str());
-      ++giWiFiUpCount;
+      giWiFiUpCount += 1;
     }
     else if ( giWiFiUpCount > 200 )
     { // try again
       giWiFiUpCount = 0;
       
       Serial.printf("WiFi still not connected\n");
+    }
+    else
+    {
+      giWiFiUpCount += 1;
     }
   }  
 
@@ -167,21 +195,9 @@ void wifiInit()
   }
 
 
+  Serial.printf( "WiFi starting\n" );
   WiFi.begin(gsPrefSSID.c_str(), gsPrefPassword.c_str());
-
-  int WLcount = 0;
-  while (WiFi.status() != WL_CONNECTED && WLcount < 200)  
-  { // can take a couple of seconds
-    delay(100);
-    Serial.printf(".");
-    ++WLcount;
-    if ( (WLcount % 60) == 0 )  
-    { // keep from scrolling sideways forever
-      Serial.printf("\n");
-    }
-  }
-  
-  delay(3000);
+  giWiFiUpCount += 1;
 }  
 
 // match WiFi IDs in NVS to Pref store,  assumes WiFi.mode(WIFI_AP_STA);  was
@@ -261,9 +277,9 @@ void PrintIPinfo()
   gsMAC = getMacAddress();
 
   Serial.printf("SSID '%s', %d dbm\n", gsGetSsid.c_str(), giRssi );
-  Serial.printf("IP address: %s / %s\n", WiFi.localIP(), WiFi.subnetMask() );
-  Serial.printf("Gateway IP: %s\n", WiFi.gatewayIP() );
-  Serial.printf("DNS: %s\n", WiFi.dnsIP() );
+  Serial.printf("IP address: %s / %s\n", WiFi.localIP().toString().c_str(), WiFi.subnetMask().toString().c_str() );
+  Serial.printf("Gateway IP: %s\n", WiFi.gatewayIP().toString().c_str() );
+  Serial.printf("DNS: %s\n", WiFi.dnsIP().toString().c_str() );
   Serial.printf("MAC: %s\n", gsMAC.c_str() );
 }
 
@@ -371,32 +387,68 @@ String getSsidPass(String sKey)
 //**********************************************************************************************************
 
 // callbacks for button debounce
-void button1_cb()
-{
-  timerAlarmWrite( timer1, 50000, false );
-  timerAlarmEnable( timer1 );
-  iBtn1Count += 1;
+void IRAM_ATTR button1_cb()
+{ // delay 50msec
+  if ( giBtn1Active == 0 )
+  {
+    timerAlarmWrite( timer1, 50000, false );
+    timerAlarmEnable( timer1 );
+    giBtn1Active = 1;
+  }
 }
 
-void button2_cb()
+void IRAM_ATTR button2_cb()
 {
-//  timerAlarmWrite( timer2, 50000, false );
-//  timerAlarmEnable( timer2 );
-  iBtn2Count += 1;
+  if ( giBtn2Active == 0 )
+  {
+    timerAlarmWrite( timer2, 50000, false );
+    timerAlarmEnable( timer2 );
+    giBtn2Active = 1;
+  }
 }
 
-void button3_cb()
+void IRAM_ATTR button3_cb()
 {
-//  timerAlarmWrite( timer3, 50000, false );
-//  timerAlarmEnable( timer3 );
-  iBtn3Count += 1;
+  if ( giBtn3Active == 0 )
+  {
+    timerAlarmWrite( timer3, 50000, false );
+    timerAlarmEnable( timer3 );
+    giBtn3Active = 1;
+  }
 }
 
-void button4_cb()
+void IRAM_ATTR button4_cb()
 {
-//  timerAlarmWrite( timer4, 50000, false );
-//  timerAlarmEnable( timer4);
-  iBtn4Count += 1;
+  if ( giBtn4Active == 0 )
+  {
+    timerAlarmWrite( timer4, 50000, false );
+    timerAlarmEnable( timer4);
+    giBtn4Active = 1;
+  }
+}
+
+void IRAM_ATTR button1Changed()
+{
+  giButton1Changed = digitalRead(INPUT_1_PIN);
+  gulBtn1Time = millis();
+}
+
+void IRAM_ATTR button2Changed()
+{
+  giButton2Changed = digitalRead(INPUT_2_PIN);
+  gulBtn2Time = millis();
+}
+
+void IRAM_ATTR button3Changed()
+{
+  giButton3Changed = digitalRead(INPUT_3_PIN);
+  gulBtn3Time = millis();
+}
+
+void IRAM_ATTR button4Changed()
+{
+  giButton4Changed = digitalRead(INPUT_4_PIN);
+  gulBtn4Time = millis();
 }
 
 void nimrodSetup()
@@ -417,37 +469,54 @@ void nimrodSetup()
   attachInterrupt( INPUT_3_PIN, button3_cb, FALLING );
   attachInterrupt( INPUT_4_PIN, button4_cb, FALLING );
 
-  digitalWrite( OUTPUT_LED_PIN, OUTPUT_ON );
+  digitalWrite( OUTPUT_LED_PIN, HIGH );
   digitalWrite( OUTPUT_1_PIN, iOutput1State );
   digitalWrite( OUTPUT_2_PIN, iOutput2State );
   digitalWrite( OUTPUT_3_PIN, iOutput3State );
   digitalWrite( OUTPUT_4_PIN, iOutput4State ); 
 
-
+  // 80 prescale = 1 microsecond timer 
   timer1 = timerBegin(0, 80, true);
   timer2 = timerBegin(1, 80, true);
   timer3 = timerBegin(2, 80, true);
   timer4 = timerBegin(3, 80, true);
 
   timerAttachInterrupt( timer1, &button1Changed, false );
-  //timerAttachInterrupt( timer2, &button2Changed, false );
-  //timerAttachInterrupt( timer3, &button3Changed, false );
-  //timerAttachInterrupt( timer4, &button4Changed, false );
+  timerAttachInterrupt( timer2, &button2Changed, false );
+  timerAttachInterrupt( timer3, &button3Changed, false );
+  timerAttachInterrupt( timer4, &button4Changed, false );
 
   client.setCACert(gszNimrodRootCA);
 //  client.setCertificate(gszNimrodCertKey); // for client verification
 //  client.setPrivateKey(gszNimrodCert);  // for client verification
+
+  // print the device addresses
+  while ( sensors.getAddress( wDeviceAddr, giNumDevices) )
+  { 
+    giNumDevices += 1;
+    Serial.printf( "Found device with address %02x%02x%02x%02x%02x%02x%02x%02x\n",
+          wDeviceAddr[0], wDeviceAddr[1], wDeviceAddr[2], wDeviceAddr[3], 
+          wDeviceAddr[4], wDeviceAddr[5], wDeviceAddr[6], wDeviceAddr[7] );
+  }
+  Serial.printf( "NumDevices = %d\n", giNumDevices );
+  if ( giNumDevices > MAX_DEVICES )
+  {
+    Serial.printf( "Too many Devices = %d (was %d)\n", MAX_DEVICES, giNumDevices );    
+    giNumDevices = MAX_DEVICES;
+  }
 }
 
 
 // called form the main loop() function
 void nimrodLoop()
 {
+  unsigned long ulTimeNow = millis();
+  
   if ( client.connected() )
   { // socket is connected
     if ( client.available() == 8 )
     {
-      iSecSinceLastRecv = 0;
+      giSecSinceLastRecv = 0;
       Serial.printf( "msg is available, %d bytes\n", client.available() );
 
       int i;
@@ -466,53 +535,109 @@ void nimrodLoop()
 
 
   // flash the led
-  if ( iSocketConnected <= 0 )
+  if ( giSocketConnected <= 0 )
   { // wifi is disconnected
-    if ( iLedState == 0 )
-      digitalWrite( OUTPUT_LED_PIN, OUTPUT_ON );
+    if ( giLedState == 0 )
+      digitalWrite( OUTPUT_LED_PIN, HIGH );
     else
-      digitalWrite( OUTPUT_LED_PIN, OUTPUT_OFF );
+      digitalWrite( OUTPUT_LED_PIN, LOW );
   }
   else
   { // wifi is connected
-    if ( iLedTimer == 0 )
+    if ( giLedTimer == 0 )
     { // stop blinking the led after 30 seconds
-      digitalWrite( OUTPUT_LED_PIN, OUTPUT_OFF ) ; 
+      digitalWrite( OUTPUT_LED_PIN, LOW ) ; 
     }
-    else if ( iLedState == 0 or iLedState == 2 )
+    else if ( giLedState == 0 or giLedState == 2 )
     {
-      digitalWrite( OUTPUT_LED_PIN, OUTPUT_ON );
+      digitalWrite( OUTPUT_LED_PIN, HIGH );
     }
     else
     {
-      digitalWrite( OUTPUT_LED_PIN, OUTPUT_OFF );
+      digitalWrite( OUTPUT_LED_PIN, LOW );
     }
   }
-  
-  iLedState = iLedState + 1;
-  if ( iLedState >= 10 )
-  { // every second
-    iLedState = 0;
-    iSecSinceLastSend = iSecSinceLastSend + 1;
-    iSecSinceLastRecv = iSecSinceLastRecv + 1;
 
-    //Serial.printf("n\n" );
-    
-    // check wifi
-    if ( iSocketConnected == 1 )
+  if ( giButton1Changed == 0 )
+  {
+    buttonChanged(INPUT_1_PIN, giButton1Changed );
+    giButton1Changed = -1;
+  }
+  else if ( gulBtn1Time + 150 < ulTimeNow )
+  {
+    giBtn1Active = 0;
+  }
+  if ( giButton2Changed == 0 )
+  {
+    buttonChanged(INPUT_2_PIN, giButton2Changed);
+    giButton2Changed = -1;
+  }
+  else if ( gulBtn2Time + 150 < ulTimeNow )
+  {
+    giBtn2Active = 0;
+  }
+  if ( giButton3Changed == 0 )
+  {
+    buttonChanged(INPUT_3_PIN, giButton3Changed);
+    giButton3Changed = -1;
+  }
+  else if ( gulBtn3Time + 150 < ulTimeNow )
+  {
+    giBtn3Active = 0;
+  }
+  if ( giButton4Changed == 0 )
+  {
+    buttonChanged(INPUT_4_PIN, giButton4Changed);
+    giButton4Changed = -1;
+  }
+  else if ( gulBtn4Time + 150 < ulTimeNow )
+  {
+    giBtn4Active = 0;
+  }
+  
+  SetStartupOutputs();
+
+  giLedState += 1;
+  if ( giLedState >= 10 )
+  { // every second
+    giLedState = 0;
+    giSecSinceLastSend += 1;
+    giSecSinceLastRecv += 1;
+    for ( int i = 0; i < MAX_DEVICES; i++ )
     {
+      giSecSinceLastTemp[i] += 1;
+    }
+
+    // check wifi
+    if ( giSocketConnected == 1 )
+    {
+      giTempCount += 1;
+      if ( giTempCount >= 5 )
+      {
+        giTempCount = 0;
+        ReadTemperatures();
+      }
+    
       if ( WiFi.status() != WL_CONNECTED )
       {
-        iSocketConnected = -1;
-        iLedTimer = 20;
+        giSocketConnected = -1;
+        giLedTimer = 20;
       }
-      else if ( iLedTimer > 0 )
+      else if ( giLedTimer > 0 )
       {
-        iLedTimer = iLedTimer - 1;
+        giLedTimer -= 1;
       }
     }
     else if ( giWFstatus == WL_CONNECTED )
     { // try to connect our socket
+      if ( giStartup > 0 )
+      {
+        giStartup = 0;
+        SetStartupOutputs();
+      }
+      
+      PrintIPinfo();
+      
       Serial.printf( "Try to connect the socket\n" );
       if (!client.connect(NIMROD_IP, NIMROD_PORT)) 
       {
@@ -520,7 +645,7 @@ void nimrodLoop()
       }
       else
       {
-        iSocketConnected = 1;
+        giSocketConnected = 1;
       
         Serial.printf( "Connected to %s:%d\n", NIMROD_IP, NIMROD_PORT );
   
@@ -528,49 +653,30 @@ void nimrodLoop()
         // 01234567890123456789
         // ESP001CLK1
         // ESPxxxCIDyyyyyyyy
-        sprintf( szMsg, "%sCID%02x%02x%02x%02x%02x%02x", sEspName, gsMAC[0], gsMAC[1], gsMAC[2], gsMAC[3], gsMAC[4], gsMAC[5] );
+        sprintf( szMsg, "%sCID%c%c%c%c%c%c%c%c%c%c%c%c", sEspName, gsMAC[0], gsMAC[1], gsMAC[3], gsMAC[4], gsMAC[6], gsMAC[7],
+            gsMAC[9], gsMAC[10], gsMAC[12], gsMAC[13], gsMAC[15], gsMAC[16] );
         socket_send( szMsg );
       }      
     }
 
     
-    if ( iSocketConnected == 1 )
+    if ( giSocketConnected == 1 )
     {
-      if ( iSecSinceLastRecv >= PING_PERIOD+5 )  
+      if ( giSecSinceLastRecv >= PING_PERIOD+5 )  
       { // socket is dead
-        iSecSinceLastRecv = 0;
+        giSecSinceLastRecv = 0;
         
         Serial.printf( "socket is dead\n" );
         client.stop();
-        iSocketConnected = -1;
+        giSocketConnected = -1;
       }
-      else if ( iSecSinceLastSend >= PING_PERIOD )
+      else if ( giSecSinceLastSend >= PING_PERIOD )
       { // send a ping
         char szMsg[MSG_LENGTH+1];
         sprintf( szMsg, "%sPG", sEspName );
         socket_send( szMsg );
       }
 
-      if ( iBtn1Count != iBtn1LastCount )
-      {
-        iBtn1LastCount = iBtn1Count;
-        Serial.printf( "Btn1Count %d\n", iBtn1Count );
-      }
-      if ( iBtn2Count != iBtn2LastCount )
-      {
-        iBtn2LastCount = iBtn2Count;
-        Serial.printf( "Btn2Count %d\n", iBtn2Count );
-      }
-      if ( iBtn3Count != iBtn3LastCount )
-      {
-        iBtn3LastCount = iBtn3Count;
-        Serial.printf( "Btn3Count %d\n", iBtn3Count );
-      }
-      if ( iBtn4Count != iBtn4LastCount )
-      {
-        iBtn4LastCount = iBtn4Count;
-        Serial.printf( "Btn4Count %d\n", iBtn4Count );
-      }
     }
     
     
@@ -583,7 +689,7 @@ void nimrodLoop()
       { // expired, turn off output
         Serial.printf( "output 1 now off\n" );
         iOutput1Timer = -1;
-        iOutput1State = OUTPUT_OFF;
+        iOutput1State = LOW;
         digitalWrite( OUTPUT_1_PIN, iOutput1State );
       }
     }
@@ -596,7 +702,7 @@ void nimrodLoop()
       { // expired, turn off output
         Serial.printf( "output 2 now off\n" );
         iOutput2Timer = -1;
-        iOutput2State = OUTPUT_OFF;
+        iOutput2State = LOW;
         digitalWrite( OUTPUT_2_PIN, iOutput2State );
       }
     }
@@ -609,7 +715,7 @@ void nimrodLoop()
       { // expired, turn off output
         Serial.printf( "output 3 now off\n" );
         iOutput3Timer = -1;
-        iOutput3State = OUTPUT_OFF;
+        iOutput3State = LOW;
         digitalWrite( OUTPUT_3_PIN, iOutput3State );
       }
     }
@@ -622,13 +728,82 @@ void nimrodLoop()
       { // expired, turn off output
         Serial.printf( "output 4 now off\n" );
         iOutput4Timer = -1;
-        iOutput4State = OUTPUT_OFF;
+        iOutput4State = LOW;
         digitalWrite( OUTPUT_4_PIN, iOutput4State );
       }
     }
     
   }
       
+}
+
+// read temperature every 5 seconds
+void ReadTemperatures()
+{
+  if ( giNumDevices > 0 )
+  {
+    sensors.requestTemperatures(); 
+
+    for ( int i = 0; i < giNumDevices; i++ )
+    {
+      float fTempC = sensors.getTempCByIndex(i);
+      if ( fabs(gfLastTemp[i] - fTempC) >= 0.5 || giSecSinceLastTemp[i] >= 60 )
+      { // send our temperature
+        char szMsg[MSG_LENGTH+1];
+        // 01234567890123456789
+        // ESP001CLK1
+        // ESP001TMPn:xx.x
+        // ESPxxxCIDyyyyyyyy
+        sprintf( szMsg, "%sTMP%d:%.1f", sEspName, i+1, fTempC );
+        socket_send( szMsg );      
+
+        giSecSinceLastTemp[i] = 0;
+      }
+      gfLastTemp[i] = fTempC;
+    }
+  }
+}
+
+void SetStartupOutputs()
+{
+  if ( giStartup == 0 )
+  {
+    giStartup = -2;
+    digitalWrite( OUTPUT_1_PIN, LOW );  
+    digitalWrite( OUTPUT_2_PIN, LOW );  
+    digitalWrite( OUTPUT_3_PIN, LOW );  
+    digitalWrite( OUTPUT_4_PIN, LOW );  
+
+  }
+  else
+  {
+    switch ( giStartup )
+    {
+    default:
+      break;
+    case -1:
+    case 1:
+      digitalWrite( OUTPUT_1_PIN, HIGH );
+      digitalWrite( OUTPUT_4_PIN, LOW );
+      giStartup = 2;
+      break;
+    case 2:
+      digitalWrite( OUTPUT_2_PIN, HIGH );
+      digitalWrite( OUTPUT_1_PIN, LOW );
+      giStartup = 3;
+      break;
+    case 3:
+      digitalWrite( OUTPUT_3_PIN, HIGH );
+      digitalWrite( OUTPUT_2_PIN, LOW );
+      giStartup = 4;
+      break;
+    case 4:
+      digitalWrite( OUTPUT_4_PIN, HIGH );
+      digitalWrite( OUTPUT_3_PIN, LOW );
+      giStartup = 1;
+      break;
+    }
+  }
 }
 
 void socket_send( char* msg )
@@ -642,44 +817,23 @@ void socket_send( char* msg )
 
   client.print( msg );
   
-  iSecSinceLastSend = 0;
+  giSecSinceLastSend = 0;
 }
 
-void button1Changed()
-{
-  buttonChanged(INPUT_1_PIN);
-}
-
-void button2Changed()
-{
-  buttonChanged(INPUT_2_PIN);
-}
-
-void button3Changed()
-{
-  buttonChanged(INPUT_3_PIN);
-}
-
-void button4Changed()
-{
-  buttonChanged(INPUT_4_PIN);
-}
-
-void buttonChanged( int pin )
+void buttonChanged( int pin, int val )
 {
   char szMsg[MSG_LENGTH+1];
   
-  int val = digitalRead(pin);
   
-  iLedTimer = 20;
+  giLedTimer = 20;
   Serial.printf("Pin %d val now %d\n", pin, val );
   
-  if ( val == 0 )
+  if ( val != 0 )
   { // do nothing
   }
   else if ( pin == INPUT_1_PIN )
   { // button 1 is pressed
-    if  ( iSocketConnected > 0 )
+    if  ( giSocketConnected > 0 )
     {
       Serial.printf( "send CLK1\n" );
       sprintf( szMsg, "%sCLK1", sEspName );
@@ -687,7 +841,7 @@ void buttonChanged( int pin )
     }
     else
     {
-      if ( iOutput1State == OUTPUT_OFF )
+      if ( iOutput1State == LOW )
         activate_output2( 1, iOutput1Period );
       else
         activate_output2( 1, 0 );
@@ -695,7 +849,7 @@ void buttonChanged( int pin )
   }    
   else if ( pin == INPUT_2_PIN )
   { // button 2 is pressed
-    if ( iSocketConnected > 0 )
+    if ( giSocketConnected > 0 )
     {
       Serial.printf( "send CLK2\n" );
       sprintf( szMsg, "%sCLK2", sEspName );
@@ -703,7 +857,7 @@ void buttonChanged( int pin )
     }
     else
     {
-      if ( iOutput2State == OUTPUT_OFF )
+      if ( iOutput2State == LOW )
         activate_output2( 2, iOutput2Period );
       else
         activate_output2( 2, 0 );
@@ -711,7 +865,7 @@ void buttonChanged( int pin )
   }
   else if ( pin == INPUT_3_PIN )
   { // button 3 is pressed
-    if ( iSocketConnected > 0 )
+    if ( giSocketConnected > 0 )
     {
       Serial.printf( "send CLK3\n" );
       sprintf( szMsg, "%sCLK3", sEspName );
@@ -719,7 +873,7 @@ void buttonChanged( int pin )
     }
     else
     {
-      if ( iOutput3State == OUTPUT_OFF )
+      if ( iOutput3State == LOW )
         activate_output2( 3, iOutput3Period );
       else
         activate_output2( 3, 0 );
@@ -727,7 +881,7 @@ void buttonChanged( int pin )
   }
   else if ( pin == INPUT_4_PIN )
   { //  button 4 is pressed
-    if ( iSocketConnected > 0 )
+    if ( giSocketConnected > 0 )
     {
       Serial.printf( "send CLK4\n" );
       sprintf( szMsg, "%sCLK4", sEspName );
@@ -735,7 +889,7 @@ void buttonChanged( int pin )
     }
     else
     {
-      if ( iOutput4State == OUTPUT_OFF )
+      if ( iOutput4State == LOW )
         activate_output2( 4, iOutput4Period );
       else
         activate_output2( 4, 0 );
@@ -776,12 +930,12 @@ void activate_output2( int iOutput, int iPeriod )
     if ( iPeriod == 0 )
     { // turn off
       iOutput1Timer = -1;
-      iOutput1State = OUTPUT_OFF;
+      iOutput1State = LOW;
     }   
     else
     {
       iOutput1Period = iPeriod;
-      iOutput1State = OUTPUT_ON;
+      iOutput1State = HIGH;
         
       if ( iOutput1Timer < 0 )
         iOutput1Timer = iOutput1Period;
@@ -797,12 +951,12 @@ void activate_output2( int iOutput, int iPeriod )
     if ( iPeriod == 0 )
     { // turn off
       iOutput2Timer = -1;
-      iOutput2State = OUTPUT_OFF;
+      iOutput2State = LOW;
     }
     else
     {
       iOutput2Period = iPeriod;
-      iOutput2State = OUTPUT_ON;
+      iOutput2State = HIGH;
         
       if ( iOutput2Timer < 0 )
         iOutput2Timer = iOutput2Period;
@@ -818,12 +972,12 @@ void activate_output2( int iOutput, int iPeriod )
     if ( iPeriod == 0 )
     { // turn off
       iOutput3Timer = -1;
-      iOutput3State = OUTPUT_OFF;
+      iOutput3State = LOW;
     }
     else
     {
       iOutput3Period = iPeriod;
-      iOutput3State = OUTPUT_ON;
+      iOutput3State = HIGH;
         
       if ( iOutput3Timer < 0 )
         iOutput3Timer = iOutput3Period;
@@ -839,12 +993,12 @@ void activate_output2( int iOutput, int iPeriod )
     if ( iPeriod == 0 )
     { // turn off
       iOutput4Timer = -1;
-      iOutput4State = OUTPUT_OFF;
+      iOutput4State = LOW;
     }
     else
     {
       iOutput4Period = iPeriod;
-      iOutput4State = OUTPUT_ON;
+      iOutput4State = HIGH;
         
       if ( iOutput4Timer < 0 )
         iOutput4Timer = iOutput4Period;

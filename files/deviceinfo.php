@@ -114,12 +114,12 @@ function func_check_di_array(&$di_array)
     } else if (($di_array['di_IOType'] == E_IO_VOLT_HIGHLOW || $di_array['di_IOType'] == E_IO_VOLT_HIGH || $di_array['di_IOType'] == E_IO_VOLT_LOW || 
         $di_array['di_IOType'] == E_IO_VOLT_MONITOR || $di_array['di_IOType'] == E_IO_VOLT_DAYNIGHT) && 
         $di_array['di_CalcFactor'] === "" ) {
-        $di_array['error_msg'] = "You must enter a Calculation Factor > 0.";
+        $di_array['error_msg'] = "You must enter a Calculation Factor >= 0.";
         return false;
     } else if ($di_array['di_IOType'] == E_IO_ON_TIMER && $di_array['di_Weekdays'] == "NNNNNNN") {
         $di_array['error_msg'] = "Timer inputs must trigger on at least one day of the week.";
         return false;
-    } else if ($di_array['di_AnalogType'] == "A" && $di_array['di_Offset'] == 0.0) {
+    } else if ($di_array['di_AnalogType'] == "A" && $di_array['di_Offset'] == "") {
         $di_array['error_msg'] = "Analog sensors require an Offset voltage";
         return false;
     } else if ($di_array['di_MonitorPos1'] != "" && (strlen($di_array['di_MonitorPos1']) != 3 || !func_MonPosChar1Valid($di_array['di_MonitorPos1']) || !func_MonPosChar2Valid($di_array['di_MonitorPos1']) || !func_MonPosChar3Valid($di_array['di_MonitorPos1']))) {
@@ -164,6 +164,12 @@ function func_check_di_array(&$di_array)
         floatval($di_array['di_MonitorLo']) > floatval($di_array['di_MonitorHi']) )
     {
         $di_array['error_msg'] = "The 'Monitor Low' value must be lower than the 'Monitor High' value";
+        return false;
+    }
+    else if ( ($di_array['di_IOType'] == E_IO_ROTENC_LOW || $di_array['di_IOType'] == E_IO_ROTENC_LOW || $di_array['di_IOType'] == E_IO_ROTENC_HIGHLOW || $di_array['di_IOType'] == E_IO_ROTENC_MONITOR) && 
+        strlen($di_array['di_CalcFactor']) == 0 )
+    {
+        $di_array['error_msg'] = "The 'Calc Factor' value must be entered for Rotary Encoders.";
         return false;
     }
     
@@ -215,11 +221,11 @@ function func_get_dir($type, &$sdir)
             break;
         case E_IO_VOLT_MONITOR:
             $dir = 0;
-            $sdir = "V.Mon";
+            $sdir = "Volt.Mon";
             break;
         case E_IO_LEVEL_MONITOR:
             $dir = 0;
-            $sdir = "L.Mon";
+            $sdir = "Lvl.Mon";
             break;
         case E_IO_LEVEL_HIGH:
             $dir = 0;
@@ -232,6 +238,74 @@ function func_get_dir($type, &$sdir)
         case E_IO_LEVEL_HIGHLOW:
             $dir = 0;
             $sdir = "Lvl.H/L";
+            break;
+        case E_IO_ROTENC_MONITOR:
+            $dir = 0;
+            $sdir = "RE.Mon";
+            break;
+        case E_IO_ROTENC_HIGH:
+            $dir = 0;
+            $sdir = "RE.H";
+            break;
+        case E_IO_ROTENC_LOW:
+            $dir = 0;
+            $sdir = "RE.L";
+            break;
+        case E_IO_ROTENC_HIGHLOW:
+            $dir = 0;
+            $sdir = "RE.H/L";
+            break;
+        case E_IO_CURRENT_MONITOR:
+            $dir = 0;
+            $sdir = "Amps.Mon";
+            break;
+        case E_IO_CURRENT_HIGH:
+            $dir = 0;
+            $sdir = "Amps.H";
+            break;
+        case E_IO_CURRENT_LOW:
+            $dir = 0;
+            $sdir = "Amps.L";
+            break;
+        case E_IO_CURRENT_HIGHLOW:
+            $dir = 0;
+            $sdir = "Amps.H/L";
+            break;
+        case E_IO_POWER_MONITOR:
+            $dir = 0;
+            $sdir = "Pwr.Mon";
+            break;
+        case E_IO_POWER_HIGH:
+            $dir = 0;
+            $sdir = "Pwr.H";
+            break;
+        case E_IO_POWER_LOW:
+            $dir = 0;
+            $sdir = "Pwr.L";
+            break;
+        case E_IO_POWER_HIGHLOW:
+            $dir = 0;
+            $sdir = "Pwr.H/L";
+            break;
+        case E_IO_FREQ_MONITOR:
+            $dir = 0;
+            $sdir = "Freq.Mon";
+            break;
+        case E_IO_FREQ_HIGH:
+            $dir = 0;
+            $sdir = "Freq.H";
+            break;
+        case E_IO_FREQ_LOW:
+            $dir = 0;
+            $sdir = "Freq.L";
+            break;
+        case E_IO_FREQ_HIGHLOW:
+            $dir = 0;
+            $sdir = "Freq.H/L";
+            break;
+        case E_IO_PWRFACT_MONITOR:
+            $dir = 0;
+            $sdir = "PwrFact.H/L";
             break;
     }
     
@@ -463,12 +537,15 @@ else if (isset($_POST['NewDeviceInfo']) || isset($_POST['UpdateDeviceInfo']))
             $addr_filter = $di_array['addr_filter'];
             $dir_filter = $di_array['dir_filter'];
             
-            $new_deviceinfo = false;
             func_clear_di_array($di_array);
-            
-            $di_array['info_msg'] = "New deviceinfo saved successfully.";
+        
+            if ( $new_deviceinfo )
+                $di_array['info_msg'] = "New deviceinfo saved successfully.";
+            else
+                $di_array['info_msg'] = "Deviceinfo updated successfully.";
             $di_array['addr_filter'] = $addr_filter;
             $di_array['dir_filter'] = $dir_filter;
+            $new_deviceinfo = false;
         } 
         else 
         {
@@ -784,25 +861,13 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		printf("<select class='custom-select' size='1' name='di_IOType' id='di_IOType' onChange='ioTypeChange();'>");
-    		printf("<option> ");
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_ON_OFF ? "selected" : ""), E_IOD_ON_OFF);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_ON_TIMER ? "selected" : ""), E_IOD_ON_TIMER);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TOGGLE ? "selected" : ""), E_IOD_TOGGLE);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_ON_OFF_TIMER ? "selected" : ""), E_IOD_ON_OFF_TIMER);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_OUTPUT ? "selected" : ""), E_IOD_OUTPUT);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TEMP_HIGHLOW ? "selected" : ""), E_IOD_TEMP_HIGHLOW);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TEMP_HIGH ? "selected" : ""), E_IOD_TEMP_HIGH);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TEMP_LOW ? "selected" : ""), E_IOD_TEMP_LOW);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_TEMP_MONITOR ? "selected" : ""), E_IOD_TEMP_MONITOR);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_HIGHLOW ? "selected" : ""), E_IOD_VOLT_HIGHLOW);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_HIGH ? "selected" : ""), E_IOD_VOLT_HIGH);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_LOW ? "selected" : ""), E_IOD_VOLT_LOW);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_MONITOR ? "selected" : ""), E_IOD_VOLT_MONITOR);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_VOLT_DAYNIGHT ? "selected" : ""), E_IOD_VOLT_DAYNIGHT);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_LEVEL_MONITOR ? "selected" : ""), E_IOD_LEVEL_MONITOR);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_LEVEL_HIGH ? "selected" : ""), E_IOD_LEVEL_HIGH);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_LEVEL_LOW ? "selected" : ""), E_IOD_LEVEL_LOW);
-    		printf("<option %s>%s", ($di_array['di_IOType'] == E_IO_LEVEL_HIGHLOW ? "selected" : ""), E_IOD_LEVEL_HIGHLOW);
+    		printf("<option></option>");
+    		$e_io = 0;
+    		foreach ( $_SESSION['E_IOD'] as $e_iod )
+    		{
+    		    printf("<option %s>%s</option>", ($di_array['di_IOType'] == $e_io ? "selected" : ""), $e_iod );
+    		    $e_io += 1;
+    		}
     		printf("</select>");
     		printf( "</div>" );
     		printf( "</div>" );
@@ -858,6 +923,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf("<option></option>");
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "V" ? "selected" : ""), "V. Voltage");
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "A" ? "selected" : ""), "A. Current");
+    		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "W" ? "selected" : ""), "W. Power");
+    		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "F" ? "selected" : ""), "F. Frequency");
     		printf("</select>");
     		printf( "</div>" );
     		printf( "</div>" );
@@ -884,7 +951,9 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_CalcFactor'>Calc Factor: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		$tip = sprintf( "The Modbus devices only measure 0-10V directly, so if you are measuring 100V via a 10:1 divider the calc factor would be 10.0<br>For Level devices the Calc Factor is the max water level in mm." );
+    		$tip = sprintf( "Analog Voltage devices only measure 0-10V directly, so if you are measuring 100V via a 10:1 divider the calc factor would be 10.0<br>" );
+    		$tip .= sprintf( "For Level devices the Calc Factor is the max water level in mm.<br>" );
+    		$tip .= sprintf( "For Rotary Encoders the Calc Factor is the distance in mm for one rotation." );
     		printf( "<input type='text' class='form-control' name='di_CalcFactor' id='di_CalcFactor' size='5' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $di_array['di_CalcFactor'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );
@@ -894,7 +963,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_Offset'>Offset Voltage: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		$tip = sprintf( "For Analog Current the Offest is the 0Amp voltage, e.g. 2.49V. For Level devices the Offset is the sensor height above the max level." );
+    		$tip = sprintf( "For Analog Current the Offest is the 0 Amp voltage, e.g. 2.49V.<br>For Level devices the Offset is the sensor height above the max level." );
     		printf( "<input type='text' class='form-control' name='di_Offset' id='di_Offset' size='5' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $di_array['di_Offset'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );

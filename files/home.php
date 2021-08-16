@@ -93,7 +93,7 @@ function func_get_graph_datetime()
 	}
 }
 
-function func_get_graph_devices( $temperatures, $voltages, $levels )
+function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies )
 {
     $g_devices = array();
     foreach ( $_SESSION['GraphDevices'] as $gg )
@@ -125,6 +125,42 @@ function func_get_graph_devices( $temperatures, $voltages, $levels )
         if ( $found == false )
         {
             foreach ( $levels as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            foreach ( $currents as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            foreach ( $powers as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            foreach ( $frequencies as $tt )
             {
                 if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
                 {
@@ -279,6 +315,8 @@ else if ( $delete_all_event_no != 0 )
 else if ( isset($_GET['ClearGraph']) )
 {
     $_SESSION['GraphDevices'] = array();
+    $_SESSION['GStartDate'] == "";
+    $_SESSION['GStartTime'] == "";
 }
 else if ( isset($_GET['CurrentGraph']) )
 {
@@ -313,6 +351,9 @@ $datetime = func_get_graph_datetime();
 $temperatures = $db->GetLatestTemperatures( $_SESSION['GraphHours'], $datetime );
 $voltages = $db->GetLatestVoltages( $_SESSION['GraphHours'], $datetime );
 $levels = $db->GetLatestLevels( $_SESSION['GraphHours'], $datetime );
+$currents = $db->GetLatestCurrents( $_SESSION['GraphHours'], $datetime );
+$powers = $db->GetLatestPowers( $_SESSION['GraphHours'], $datetime );
+$frequencies = $db->GetLatestFrequencies( $_SESSION['GraphHours'], $datetime );
 
 $db_size = $db->GetDatabaseSize();
 
@@ -454,32 +495,59 @@ foreach ( $camera_list as $camera )
               </tr>
             </thead>
     
-    		<?php         
-            foreach ( $voltages as $tt )
-            {
-                $val = 0;
-                if ( count($tt['data']) > 0 )
-                    $val = func_calc_voltage( $tt['data'][count($tt['data'])-1]['ev_Value'], $tt['di_AnalogType'] );
-                $class = "";
-                if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
-                    $class = "table-danger";
-                printf( "<tr class='%s'>", $class );
-            	printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-            	printf( "<td>%s%s</td>", $val, $tt['di_AnalogType'] );
-            	if ( count($tt['data']) > 0 )
-                	printf( "<td><div class='timestamp text-nowrap'>%s</div></td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
-            	else
-            	    printf( "<td><div class='timestamp text-nowrap'>?</div></td>" );
-            	
-            	$img = "&nbsp;&nbsp;&nbsp;";
-            	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
-            	{
-            		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
-            	}
-            	printf( "<td>%s</td>", $img );
-            	
-            	printf( "</tr>" );
-            }
+    		<?php
+    		$datalist = array( $voltages, $currents, $powers, $frequencies );
+    		foreach ( $datalist as $dtype )
+    		{
+    		    if ( count($dtype) > 0 )
+    		    {
+                    foreach ( $dtype as $tt )
+                    {
+                        $units = "";
+                        $val = 0;
+                        if ( count($tt['data']) > 0 )
+                        {
+                            $units = $tt['di_AnalogType'];
+                            switch ( $tt['di_AnalogType'] )
+                            {
+                            default:
+                            case 'V':
+                                $val = func_calc_voltage( $tt['data'][count($tt['data'])-1]['ev_Value'], $tt['di_AnalogType'] );
+                                break;
+                            case 'A':
+                                $val = func_calc_current( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                                break;
+                            case 'W':
+                                $val = func_calc_power( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                                break;
+                            case 'F':
+                                $units = "Hz";
+                                $val = func_calc_frequency( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                                break;
+                            }
+                        }
+                        $class = "";
+                        if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
+                            $class = "table-danger";
+                        printf( "<tr class='%s'>", $class );
+                    	printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
+                    	printf( "<td>%s%s</td>", $val, $units );
+                    	if ( count($tt['data']) > 0 )
+                        	printf( "<td><div class='timestamp text-nowrap'>%s</div></td>", func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+                    	else
+                    	    printf( "<td><div class='timestamp text-nowrap'>?</div></td>" );
+                    	
+                    	$img = "&nbsp;&nbsp;&nbsp;";
+                    	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
+                    	{
+                    		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
+                    	}
+                    	printf( "<td>%s</td>", $img );
+                    	
+                    	printf( "</tr>" );
+                    }
+                }
+    		}
             ?>
             
             </table>
@@ -618,10 +686,13 @@ foreach ( $camera_list as $camera )
         $temperatures = $db->GetLatestTemperatures( $_SESSION['GraphHours'], $datetime );
         $voltages = $db->GetLatestVoltages( $_SESSION['GraphHours'], $datetime );
         $levels = $db->GetLatestLevels( $_SESSION['GraphHours'], $datetime );
+        $currents = $db->GetLatestCurrents( $_SESSION['GraphHours'], $datetime );
+        $powers = $db->GetLatestPowers( $_SESSION['GraphHours'], $datetime );
+        $frequencies = $db->GetLatestFrequencies( $_SESSION['GraphHours'], $datetime );
         
-        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels );
+        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies );
         
-        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $g_devices );
+        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $g_devices );
         func_draw_graph_div( true, "graphdiv", 1, $alert_width, $graph_bgcolor, $alert_okcolor, $alert_ngcolor, $g_data );
         func_create_graph( $g_data, "graphdiv" );
         ?>

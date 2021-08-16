@@ -83,8 +83,8 @@ void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... )
 	va_end( args );
 
 	// log to stdout as well
-	fprintf( stdout, szBuf );
-	fprintf( stdout, "\n" );
+	//fprintf( stdout, szBuf );
+	//fprintf( stdout, "\n" );
 
 	// write to our log file
 	snprintf( szLogFile, sizeof(szLogFile), "%s/nimrod.log", gszLogDir );

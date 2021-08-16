@@ -25,7 +25,7 @@
 #include <openssl/err.h>
 #include <openssl/tls1.h>
 #include <openssl/ssl.h>
-
+#include <mysql/mysql.h>
 #include <modbus/modbus.h>
 #include "mb_devices.h"
 #include "mb_thread.h"
@@ -49,6 +49,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_pbThreadRunning = pbThreadRunning;
 	m_pbAllDevicesDead = pbAllDevicesDead;
 
+	m_tThreadStartTime = time(NULL);
 	m_tConfigTime = time(NULL);
 	m_tPlcStatesTime = 0;
 	m_tLastConfigCheck = time(NULL);
@@ -203,15 +204,19 @@ void CThread::Worker()
 	time_t tLastTemperatureCheck = 0;
 	time_t tLastVoltageCheck = 0;
 	time_t tLastLevelCheck = 0;
+	time_t tLastRotEncCheck = 0;
+	time_t tLastVIPFCheck = 0;
 	time_t tTimenow;
 	time_t tUpdated;
 	time_t tAllDeadStart = 0;
 	time_t tLastLevelK02Prompt = 0;
 	time_t tLastTimerDeviceCheck = 0;
+	time_t tLastCurlCheckTime = 0;
 	const char* pszCertFile = "/home/nimrod/nimrod-cert.pem";
 	const char* pszKeyFile = "/home/nimrod/nimrod-cert.key";
 	struct tm tm;
 	struct timeval old_response_to_tv;
+	struct timeval response_to_tv;
 	CMysql myDB;
 
 
@@ -233,6 +238,23 @@ void CThread::Worker()
 		LoadCertificates( m_sslServerCtx, pszCertFile, pszKeyFile );
 
 		CreateListenerSocket();
+
+		// mark all ESP devices as being suspect
+		for ( idx = 0; idx < MAX_DEVICES; idx++ )
+		{
+			if ( strncmp( m_pmyDevices->GetComPort(idx), "ESP", 3 ) == 0 )
+			{
+				LogMessage( E_MSG_INFO, "Marking ESP device '%s' as SUSPECT", m_pmyDevices->GetDeviceName(idx) );
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_SUSPECT ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				}
+			}
+			else if ( m_pmyDevices->GetComPort(idx)[0] == '\0' )
+			{	// end of list
+				break;
+			}
+		}
 	}
 
 	if ( IsTimerThread() )
@@ -351,8 +373,12 @@ void CThread::Worker()
 						pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
 
 						// only run the cleanup on the primary nimrod pi
-						// TODO: what if primary hostname is not nimrod ?
-						if ( iDayMinutes == 71 && IsMyHostname( "nimrod" ) )
+						char szHostname[50] = "nimrod";
+						if ( strlen(m_pmyDevices->GetDeviceHostname(0)) > 0 )
+						{	// assume the first device runs on the primary host
+							snprintf( szHostname, sizeof(szHostname), "%s", m_pmyDevices->GetDeviceHostname(0) );
+						}
+						if ( iDayMinutes == 71 && IsMyHostname( szHostname ) )
 						{	// delete events table records at 01:11am each day (60 + 11 = 71 minutes)
 							myDB.CleanupEventsTable();
 						}
@@ -368,6 +394,20 @@ void CThread::Worker()
 				}
 
 				GetCameraSnapshots( myDB, m_CameraList );
+			}
+
+			if ( tLastCurlCheckTime + 60 <= time(NULL) )
+			{
+				char szCmd[256];
+				//snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 http://flatcatit.co.nz/helo-nimrod/$HOSTNAME > /dev/null &" );
+				LogMessage( E_MSG_INFO, "Running '%s'", szCmd );
+				int rc = system( szCmd );
+				if ( rc != 0 )
+				{
+					LogMessage( E_MSG_INFO, "curl helo-nimrod returned %d", rc );
+				}
+
+				tLastCurlCheckTime = time(NULL);
 			}
 
 			ProcessPlcStates( myDB, m_pmyPlcStates );
@@ -429,9 +469,17 @@ void CThread::Worker()
 					{	// Save original timeout
 						bPrintedTO = true;
 #if LIBMODBUS_VERSION_CHECK(3,1,0)
+						response_to_tv.tv_sec = 0;
+						response_to_tv.tv_usec = 300000;
+						modbus_set_response_timeout(ctx, (uint32_t)&response_to_tv.tv_sec, (uint32_t)&response_to_tv.tv_usec );
+
 						modbus_get_response_timeout( ctx, (uint32_t*)&old_response_to_tv.tv_sec, (uint32_t*)&old_response_to_tv.tv_usec );
 						LogMessage( E_MSG_INFO, "Response timeout ctx %p is %u.%06u usec", ctx, old_response_to_tv.tv_sec, old_response_to_tv.tv_usec );
 #else
+						response_to_tv.tv_sec = 0;
+						response_to_tv.tv_usec = 300000;
+						modbus_set_response_timeout(ctx, &response_to_tv);
+
 						modbus_get_response_timeout( ctx, &old_response_to_tv );
 						LogMessage( E_MSG_INFO, "Response timeout ctx %p is %u.%06u usec", ctx, old_response_to_tv.tv_sec, old_response_to_tv.tv_usec );
 #endif
@@ -462,10 +510,28 @@ void CThread::Worker()
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HDL )
 					{
 						if ( tLastLevelCheck + LEVEL_CHECK_PERIOD <= time(NULL) )
-						{	// only check voltage devices every 5 seconds
+						{	// only check level devices every 5 seconds
 							tLastLevelCheck = time(NULL);
 
 							HandleHdlLevelDevice( myDB, ctx, idx, bAllDead );
+						}
+					}
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_ROTARY_ENC_12BIT )
+					{
+						if ( tLastRotEncCheck + ROTENC_CHECK_PERIOD <= time(NULL) )
+						{	// only check rotary encoder devices every 1 seconds
+							tLastRotEncCheck = time(NULL);
+
+							HandleRotaryEncoderDevice( myDB, ctx, idx, bAllDead );
+						}
+					}
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VIPF_MON )
+					{
+						if ( tLastVIPFCheck + VIPF_CHECK_PERIOD <= time(NULL) )
+						{	// only check VIPF devices every 1 seconds
+							tLastVIPFCheck = time(NULL);
+
+							HandleVIPFDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
 					else
@@ -544,6 +610,7 @@ void CThread::Worker()
 	*m_pbThreadRunning = false;
 }
 
+// ultrasonic level device
 void CThread::HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPrompt, bool& bAllDead )
 {
 	// Gap=xxxmm\n
@@ -673,7 +740,7 @@ void CThread::HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPr
 				bLogit = true;
 
 				// save 10x the value so we have one decimal place for graphing
-				myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_LEVEL, (int)(dVal*10), "" );
+				myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_LEVEL, dVal, "" );
 
 				m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
 				m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
@@ -1058,7 +1125,7 @@ size_t CThread::ReadTcpipMsgBytes( SSL* ssl, const int newfd, NIMROD_MSGBUF_TYPE
 				szEsp[i] = msgBuf.szBuf[i];
 			}
 
-			LogMessage( E_MSG_INFO, "Got ESP msg '%s'", szEsp );
+			LogMessage( E_MSG_DEBUG, "Got ESP msg '%s'", szEsp );
 
 			bzero( &msgBuf, sizeof(msgBuf) );
 			msgBuf.msg.eMsgType = E_MT_ESP_MSG;
@@ -1070,19 +1137,25 @@ size_t CThread::ReadTcpipMsgBytes( SSL* ssl, const int newfd, NIMROD_MSGBUF_TYPE
 			// check the msg format
 			// 012345678901234
 			// ESPxxxCLKx
+			// ESPxxxTMPn:xx.x
 			// ESPxxxCIDyyyyyyyyyy
 			if ( szEsp[0] == 'E' && szEsp[1] == 'S' && szEsp[2] == 'P' )
 			{	// valid
 				strncpy( msgBuf.msg.esp.szEspName, szEsp, sizeof(msgBuf.msg.esp.szEspName)-1 );
 				msgBuf.msg.esp.szEspName[sizeof(msgBuf.msg.esp.szEspName)-1] = '\0';
 
-				// same the msg type
+				// save the msg type
 				strncpy( msgBuf.msg.esp.szEvent, &szEsp[6], sizeof(msgBuf.msg.esp.szEvent)-1 );
 				msgBuf.msg.esp.szEvent[sizeof(msgBuf.msg.esp.szEvent)-1] = '\0';
 
 				if ( strcmp( msgBuf.msg.esp.szEvent, "CLK" ) == 0 )
 				{
 					msgBuf.msg.esp.iButton = (int)(szEsp[9] - '0');
+				}
+				else if ( strcmp( msgBuf.msg.esp.szEvent, "TMP" ) == 0 )
+				{
+					msgBuf.msg.esp.iChannel = (int)(szEsp[9] - '0');
+					msgBuf.msg.esp.dTemperature = atof( &szEsp[11] );
 				}
 				else if ( strcmp( msgBuf.msg.esp.szEvent, "CID" ) == 0 )
 				{	// mac address
@@ -1136,7 +1209,7 @@ void CThread::AcceptTcpipClient()
 		{	// new client connection
 			LogMessage( E_MSG_INFO, "new client connection (%d clients)", m_iClientCount+1 );
 
-			// TODO: make socket non blocking - the SSL_accept fails if the socket is non blocking
+			// make socket non blocking - the SSL_accept fails if the socket is non blocking
 			// set socket as non blocking
 /*			int flags = fcntl( newfd, F_GETFL, 0 );
 			if ( flags < 0 )
@@ -1173,7 +1246,7 @@ void CThread::AcceptTcpipClient()
 
 					int rc = SSL_accept(m_xClientSSL[i]);
 					if ( rc <= 0 )   // perform the connection
-					{
+					{	// error
 						int ret = 0;
 						int rc1 = SSL_get_error( m_xClientSSL[i], ret );
 						LogMessage( E_MSG_ERROR, "AcceptTcpipClient(): SSL_accept failed, %d %d, %d %d", rc, ret, rc1, errno );
@@ -1191,6 +1264,7 @@ void CThread::AcceptTcpipClient()
 						LogMessage( E_MSG_INFO, "SSL_accept returned %d", rc );
 						LogMessage( E_MSG_INFO, "SSL connection using %s", SSL_get_cipher(m_xClientSSL[i]) );
 						ShowCerts(m_xClientSSL[i]);
+						m_tClientLastMsg[i] = time(NULL);
 					}
 
 					break;
@@ -1292,7 +1366,7 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 				enum E_MESSAGE_TYPE eMsgType = msgBuf.msg.eMsgType;
 				size_t uMsgSize = sizeof(replyBuf);
 
-				LogMessage( E_MSG_INFO, "Got msg type %s (segment %d of %d)", CThread::GetTcpipMsgType(eMsgType), msgBuf.msg.iSegCount, msgBuf.msg.iSegTotal );
+				LogMessage( E_MSG_DEBUG, "Got msg type %s (segment %d of %d)", CThread::GetTcpipMsgType(eMsgType), msgBuf.msg.iSegCount, msgBuf.msg.iSegTotal );
 
 				m_tClientLastMsg[fdx] = time(NULL);
 
@@ -1359,6 +1433,8 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 				case E_MT_ESP_MSG:
 					if ( strcmp( msgBuf.msg.esp.szEvent, "CLK" ) == 0 )
 						LogMessage( E_MSG_INFO, "ESP button %d click from '%s'", msgBuf.msg.esp.iButton, msgBuf.msg.esp.szEspName );
+					else if ( strcmp( msgBuf.msg.esp.szEvent, "TMP" ) == 0 )
+						LogMessage( E_MSG_INFO, "ESP temperature %d %.1f degC from '%s'", msgBuf.msg.esp.iChannel, msgBuf.msg.esp.dTemperature, msgBuf.msg.esp.szEspName );
 					else if ( strcmp( msgBuf.msg.esp.szEvent, "CID" ) == 0 )
 						LogMessage( E_MSG_INFO, "ESP chip id from '%s'", msgBuf.msg.esp.szEspName );
 					else
@@ -1378,6 +1454,21 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 
 						m_szEspResponseMsg[0] = '\0';
 						ProcessEspSwitchEvent( myDB, msgBuf.msg.esp.szEspName, msgBuf.msg.esp.iButton - 1 );
+
+						if ( strlen(m_szEspResponseMsg) > 0 )
+						{
+							snprintf( replyBuf.msg.esp.szBuf, sizeof(replyBuf.msg.esp.szBuf), "%s", m_szEspResponseMsg );
+							m_szEspResponseMsg[0] = '\0';
+						}
+
+						pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
+					}
+					else if ( msgBuf.msg.esp.iChannel != 0 )
+					{
+						pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
+
+						m_szEspResponseMsg[0] = '\0';
+						ProcessEspTemperatureEvent( myDB, msgBuf.msg.esp.szEspName, msgBuf.msg.esp.iChannel-1, msgBuf.msg.esp.dTemperature );
 
 						if ( strlen(m_szEspResponseMsg) > 0 )
 						{
@@ -1459,6 +1550,24 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 
 						}
 
+						// update the device status
+						int idx2;
+						idx2 = m_pmyDevices->GetIdxForName( m_szClientEspName[fdx] );
+						if ( idx2 >= 0 )
+						{
+							if ( m_pmyDevices->SetDeviceStatus( idx2, E_DS_ALIVE ) )
+							{
+								m_pmyDevices->UpdateDeviceStatus( myDB, idx2 );
+							}
+
+							LogMessage( E_MSG_INFO, "ESP device '%s' (0x%x->%d,%d) is now alive !", m_pmyDevices->GetDeviceName(idx2), m_pmyDevices->GetAddress(idx2), idx2, fdx );
+							myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx2), 0, E_ET_DEVICE_OK, 0, "ESP device '%s' (0x%x->%d,%d) is now alive !", m_pmyDevices->GetDeviceName(idx2), m_pmyDevices->GetAddress(idx2), idx2, fdx );
+						}
+						else
+						{
+							LogMessage( E_MSG_ERROR, "Failed to find idx for ESP device '%s'", m_szClientEspName[fdx] );
+						}
+
 						// check if we have another socket for this chip id
 						int fdx2;
 
@@ -1468,8 +1577,9 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 							{	// different slot is in use
 								if ( strcmp( m_szClientEspName[fdx2], m_szClientEspName[fdx] ) == 0 )
 								{	// same esp name
-									LogMessage( E_MSG_WARN, "Extra socket %d for esp device %s, ping scheduled", fdx2, m_szClientEspName[fdx] );
-									m_tClientLastMsg[fdx2] = time(NULL) - ESP_PING_TIMEOUT + 2;
+									LogMessage( E_MSG_WARN, "Extra socket %d for esp device %s, closing the extra socket", fdx2, m_szClientEspName[fdx] );
+
+									CloseSocket( m_iClientFd[fdx2], fdx2 );
 								}
 							}
 
@@ -1500,7 +1610,7 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 				{
 					char *ip = inet_ntoa( m_xClientInAddr[fdx] );
 
-					LogMessage( E_MSG_INFO, "Sent reply msg type %s to %s, len %d, socket %d", CThread::GetTcpipMsgType(replyBuf.msg.eMsgType), (ip == NULL ? "unknown" : ip), (int)uMsgSize, fdx );
+					LogMessage( E_MSG_DEBUG, "Sent reply msg type %s to %s, len %d, socket %d", CThread::GetTcpipMsgType(replyBuf.msg.eMsgType), (ip == NULL ? "unknown" : ip), (int)uMsgSize, fdx );
 				}
 
 				// close the socket if it is from nimrod pi
@@ -1513,35 +1623,33 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 			{
 				if ( uLen != 0 )
 				{
-					LogMessage( E_MSG_ERROR, "Msg data missing, %u bytes", uLen );
+					LogMessage( E_MSG_ERROR, "ESP Msg data missing, only %u bytes received", uLen );
 				}
 
 				if ( m_tClientLastMsg[fdx] + ESP_PING_TIMEOUT < time(NULL) )
-				{	// last client message was more than 30 sec ago
-					replyBuf.msg.eMsgType = E_MT_ESP_MSG;
-					snprintf( replyBuf.msg.esp.szBuf, sizeof(replyBuf.msg.esp.szBuf), "PG000000" );
+				{	// last client message was more than 90 sec ago
+					// esp device is no longer connected
+					int idx2;
 
-
-					rc = SSL_write( m_xClientSSL[fdx], replyBuf.msg.esp.szBuf, strlen(replyBuf.msg.esp.szBuf) );
-					//rc = write( m_iClientFd[fdx], replyBuf.msg.esp.szBuf, strlen(replyBuf.msg.esp.szBuf) );
-					if ( rc != (int)strlen(replyBuf.msg.esp.szBuf) )
+					idx2 = m_pmyDevices->GetIdxForName( m_szClientEspName[fdx] );
+					if ( idx2 >= 0 )
 					{
-						int r1, r2 = 0;
-						r1 = SSL_get_error(m_xClientSSL[fdx], r2 );
-						LogMessage( E_MSG_ERROR, "Failed to send ping to client %d: %d, %d", fdx, r1, r2 );
+						if ( m_pmyDevices->SetDeviceStatus( idx2, E_DS_DEAD ) )
+						{
+							m_pmyDevices->UpdateDeviceStatus( myDB, idx2 );
+						}
 
-						CloseSocket( m_iClientFd[fdx], fdx );
-
-						LogMessage( E_MSG_INFO, "client socket closed, (%d clients)", m_iClientCount );
+						LogMessage( E_MSG_INFO, "ESP device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx2), m_pmyDevices->GetAddress(idx2), idx2 );
+						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx2), 0, E_ET_DEVICE_NG, 0, "ESP device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx2), m_pmyDevices->GetAddress(idx2), idx2 );
 					}
 					else
 					{
-						char *ip = inet_ntoa( m_xClientInAddr[fdx] );
-
-						LogMessage( E_MSG_INFO, "Sent ping msg type %s to %s, socket %d", CThread::GetTcpipMsgType(replyBuf.msg.eMsgType), (ip == NULL ? "unknown" : ip), fdx );
-
-						m_tClientLastMsg[fdx] = time(NULL);
+						LogMessage( E_MSG_ERROR, "Failed to find idx for ESP device '%s'", m_szClientEspName[fdx] );
 					}
+
+					CloseSocket( m_iClientFd[fdx], fdx );
+
+					LogMessage( E_MSG_INFO, "client socket closed, (%d clients)", m_iClientCount );
 				}
 			}
 
@@ -1558,15 +1666,22 @@ void CThread::ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int
 	idx = m_pmyDevices->GetIdxForName( szName );
 	if ( idx >= 0 )
 	{
-		m_pmyDevices->GetNewInput(idx,i) = 1;
+		if ( m_pmyDevices->GetInIOName(idx,i)[0] != '\0' )
+		{
+			m_pmyDevices->GetNewInput(idx,i) = 1;
 
-		LogMessage( E_MSG_INFO, "Switch '%s' %d = %d on device addr %d (%s) %d", m_pmyDevices->GetInIOName(idx,i), i+1, m_pmyDevices->GetNewInput(idx,i), m_pmyDevices->GetAddress(idx),
-			m_pmyDevices->GetEventTypeDesc( eType ), idx );
+			LogMessage( E_MSG_INFO, "Switch '%s' %d = %d on device addr %d (%s) %d", m_pmyDevices->GetInIOName(idx,i), i+1, m_pmyDevices->GetNewInput(idx,i), m_pmyDevices->GetAddress(idx),
+				m_pmyDevices->GetEventTypeDesc( eType ), idx );
 
-		myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, eType, i, "Switch '%s' %d = %d on device addr %d (%s)", m_pmyDevices->GetInIOName(idx,i), i+1, m_pmyDevices->GetNewInput(idx,i),
-			m_pmyDevices->GetAddress(idx), m_pmyDevices->GetEventTypeDesc( eType ) );
+			myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, eType, i, "Switch '%s' %d = %d on device addr %d (%s)", m_pmyDevices->GetInIOName(idx,i), i+1, m_pmyDevices->GetNewInput(idx,i),
+				m_pmyDevices->GetAddress(idx), m_pmyDevices->GetEventTypeDesc( eType ) );
 
-		ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, m_pmyDevices->GetNewInput(idx,i), eType );
+			ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, m_pmyDevices->GetNewInput(idx,i), eType );
+		}
+		else
+		{
+			LogMessage( E_MSG_WARN, "ESP '%s' button click has no deviceinfo association", szName );
+		}
 	}
 }
 
@@ -1899,7 +2014,7 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 					// check if this event should be passed onto the plc handling
 					if ( m_pmyDevices->GetNewInput( idx, i )  == true && m_pmyPlcStates->FindInputDevice( m_pmyDevices->GetDeviceNo(idx), i ) )
 					{	// only pass the switch down event not the release
-						m_pmyPlcStates->AddInputEvent( m_pmyDevices->GetDeviceNo(idx), i );
+						m_pmyPlcStates->AddInputEvent( m_pmyDevices->GetDeviceNo(idx), i, 1 );
 					}
 				}
 			}
@@ -1912,7 +2027,6 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 
 void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
-	bool bLogit;
 	int iChannel;
 	int rc;
 	int err;
@@ -1979,123 +2093,294 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
 			{
-				if ( strlen(m_pmyDevices->GetInIOName(idx,iChannel)) == 0 )
-				{	// no name, assume this channel is unused
+				// level is in mm
+				double dDiff = 20;
 
-				}
-				else if ( m_pmyDevices->GetNewData( idx, iChannel ) != m_pmyDevices->GetLastData( idx, iChannel ) )
-				{	// data has changed
-					// level is in mm
-					int iDiff = 5;
+				E_EVENT_TYPE eEventType = E_ET_LEVEL;
+				E_IO_TYPE eIOTypeL = E_IO_LEVEL_LOW;
+				E_IO_TYPE eIOTypeH = E_IO_LEVEL_HIGH;
+				E_IO_TYPE eIOTypeHL = E_IO_LEVEL_HIGHLOW;
+				char szUnits[10] = "mm";
+				char szDesc[20] = "Level";
+				char szName[50] = "HDL Level";
+				double dValOld = m_pmyDevices->CalcLevel(idx,iChannel,false);
+				double dValNew = m_pmyDevices->CalcLevel(idx,iChannel,true);
 
-					double dVal = m_pmyDevices->CalcLevel(idx,iChannel,true);
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+			}	// end for loop
 
-					bLogit = false;
-					if ( abs(m_pmyDevices->GetNewData(idx,iChannel) - m_pmyDevices->GetLastLogData(idx,iChannel)) >= iDiff ||
-							m_pmyDevices->GetLastRecorded(idx,iChannel) + MAX_EVENT_PERIOD < time(NULL) )
-					{	// 5 mm change
-						bLogit = true;
+			// break out of retry loop
+			break;
+		}
+	}
+}
 
-						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_LEVEL, (int)(dVal*10), "" );
-						//LogMessage( E_MSG_INFO, "Event Level '%s' %d %d", m_pmyDevices->GetInIOName(idx,i), iVal, (int16_t)(m_pmyDevices->GetNewData( idx, i )) );
+void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
+{
+	int iChannel;
+	int rc;
+	int err;
+	int addr;
+	int iLoop;
+	int iRetry = 3;
 
-						m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
-						m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
-					}
+	//modbus_set_debug(ctx, true);
 
-					if ( bLogit )
-						LogMessage( E_MSG_INFO, "Level %d '%s' %d %.1f%%", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
-								dVal );
-					else
-						LogMessage( E_MSG_DEBUG, "Level %d '%s' %d %.1f%%", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
-								dVal );
+	//printf ("testing %ld\n", time(NULL));
 
-					if ( m_pmyDevices->GetInChannelType(idx,iChannel) == E_IO_LEVEL_HIGH || m_pmyDevices->GetInChannelType(idx,iChannel) == E_IO_LEVEL_HIGHLOW )
-					{
-						if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) &&
-								m_pmyDevices->CalcLevel(idx,iChannel,true) >= m_pmyDevices->GetMonitorValueHi(idx,iChannel) &&
-								m_pmyDevices->CalcLevel(idx,iChannel,false) < m_pmyDevices->GetMonitorValueHi(idx,iChannel) )
-						{	// level increasing and high voltage trigger reached
-							if ( !m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
-							{	// trigger level reached
-								LogMessage( E_MSG_INFO, "Channel %d '%s' High Level %.2f %% on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
-									m_pmyDevices->GetMonitorValueHi(idx,iChannel), m_pmyDevices->GetAddress(idx) );
+	addr = 0x00;
+	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
+	{	// 1 input channel but we need to read 2 registers for multi turn encoders
+		int count = m_pmyDevices->GetNumInputs(idx);
+		if ( count == 1 )
+			count = 2;
 
-								m_pmyDevices->GetAlarmTriggered(idx,iChannel) = true;
-
-								ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, true, E_ET_LEVEL );
-							}
-							else
-							{
-								LogMessage( E_MSG_INFO, "Channel %d '%s' High Level %.2f %% on device %d already reached", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
-																	m_pmyDevices->GetMonitorValueHi(idx,iChannel), m_pmyDevices->GetAddress(idx) );
-							}
-						}
-						else if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) &&
-								m_pmyDevices->CalcLevel(idx,iChannel,true) <= m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
-								m_pmyDevices->CalcLevel(idx,iChannel,false) > m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
-								m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
-						{	// level decreasing and hysteresis reached
-							LogMessage( E_MSG_INFO, "Channel %d '%s' High Level Hysteresis %.2f %% on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
-									m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel), m_pmyDevices->GetAddress(idx) );
-
-							m_pmyDevices->GetAlarmTriggered(idx,iChannel) = false;
-
-							ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, false, E_ET_LEVEL );
-						}
-					}
-
-					if ( m_pmyDevices->GetInChannelType(idx,iChannel) == E_IO_LEVEL_LOW || m_pmyDevices->GetInChannelType(idx,iChannel) == E_IO_LEVEL_HIGHLOW )
-					{
-						if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) &&
-								m_pmyDevices->CalcLevel(idx,iChannel,true) <= m_pmyDevices->GetMonitorValueLo(idx,iChannel) &&
-								m_pmyDevices->CalcLevel(idx,iChannel,false) > m_pmyDevices->GetMonitorValueLo(idx,iChannel) )
-						{	// level decreasing and low voltage trigger reached
-							if ( !m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
-							{	// low level trigger reached
-								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Level %.2f %% on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
-									m_pmyDevices->GetMonitorValueLo(idx,iChannel), m_pmyDevices->GetAddress(idx) );
-
-								m_pmyDevices->GetAlarmTriggered(idx,iChannel) = true;
-
-								ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, true, E_ET_LEVEL );
-							}
-							else
-							{
-								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Level %.2f %% on device %d already reached", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
-																	m_pmyDevices->GetMonitorValueLo(idx,iChannel), m_pmyDevices->GetAddress(idx) );
-							}
-						}
-						else if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) &&
-								m_pmyDevices->CalcLevel(idx,iChannel,true) >= m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
-								m_pmyDevices->CalcLevel(idx,iChannel,false) < m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
-								m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
-						{	// voltage increasing and hysteresis reached
-							LogMessage( E_MSG_INFO, "Channel %d '%s' Low Level Hysteresis %.2f %% on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
-									m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel), m_pmyDevices->GetAddress(idx) );
-
-							m_pmyDevices->GetAlarmTriggered(idx,iChannel) = false;
-
-							ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, false, E_ET_LEVEL );
-						}
-					}
-				}
-				else if ( m_pmyDevices->GetLastRecorded(idx,iChannel) + MAX_EVENT_PERIOD < time(NULL) )
-				{	// record data every 5 minutes regardless of change
-					double dVal;
-
-					dVal = m_pmyDevices->CalcLevel(idx,iChannel,true);
-					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_LEVEL, (int)(dVal*10), "" );
-
-					m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
-					m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
-
-					LogMessage( E_MSG_INFO, "Level %d '%s' %d %.1f%%", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
-							dVal );
+		rc = modbus_read_registers( ctx, addr, count, m_pmyDevices->GetNewData(idx) );
+		if ( rc == -1 )
+		{	// failed
+			err = errno;
+			if ( iLoop+1 >= iRetry )
+			{	// give up
+				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
+				{	// device has just failed
+					LogMessage( E_MSG_INFO, "RotEnc device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "RotEnc device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
 				}
 
-				//LogMessage( E_MSG_INFO, "SetLastData %d %d %.1f", idx, i, m_pmyDevices->GetNewData(idx,i) );
-				m_pmyDevices->GetLastData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				}
+
+				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
+				{
+					LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+				}
+			}
+			else
+			{	// retry
+				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d retry", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+
+				usleep( 10000 + (10000*iLoop) );
+
+				if ( modbus_set_slave( ctx, m_pmyDevices->GetAddress(idx) ) == -1 )
+				{
+					LogMessage( E_MSG_ERROR, "modbus_set_slave(%p) %d failed: %s", ctx, idx, modbus_strerror(errno) );
+				}
+
+				usleep( 10000 + (10000*iLoop) );
+			}
+		}
+		else
+		{	// success
+			bAllDead = false;
+			if ( iLoop > 0 )
+			{
+				LogMessage( E_MSG_INFO, "modbus_read_registers() retry successful, loop %d", iLoop );
+			}
+
+			if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+			{
+				LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			}
+
+			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+			{
+				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+			}
+
+			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
+			{
+				// distance is in mm
+				double dDiff = 5;
+
+				E_EVENT_TYPE eEventType = E_ET_ROTARY_ENC;
+				E_IO_TYPE eIOTypeL = E_IO_ROTENC_LOW;
+				E_IO_TYPE eIOTypeH = E_IO_ROTENC_HIGH;
+				E_IO_TYPE eIOTypeHL = E_IO_ROTENC_HIGHLOW;
+				char szUnits[10] = "mm";
+				char szDesc[20] = "Distance";
+				char szName[50] = "Rotary Encoder";
+				double dValOld = m_pmyDevices->CalcRotaryEncoderDistance(idx,iChannel,false);
+				double dValNew = m_pmyDevices->CalcRotaryEncoderDistance(idx,iChannel,true);
+
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+			}	// end for loop
+
+			// break out of retry loop
+			break;
+		}
+	}
+	//modbus_set_debug(ctx, false);
+}
+
+void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
+{
+	int iChannel;
+	int rc;
+	int err;
+	int addr;
+	int iLoop;
+	int iRetry = 3;
+	int iCheckAgain = 1;
+
+
+	addr = 0x00;
+	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
+	{	// read 10 bytes
+		int count = 10;
+		uint16_t uiVal[10];
+
+		// VIPF devices may not respond as they are powered by the 230VAC they are monitoring
+		if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_ALIVE )
+		{
+			iCheckAgain = 0;
+			if ( time(NULL) % 10 == 0 || m_tThreadStartTime + 10 >= time(NULL) )
+			{	// check if the device has come alive every 10 seconds
+				iCheckAgain = -1;
+			}
+		}
+
+		if ( iCheckAgain != 0 )
+		{
+			rc = modbus_read_input_registers( ctx, addr, count, uiVal );
+		}
+		else
+		{
+			break;
+		}
+		if ( rc == -1 )
+		{	// failed
+			// don't retry VIPF devices
+			err = errno;
+
+			//if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
+			if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_BURIED )
+			{	// device has just failed
+				LogMessage( E_MSG_INFO, "VIPF device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+				// do not record this in the DB - expected failure
+				//myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "VIPF device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			}
+
+			//if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
+			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
+			{
+				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+			}
+
+			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
+			{
+				LogMessage( E_MSG_WARN, "modbus_read_input_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+			}
+
+			iLoop = iRetry;
+
+			memset( uiVal, 0, 10*sizeof(uint16_t) );
+		}
+
+		// always process the data values, use 0 values when the device is powered off
+		if ( true )
+		{	// success
+			// put register data into channel data
+			m_pmyDevices->GetNewData(idx)[0] = uiVal[0];	// volts, lsb = 0.1V
+			m_pmyDevices->GetNewData(idx)[1] = (uiVal[1] + (uiVal[2] >> 8));	// current, lsb = 0.001A
+			m_pmyDevices->GetNewData(idx)[2] = (uiVal[3] + (uiVal[5] >> 8));	// power, lsb = 0.1W
+			m_pmyDevices->GetNewData(idx)[3] = (uiVal[5] + (uiVal[6] >> 8));	// energy, lsb = 1Wh
+			m_pmyDevices->GetNewData(idx)[4] = uiVal[7];	// frequency, lsb = 0.1Hz
+			m_pmyDevices->GetNewData(idx)[5] = uiVal[8];	// power factor, lsb = 0.01
+
+
+			if ( rc != -1 )
+			{
+				bAllDead = false;
+				if ( iLoop > 0 )
+				{
+					LogMessage( E_MSG_INFO, "modbus_read_input_registers() retry successful, loop %d", iLoop );
+				}
+
+				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+				{
+					LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+				}
+
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				}
+			}
+
+			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
+			{
+				double dDiff;
+				double dValNew;
+				double dValOld;
+				char szUnits[10] = "?";
+				char szDesc[20] = "?";
+				char szName[50] = "VIPF Monitor";
+				E_EVENT_TYPE eEventType = E_ET_VOLTAGE;
+				E_IO_TYPE eIOTypeL = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeH = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeHL = E_IO_VOLT_MONITOR;
+
+				dValOld = m_pmyDevices->CalcVIPFValue(idx,iChannel,false);
+				dValNew = m_pmyDevices->CalcVIPFValue(idx,iChannel,true);
+				switch ( iChannel )
+				{
+				default:
+					dDiff = 5;
+					dValNew = 0;
+					break;
+				case 0:		// voltage
+					dDiff = 5;	// 0.5 volts
+					eEventType = E_ET_VOLTAGE;
+					strcpy( szUnits, "V" );
+					strcpy( szDesc, "Voltage" );
+					eIOTypeL = E_IO_VOLT_LOW;
+					eIOTypeH = E_IO_VOLT_HIGH;
+					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					break;
+				case 1:		// current
+					dDiff = 100;	// 100mA
+					eEventType = E_ET_CURRENT;
+					strcpy( szUnits, "A" );
+					strcpy( szDesc, "Current" );
+					eIOTypeL = E_IO_CURRENT_LOW;
+					eIOTypeH = E_IO_CURRENT_HIGH;
+					eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+					break;
+				case 2:		// power
+					dDiff = 20;	// 20 Watts
+					eEventType = E_ET_POWER;
+					strcpy( szUnits, "W" );
+					strcpy( szDesc, "Power" );
+					eIOTypeL = E_IO_VOLT_LOW;
+					eIOTypeH = E_IO_VOLT_HIGH;
+					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					break;
+				case 3:		// energy
+					dDiff = 10;	// 10 Wh
+					break;
+				case 4:		// frequency
+					dDiff = 1;	// 1Hz
+					eEventType = E_ET_FREQUENCY;
+					strcpy( szUnits, "Hz" );
+					strcpy( szDesc, "Frequency" );
+					eIOTypeL = E_IO_FREQ_LOW;
+					eIOTypeH = E_IO_FREQ_HIGH;
+					eIOTypeHL = E_IO_FREQ_HIGHLOW;
+					break;
+				case 5:		// power factor
+					dDiff = 5;	// 0.05 deg
+					eEventType = E_ET_POWERFACTOR;
+					strcpy( szUnits, "PF" );
+					strcpy( szDesc, "Power Factor" );
+					eIOTypeL = E_IO_PWRFACT_MONITOR;
+					eIOTypeH = E_IO_PWRFACT_MONITOR;
+					eIOTypeHL = E_IO_PWRFACT_MONITOR;
+					break;
+				}
+
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -2106,8 +2391,7 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 
 void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
-	bool bLogit;
-	int i;
+	int iChannel;
 	int rc;
 	int err;
 	int addr;
@@ -2171,161 +2455,22 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
 			}
 
-			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
+			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
 			{
-				if ( strlen(m_pmyDevices->GetInIOName(idx,i)) == 0 )
-				{	// no name, assume this channel is unused
+				// 20mV change
+				double dDiff = 20;
 
-				}
-				else if ( m_pmyDevices->GetNewData( idx, i ) != m_pmyDevices->GetLastData( idx, i ) )
-				{	// data has changed
-					int iDiff = 20;
-					if ( m_pmyDevices->GetAnalogType(idx,i) == 'A' )
-						iDiff = 10;
-					else if ( m_pmyDevices->GetCalcFactor(idx,i) >= 10 )
-						iDiff = 100;
+				E_EVENT_TYPE eEventType = E_ET_VOLTAGE;
+				E_IO_TYPE eIOTypeL = E_IO_VOLT_LOW;
+				E_IO_TYPE eIOTypeH = E_IO_VOLT_HIGH;
+				E_IO_TYPE eIOTypeHL = E_IO_VOLT_HIGHLOW;
+				char szUnits[10] = "V";
+				char szDesc[20] = "Voltage";
+				char szName[50] = "Voltage";
+				double dValOld = m_pmyDevices->CalcVoltage(idx,iChannel,false);
+				double dValNew = m_pmyDevices->CalcVoltage(idx,iChannel,true);
 
-					bLogit = false;
-					if ( abs(m_pmyDevices->GetNewData(idx,i) - m_pmyDevices->GetLastLogData(idx,i)) >= iDiff ||
-							m_pmyDevices->GetLastRecorded(idx,i) + MAX_EVENT_PERIOD < time(NULL) )
-					{	// 20 mV change
-						bLogit = true;
-						int iVal;
-
-						iVal = m_pmyDevices->CalcVoltage(idx,i,true) * 1000;
-						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, E_ET_VOLTAGE, iVal, "" );
-						//LogMessage( E_MSG_INFO, "EVent Voltage '%s' %d %d", m_pmyDevices->GetInIOName(idx,i), iVal, (int16_t)(m_pmyDevices->GetNewData( idx, i )) );
-
-						m_pmyDevices->GetLastRecorded(idx,i) = time(NULL);
-						m_pmyDevices->GetLastLogData(idx,i) = m_pmyDevices->GetNewData(idx,i);
-					}
-
-					double dVal = m_pmyDevices->CalcVoltage(idx,i,true);
-					if ( bLogit )
-						LogMessage( E_MSG_INFO, "Voltage %d '%s' %d %.2f %c (%.2f)", i+1, m_pmyDevices->GetInIOName(idx,i), (int16_t)(m_pmyDevices->GetNewData( idx, i )),
-								dVal, m_pmyDevices->GetAnalogType(idx,i), dVal / m_pmyDevices->GetCalcFactor(idx,i) );
-					else
-						LogMessage( E_MSG_DEBUG, "Voltage %d '%s' %d %.2f %c (%.2f)", i+1, m_pmyDevices->GetInIOName(idx,i), (int16_t)(m_pmyDevices->GetNewData( idx, i )),
-								dVal, m_pmyDevices->GetAnalogType(idx,i), dVal / m_pmyDevices->GetCalcFactor(idx,i) );
-
-
-					if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_VOLT_HIGH || m_pmyDevices->GetInChannelType(idx,i) == E_IO_VOLT_HIGHLOW )
-					{
-						if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) >= m_pmyDevices->GetMonitorValueHi(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) < m_pmyDevices->GetMonitorValueHi(idx,i) )
-						{	// voltage increasing and high voltage trigger reached
-							if ( !m_pmyDevices->GetAlarmTriggered(idx,i) )
-							{	// trigger voltage reached
-								LogMessage( E_MSG_INFO, "Channel %d '%s' High Voltage %.2f V on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetMonitorValueHi(idx,i), m_pmyDevices->GetAddress(idx) );
-
-								m_pmyDevices->GetAlarmTriggered(idx,i) = true;
-
-								ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, true, E_ET_VOLTAGE );
-							}
-							else
-							{
-								LogMessage( E_MSG_INFO, "Channel %d '%s' High Voltage %.2f V on device %d already reached", i+1, m_pmyDevices->GetInIOName(idx,i),
-																	m_pmyDevices->GetMonitorValueHi(idx,i), m_pmyDevices->GetAddress(idx) );
-							}
-						}
-						else if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) <= m_pmyDevices->GetMonitorValueHi(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) > m_pmyDevices->GetMonitorValueHi(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->GetAlarmTriggered(idx,i) )
-						{	// voltage decreasing and hysteresis reached
-							LogMessage( E_MSG_INFO, "Channel %d '%s' High Voltage Hysteresis %.2f V on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetMonitorValueHi(idx,i) - m_pmyDevices->GetHysteresis(idx,i), m_pmyDevices->GetAddress(idx) );
-
-							m_pmyDevices->GetAlarmTriggered(idx,i) = false;
-
-							ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, false, E_ET_VOLTAGE );
-						}
-					}
-
-					if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_VOLT_LOW || m_pmyDevices->GetInChannelType(idx,i) == E_IO_VOLT_HIGHLOW )
-					{
-						if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) <= m_pmyDevices->GetMonitorValueLo(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) > m_pmyDevices->GetMonitorValueLo(idx,i) )
-						{	// voltage decreasing and low voltage trigger reached
-							if ( !m_pmyDevices->GetAlarmTriggered(idx,i) )
-							{	// low voltage trigger reached
-								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Voltage %.2f V on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetMonitorValueLo(idx,i), m_pmyDevices->GetAddress(idx) );
-
-								m_pmyDevices->GetAlarmTriggered(idx,i) = true;
-
-								ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, true, E_ET_VOLTAGE );
-							}
-							else
-							{
-								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Voltage %.2f V on device %d already reached", i+1, m_pmyDevices->GetInIOName(idx,i),
-																	m_pmyDevices->GetMonitorValueLo(idx,i), m_pmyDevices->GetAddress(idx) );
-							}
-						}
-						else if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) >= m_pmyDevices->GetMonitorValueLo(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) < m_pmyDevices->GetMonitorValueLo(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->GetAlarmTriggered(idx,i) )
-						{	// voltage increasing and hysteresis reached
-							LogMessage( E_MSG_INFO, "Channel %d '%s' Low Voltage Hysteresis %.2f V on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetMonitorValueLo(idx,i) + m_pmyDevices->GetHysteresis(idx,i), m_pmyDevices->GetAddress(idx) );
-
-							m_pmyDevices->GetAlarmTriggered(idx,i) = false;
-
-							ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, false, E_ET_VOLTAGE );
-						}
-					}
-
-					if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_VOLT_DAYNIGHT )
-					{
-						if ( m_pmyDevices->GetDayNightState() == E_DN_UNKNOWN )
-						{
-							m_pmyDevices->SetDayNightState( m_pmyDevices->CalcVoltage(idx,i,true) );
-
-							LogMessage( E_MSG_INFO, "Day/Night State now '%s' (startup)", m_pmyDevices->GetDayNightStateName() );
-						}
-						else if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) <= m_pmyDevices->GetDayNightVoltage(E_DN_UNKNOWN) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) > m_pmyDevices->GetDayNightVoltage(E_DN_UNKNOWN) )
-						{	// voltage decreasing and has dropped into a new day/night state
-							m_pmyDevices->SetDayNightState( m_pmyDevices->CalcVoltage(idx,i,true) );
-
-							LogMessage( E_MSG_INFO, "Day/Night State now '%s' (down) %.1f %.1f", m_pmyDevices->GetDayNightStateName(),
-									m_pmyDevices->CalcVoltage(idx,i,true), m_pmyDevices->CalcVoltage(idx,i,false) );
-						}
-						else if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcVoltage(idx,i,true) >= m_pmyDevices->GetDayNightVoltage(E_DN_UNKNOWN) &&
-								m_pmyDevices->CalcVoltage(idx,i,false) < m_pmyDevices->GetDayNightVoltage(E_DN_UNKNOWN) )
-						{	// voltage increasing and has moved into a new day/night state
-							m_pmyDevices->SetDayNightState( m_pmyDevices->CalcVoltage(idx,i,true) );
-
-							LogMessage( E_MSG_INFO, "Day/Night State now '%s' (up)", m_pmyDevices->GetDayNightStateName() );
-						}
-					}
-					else if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_VOLT_MONITOR )
-					{	// nothing to do here
-					}
-				}
-				else if ( m_pmyDevices->GetLastRecorded(idx,i) + MAX_EVENT_PERIOD < time(NULL) )
-				{	// record data every 5 minutes regardless of change
-					int iVal;
-
-					iVal = m_pmyDevices->CalcVoltage(idx,i,true) * 1000;
-					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, E_ET_VOLTAGE, iVal, "" );
-					//int iVal = (int16_t)(m_pmyDevices->GetNewData(idx,i)) * m_pmyDevices->GetCalcFactor(idx,i);
-					//myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, E_ET_VOLTAGE, iVal, "" );
-
-					m_pmyDevices->GetLastRecorded(idx,i) = time(NULL);
-					m_pmyDevices->GetLastLogData(idx,i) = m_pmyDevices->GetNewData(idx,i);
-
-					LogMessage( E_MSG_INFO, "Voltage %d '%s' %d %.2f V", i+1, m_pmyDevices->GetInIOName(idx,i), (int16_t)(m_pmyDevices->GetNewData( idx, i )), m_pmyDevices->CalcVoltage(idx,i,true) );
-				}
-
-				//LogMessage( E_MSG_INFO, "SetLastData %d %d %.1f", idx, i, m_pmyDevices->GetNewData(idx,i) );
-				m_pmyDevices->GetLastData(idx,i) = m_pmyDevices->GetNewData(idx,i);
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -2336,7 +2481,6 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 
 void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
-	bool bLogit;
 	int i;
 	int rc;
 	int err;
@@ -2407,153 +2551,7 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 
 			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
 			{
-				// check for bad data
-				if ( m_pmyDevices->GetNewData( idx, i ) != m_pmyDevices->GetLastData( idx, i ) && m_pmyDevices->IsSensorConnected(idx,i) )
-				{	// data has changed
-					m_pmyDevices->SaveDataValue( idx, i );
-
-					if ( m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_DS &&
-						(m_pmyDevices->CalcTemperature(idx,i,true) < -24.0 || m_pmyDevices->CalcTemperature(idx,i,true) > 110.0 ||
-						(fabs(m_pmyDevices->CalcTemperature(idx,i,true) - m_pmyDevices->CalcTemperature(idx,i,false)) >= MAX_TEMPERATURE_DIFF &&
-						m_pmyDevices->GetLastData( idx, i ) != (uint16_t)-1)) )
-					{	// out of range - DS18B20 devices are susceptable to noise
-						if ( m_pmyDevices->DataBufferIsStable(idx,i) )
-						{
-							LogMessage( E_MSG_WARN, "Unstable temperature channel %d '%s' %u %.1f degC, %.1f degC, %u", i+1, m_pmyDevices->GetInIOName(idx,i), m_pmyDevices->GetNewData( idx, i ),
-									m_pmyDevices->CalcTemperature(idx,i,true), m_pmyDevices->CalcTemperature(idx,i,false), m_pmyDevices->GetLastData( idx, i ) );
-						}
-						else
-						{
-							if ( m_pmyDevices->GetNewData(idx,i) != (uint16_t)-1 )
-							{
-								LogMessage( E_MSG_WARN, "Invalid temperature channel %d '%s' %u %.1f degC, %.1f degC, %u", i+1, m_pmyDevices->GetInIOName(idx,i), m_pmyDevices->GetNewData( idx, i ),
-										m_pmyDevices->CalcTemperature(idx,i,true), m_pmyDevices->CalcTemperature(idx,i,false), m_pmyDevices->GetLastData( idx, i ) );
-							}
-
-							// leave the data unchanged
-							m_pmyDevices->GetNewData( idx, i ) = m_pmyDevices->GetLastData( idx, i );
-						}
-					}
-				}
-
-
-				if ( !m_pmyDevices->IsSensorConnected(idx,i) )
-				{
-					if ( m_pmyDevices->WasSensorConnected(idx,i) )
-					{
-						LogMessage( E_MSG_INFO, "Temp sensor %d '%s' no longer connected", i+1, m_pmyDevices->GetInIOName(idx,i) );
-						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, E_ET_DEVICE_NG, 0, "Temp sensor %d no longer connected", i+1 );
-					}
-				}
-				else if ( m_pmyDevices->GetNewData( idx, i ) != m_pmyDevices->GetLastData( idx, i ) )
-				{	// data has changed
-					if ( !m_pmyDevices->WasSensorConnected(idx,i) )
-					{
-						LogMessage( E_MSG_INFO, "Temp sensor %d '%s' is connected", i+1, m_pmyDevices->GetInIOName(idx,i) );
-						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, E_ET_DEVICE_OK, 0, "Temp sensor %d is connected", i+1 );
-					}
-
-					bLogit = false;
-					if ( abs(m_pmyDevices->GetNewData(idx,i) - m_pmyDevices->GetLastLogData(idx,i)) >= 2 ||
-							m_pmyDevices->GetLastRecorded(idx,i) + MAX_EVENT_PERIOD < time(NULL) )
-					{	// .2 deg change
-						bLogit = true;
-						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, E_ET_TEMPERATURE, m_pmyDevices->GetNewData(idx,i), "" );
-
-						m_pmyDevices->GetLastRecorded(idx,i) = time(NULL);
-						m_pmyDevices->GetLastLogData(idx,i) = m_pmyDevices->GetNewData(idx,i);
-					}
-
-					if ( bLogit )
-						LogMessage( E_MSG_INFO, "Temperature channel %d '%s' %u %.1f degC", i+1, m_pmyDevices->GetInIOName(idx,i), m_pmyDevices->GetNewData( idx, i ), m_pmyDevices->CalcTemperature(idx,i,true) );
-					else
-						LogMessage( E_MSG_DEBUG, "Temperature channel %d '%s' %u %.1f degC", i+1, m_pmyDevices->GetInIOName(idx,i), m_pmyDevices->GetNewData( idx, i ), m_pmyDevices->CalcTemperature(idx,i,true) );
-
-					if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_TEMP_HIGH || m_pmyDevices->GetInChannelType(idx,i) == E_IO_TEMP_HIGHLOW )
-					{
-						if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,true) >= m_pmyDevices->GetMonitorValueHi(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,false) < m_pmyDevices->GetMonitorValueHi(idx,i) )
-						{	// temperature increasing and high temp trigger reached
-							if ( !m_pmyDevices->GetAlarmTriggered(idx,i) )
-							{	// trigger temp reached
-								LogMessage( E_MSG_INFO, "Channel %d '%s' High Temp %.1f degC on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetMonitorValueHi(idx,i), m_pmyDevices->GetAddress(idx) );
-
-								m_pmyDevices->GetAlarmTriggered(idx,i) = true;
-
-								ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, true, E_ET_TEMPERATURE );
-							}
-							else
-							{	// high temp alarm already active
-								LogMessage( E_MSG_INFO, "Channel %d '%s' High Temp %.1f degC on device %d already active", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetMonitorValueHi(idx,i), m_pmyDevices->GetAddress(idx) );
-							}
-						}
-						else if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,true) <= m_pmyDevices->GetMonitorValueHi(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,false) > m_pmyDevices->GetMonitorValueHi(idx,i) - m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->GetAlarmTriggered(idx,i) )
-						{	// temperature decreasing and hysteresis reached
-							LogMessage( E_MSG_INFO, "Channel %d '%s' High Temp Hysteresis %.1f degC on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									(double)(m_pmyDevices->GetMonitorValueHi(idx,i) - m_pmyDevices->GetHysteresis(idx,i)), m_pmyDevices->GetAddress(idx) );
-
-							m_pmyDevices->GetAlarmTriggered(idx,i) = false;
-
-							ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, false, E_ET_TEMPERATURE );
-						}
-					}
-
-					if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_TEMP_LOW || m_pmyDevices->GetInChannelType(idx,i) == E_IO_TEMP_HIGHLOW )
-					{
-						if ( m_pmyDevices->GetNewData(idx,i) < m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,true) <= m_pmyDevices->GetMonitorValueLo(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,false) > m_pmyDevices->GetMonitorValueLo(idx,i) )
-						{	// temperature decreasing and low temp trigger reached
-							if ( !m_pmyDevices->GetAlarmTriggered(idx,i) )
-							{	// low temp trigger reached
-								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Temp %.1f degC on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetMonitorValueLo(idx,i), m_pmyDevices->GetAddress(idx) );
-
-								m_pmyDevices->GetAlarmTriggered(idx,i) = true;
-
-								ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, true, E_ET_TEMPERATURE );
-							}
-							else
-							{	// low temp alarm already triggered
-								LogMessage( E_MSG_INFO, "Channel %d '%s' Low Temp %.1f degC on device %d already reached", i+1, m_pmyDevices->GetInIOName(idx,i),
-									m_pmyDevices->GetMonitorValueLo(idx,i), m_pmyDevices->GetAddress(idx) );
-							}
-						}
-						else if ( m_pmyDevices->GetNewData(idx,i) > m_pmyDevices->GetLastData(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,true) >= m_pmyDevices->GetMonitorValueLo(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->CalcTemperature(idx,i,false) < m_pmyDevices->GetMonitorValueLo(idx,i) + m_pmyDevices->GetHysteresis(idx,i) &&
-								m_pmyDevices->GetAlarmTriggered(idx,i) )
-						{	// temperature increasing and hysteresis reached
-							LogMessage( E_MSG_INFO, "Channel %d '%s' Low Temp Hysteresis %.1f degC on device %d", i+1, m_pmyDevices->GetInIOName(idx,i),
-									(double)(m_pmyDevices->GetMonitorValueLo(idx,i) + m_pmyDevices->GetHysteresis(idx,i)), m_pmyDevices->GetAddress(idx) );
-
-							m_pmyDevices->GetAlarmTriggered(idx,i) = false;
-
-							ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), i, false, E_ET_TEMPERATURE );
-						}
-					}
-
-					if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_TEMP_MONITOR )
-					{	// nothing to do here
-					}
-				}
-				else if ( m_pmyDevices->GetLastRecorded(idx,i) + MAX_EVENT_PERIOD < time(NULL) )
-				{	// record every 5 minutes regardless of data changes
-					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), i, E_ET_TEMPERATURE, m_pmyDevices->GetNewData(idx,i), "" );
-
-					m_pmyDevices->GetLastRecorded(idx,i) = time(NULL);
-					m_pmyDevices->GetLastLogData(idx,i) = m_pmyDevices->GetNewData(idx,i);
-
-					LogMessage( E_MSG_INFO, "Temperature '%s' %d %u %.1f degC", m_pmyDevices->GetInIOName(idx,i), i+1, m_pmyDevices->GetNewData( idx, i ), m_pmyDevices->CalcTemperature(idx,i,true) );
-				}
-
-				m_pmyDevices->GetLastData(idx,i) = m_pmyDevices->GetNewData(idx,i);
+				ProcessTemperatureData( myDB, idx, i );
 			}	// end for loop
 
 			// break out of retry loop
@@ -2561,6 +2559,235 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 		}
 	}
 }
+
+void CThread::ProcessEspTemperatureEvent( CMysql& myDB, const char* szEspName, const int iChannel, const double dValue )
+{
+	int idx;
+
+	idx = m_pmyDevices->GetIdxForName( szEspName );
+	if ( idx >= 0 )
+	{	// ESP temperature channels are 11-14
+		uint16_t uValue;
+		int i = iChannel + 10;
+
+		if ( dValue > 0 )
+			uValue = dValue * 10;
+		else
+			uValue = (dValue * 10) + 10000;
+
+		m_pmyDevices->GetNewData( idx, i ) = uValue;
+
+		ProcessTemperatureData( myDB, idx, i );
+	}
+	else
+	{
+		LogMessage( E_MSG_ERROR, "Failed to find idx for '%s'", szEspName );
+	}
+}
+
+void CThread::ProcessTemperatureData( CMysql& myDB, const int idx, const int iChannel )
+{
+	//LogMessage( E_MSG_INFO, "ProcessTemperatureData() %d %d", idx, i );
+
+	// check for bad data
+	if ( m_pmyDevices->GetNewData( idx, iChannel ) != m_pmyDevices->GetLastData( idx, iChannel ) && m_pmyDevices->IsSensorConnected(idx,iChannel) )
+	{	// data has changed
+		m_pmyDevices->SaveDataValue( idx, iChannel );
+
+		bool bDeviceTypeOk = false;
+		if ( m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_DS )
+			bDeviceTypeOk = true;
+		else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_DIGITAL_IO && strncmp( m_pmyDevices->GetComPort(idx), "ESP", 3 ) == 0 )
+			bDeviceTypeOk = true;
+
+		if ( bDeviceTypeOk &&
+			(m_pmyDevices->CalcTemperature(idx,iChannel,true) < -24.0 || m_pmyDevices->CalcTemperature(idx,iChannel,true) > 110.0 ||
+			(fabs(m_pmyDevices->CalcTemperature(idx,iChannel,true) - m_pmyDevices->CalcTemperature(idx,iChannel,false)) >= MAX_TEMPERATURE_DIFF &&
+			m_pmyDevices->GetLastData( idx, iChannel ) != (uint16_t)-1)) )
+		{	// out of range - DS18B20 devices are susceptible to noise
+			if ( m_pmyDevices->DataBufferIsStable(idx,iChannel) )
+			{
+				LogMessage( E_MSG_WARN, "Unstable temperature channel %d '%s' %u %.1f degC, %.1f degC, %u", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), m_pmyDevices->GetNewData( idx, iChannel ),
+						m_pmyDevices->CalcTemperature(idx,iChannel,true), m_pmyDevices->CalcTemperature(idx,iChannel,false), m_pmyDevices->GetLastData( idx, iChannel ) );
+			}
+			else
+			{
+				if ( m_pmyDevices->GetNewData(idx,iChannel) != (uint16_t)-1 )
+				{
+					LogMessage( E_MSG_WARN, "Invalid temperature channel %d '%s' %u %.1f degC, %.1f degC, %u", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), m_pmyDevices->GetNewData( idx, iChannel ),
+							m_pmyDevices->CalcTemperature(idx,iChannel,true), m_pmyDevices->CalcTemperature(idx,iChannel,false), m_pmyDevices->GetLastData( idx, iChannel ) );
+				}
+
+				// leave the data unchanged
+				m_pmyDevices->GetNewData( idx, iChannel ) = m_pmyDevices->GetLastData( idx, iChannel );
+			}
+		}
+	}
+
+
+	//0.2 degC change = 2 units
+	double dDiff = 2;
+
+	E_EVENT_TYPE eEventType = E_ET_TEMPERATURE;
+	E_IO_TYPE eIOTypeL = E_IO_TEMP_LOW;
+	E_IO_TYPE eIOTypeH = E_IO_TEMP_HIGH;
+	E_IO_TYPE eIOTypeHL = E_IO_TEMP_HIGHLOW;
+	char szUnits[10] = "degC";
+	char szDesc[20] = "Temperature";
+	char szName[50] = "Temperature";
+	double dValOld = m_pmyDevices->CalcTemperature(idx,iChannel,false);
+	double dValNew = m_pmyDevices->CalcTemperature(idx,iChannel,true);
+
+	HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+}
+
+void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iChannel, const double dDiff, const E_EVENT_TYPE eEventType, const E_IO_TYPE eIOTypeL, const E_IO_TYPE eIOTypeH,
+			const E_IO_TYPE eIOTypeHL, const char* szName, const char* szDesc, const char* szUnits, const double dValNew, const double dValOld )
+{
+	bool bLogit;
+
+	if ( strlen(m_pmyDevices->GetInIOName(idx,iChannel)) == 0 )
+	{	// no name, assume this channel is unused
+		if ( eEventType == E_ET_TEMPERATURE &&  m_pmyDevices->WasSensorConnected(idx,iChannel) )
+		{
+			LogMessage( E_MSG_INFO, "%s sensor %d '%s' no longer connected", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel) );
+			myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_DEVICE_NG, 0, "%s sensor %d no longer connected", szName, iChannel+1 );
+		}
+	}
+	else if ( m_pmyDevices->GetNewData( idx, iChannel ) != m_pmyDevices->GetLastData( idx, iChannel ) )
+	{	// data has changed
+		if ( eEventType == E_ET_TEMPERATURE && !m_pmyDevices->WasSensorConnected(idx,iChannel) )
+		{
+			LogMessage( E_MSG_INFO, "%s sensor %d '%s' is connected", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel) );
+			myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_DEVICE_OK, 0, "%s sensor %d is connected", szName, iChannel+1 );
+		}
+
+		bLogit = false;
+		if ( abs(m_pmyDevices->GetNewData(idx,iChannel) - m_pmyDevices->GetLastLogData(idx,iChannel)) >= dDiff ||
+				m_pmyDevices->GetLastRecorded(idx,iChannel) + MAX_EVENT_PERIOD < time(NULL) )
+		{	// interesting amount of change
+			bLogit = true;
+
+			myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, eEventType, dValNew, "" );
+
+			m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
+			m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
+		}
+
+		if ( bLogit )
+		{
+			if ( eEventType == E_ET_ROTARY_ENC )
+				LogMessage( E_MSG_INFO, "%s %d '%s' %d %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+					(int16_t)(m_pmyDevices->GetNewData( idx, iChannel+1 )), dValNew, szUnits );
+			else
+				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+					dValNew, szUnits );
+		}
+		else
+		{
+			if ( eEventType == E_ET_ROTARY_ENC )
+				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+					(int16_t)(m_pmyDevices->GetNewData( idx, iChannel+1 )), dValNew, szUnits );
+			else
+				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+					dValNew, szUnits );
+		}
+
+		if ( m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeH || m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeHL )
+		{
+			if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) &&
+					dValNew >= m_pmyDevices->GetMonitorValueHi(idx,iChannel) &&
+					dValOld < m_pmyDevices->GetMonitorValueHi(idx,iChannel) )
+			{	// increasing and high trigger reached
+				if ( !m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
+				{	// trigger level reached
+					LogMessage( E_MSG_INFO, "Channel %d '%s' High %s %s %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+						szName, szDesc, m_pmyDevices->GetMonitorValueHi(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
+
+					m_pmyDevices->GetAlarmTriggered(idx,iChannel) = true;
+
+					ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, true, eEventType );
+				}
+				else
+				{
+					LogMessage( E_MSG_INFO, "Channel %d '%s' %s %s %.1f %s on device %d already reached", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+														szName, szDesc, m_pmyDevices->GetMonitorValueHi(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
+				}
+			}
+			else if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) &&
+					dValNew <= m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
+					dValOld > m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
+					m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
+			{	// decreasing and hysteresis reached
+				LogMessage( E_MSG_INFO, "Channel %d '%s' High %s %s Hysteresis %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+						szName, szDesc, m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
+
+				m_pmyDevices->GetAlarmTriggered(idx,iChannel) = false;
+
+				ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, false, eEventType );
+			}
+		}
+
+		if ( m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeL || m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeHL )
+		{
+			if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) &&
+					dValNew <= m_pmyDevices->GetMonitorValueLo(idx,iChannel) &&
+					dValOld > m_pmyDevices->GetMonitorValueLo(idx,iChannel) )
+			{	// decreasing and low trigger reached
+				if ( !m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
+				{	// low distance trigger reached
+					LogMessage( E_MSG_INFO, "Channel %d '%s' Low %s %s %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+						szName, szDesc, m_pmyDevices->GetMonitorValueLo(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
+
+					m_pmyDevices->GetAlarmTriggered(idx,iChannel) = true;
+
+					ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, true, eEventType );
+				}
+				else
+				{
+					LogMessage( E_MSG_INFO, "Channel %d '%s' Low %s %s %.1f %s on device %d already reached", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+														szName, szDesc, m_pmyDevices->GetMonitorValueLo(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
+				}
+			}
+			else if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) &&
+					dValNew >= m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
+					dValOld < m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
+					m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
+			{	// increasing and hysteresis reached
+				LogMessage( E_MSG_INFO, "Channel %d '%s' Low %s %s Hysteresis %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+						szName, szDesc, m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
+
+				m_pmyDevices->GetAlarmTriggered(idx,iChannel) = false;
+
+				ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, false, eEventType );
+			}
+		}
+
+		// check if this event should be passed onto the plc handling
+		if ( bLogit && m_pmyPlcStates->FindInputDevice( m_pmyDevices->GetDeviceNo(idx), iChannel ) )
+		{	// only pass the switch down event not the release
+			m_pmyPlcStates->AddInputEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, (int)(dValNew*10) );
+		}
+	}
+	else if ( m_pmyDevices->GetLastRecorded(idx,iChannel) + MAX_EVENT_PERIOD < time(NULL) )
+	{	// record data every 5 minutes regardless of change
+		myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, eEventType, dValNew, "" );
+
+		m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
+		m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
+
+		if ( eEventType == E_ET_ROTARY_ENC )
+			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+				(int16_t)(m_pmyDevices->GetNewData( idx, iChannel+1 )), dValNew, szUnits );
+		else
+			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+				dValNew, szUnits );
+	}
+
+	//LogMessage( E_MSG_INFO, "SetLastData %d %d %.1f", idx, i, m_pmyDevices->GetNewData(idx,i) );
+	m_pmyDevices->GetLastData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
+}
+
 
 void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t uState, const enum E_EVENT_TYPE eEvent )
 {
@@ -2626,6 +2853,8 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 
 				if ( m_szEspResponseMsg[0] != '\0' && !IsTcpipThread() )
 				{	// send msg to esp device via the tcpip thread
+					LogMessage( E_MSG_INFO, "ESP msg '%s'", m_szEspResponseMsg );
+
 					pthread_mutex_lock( &mutexLock[E_LT_NODEESP] );
 
 					m_pmyDevices->SetEspResponseMsg( szOutDeviceName, m_szEspResponseMsg );
@@ -2686,6 +2915,20 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 				case E_IO_ON_OFF:
 				case E_IO_TEMP_HIGH:
 				case E_IO_TEMP_LOW:
+				case E_IO_TEMP_HIGHLOW:
+				case E_IO_TEMP_MONITOR:
+				case E_IO_VOLT_HIGH:
+				case E_IO_VOLT_LOW:
+				case E_IO_VOLT_HIGHLOW:
+				case E_IO_VOLT_MONITOR:
+				case E_IO_LEVEL_HIGH:
+				case E_IO_LEVEL_LOW:
+				case E_IO_LEVEL_HIGHLOW:
+				case E_IO_LEVEL_MONITOR:
+				case E_IO_ROTENC_HIGH:
+				case E_IO_ROTENC_LOW:
+				case E_IO_ROTENC_HIGHLOW:
+				case E_IO_ROTENC_MONITOR:
 					if ( !bIsEsp )
 					{
 						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
@@ -2782,7 +3025,10 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 					}
 					else
 					{	// format the response message to the esp device
-						snprintf( m_szEspResponseMsg, sizeof(m_szEspResponseMsg), "OK%d%05d", iOutChannel+1, (bState ? iOutOnPeriod : 0) );
+						int iPeriod = (bState ? iOutOnPeriod : 0);
+						if ( bState && iOutOnPeriod == 0 )
+							iPeriod = -1;
+						snprintf( m_szEspResponseMsg, sizeof(m_szEspResponseMsg), "OK%d%05d", iOutChannel+1, iPeriod );
 					}
 
 					if ( !bError )
@@ -2863,6 +3109,20 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 				case E_IO_ON_OFF:
 				case E_IO_TEMP_HIGH:
 				case E_IO_TEMP_LOW:
+				case E_IO_TEMP_HIGHLOW:
+				case E_IO_TEMP_MONITOR:
+				case E_IO_VOLT_HIGH:
+				case E_IO_VOLT_LOW:
+				case E_IO_VOLT_HIGHLOW:
+				case E_IO_VOLT_MONITOR:
+				case E_IO_LEVEL_HIGH:
+				case E_IO_LEVEL_LOW:
+				case E_IO_LEVEL_HIGHLOW:
+				case E_IO_LEVEL_MONITOR:
+				case E_IO_ROTENC_HIGH:
+				case E_IO_ROTENC_LOW:
+				case E_IO_ROTENC_HIGHLOW:
+				case E_IO_ROTENC_MONITOR:
 					if ( !bIsEsp )
 					{
 						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
@@ -2940,7 +3200,7 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 
 			snprintf( szOutput, sizeof(szOutput), "%s/latest_snapshot.jpg", CameraList.GetSnapshotCamera().GetDirectory() );
 			snprintf( szParms, sizeof(szParms), "cmd=snapPicture2&usr=%s&pwd=%s", CameraList.GetSnapshotCamera().GetUserId(), CameraList.GetSnapshotCamera().GetPassword() );
-			snprintf( szCmd, sizeof(szCmd), "curl --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" -o %s",
+			snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" -o %s",
 					CameraList.GetSnapshotCamera().GetIPAddress(), urlEncode(szParms).c_str(), szOutput );
 
 			char szFile[100];
@@ -3100,23 +3360,24 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 		int iStateNo = 0;
 		int iDeviceNo = 0;
 		int iIOChannel = 0;
+		int iValue = 0;
 
 		iStateNo = myDB.ReadPlcStatesScreenButton();
 		if ( iStateNo == 0 )
 		{
 			pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
-			// long required as the input event comes from the com port threads
-			iStateNo = pPlcStates->ReadInputEvent( iDeviceNo, iIOChannel );
+			// lock required as the input event comes from the com port threads
+			iStateNo = pPlcStates->ReadInputEvent( iDeviceNo, iIOChannel, iValue );
 			pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
 
 			if ( iStateNo != 0 )
 			{
-				LogMessage( E_MSG_INFO, "PLC Input event %d,%d, StateNo %d", iDeviceNo, iIOChannel, iStateNo );
+				LogMessage( E_MSG_INFO, "PLC Input event %d,%d,%d StateNo %d", iDeviceNo, iIOChannel, iValue, iStateNo );
 			}
 			else if ( iDeviceNo != 0 )
 			{
-				LogMessage( E_MSG_WARN, "PLC invalid input event %d,%d for state %s", iDeviceNo, iIOChannel, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
-				gThreadMsg.PutMessage( "PLC invalid input event %d,%d for state %s", iDeviceNo, iIOChannel, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
+				LogMessage( E_MSG_WARN, "PLC invalid input event %d,%d,%d for state %s", iDeviceNo, iIOChannel, iValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
+				gThreadMsg.PutMessage( "PLC invalid input event %d,%d,%d for state %s", iDeviceNo, iIOChannel, iValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
 			}
 		}
 
@@ -3144,6 +3405,58 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 					LogMessage( E_MSG_INFO, "PLC: Event is disabled for another %ld seconds", pPlcStates->GetActiveState().GetStateTimestamp() + iDelay - tTimenow );
 					gThreadMsg.PutMessage( "PLC: Event is disabled for another %ld seconds", pPlcStates->GetActiveState().GetStateTimestamp() + iDelay - tTimenow );
 				}
+			}
+			else
+			{
+				CPlcState& myState = pPlcStates->GetState(idx);
+
+				if ( strlen(myState.GetTest()) != 0 )
+				{
+					bProcess = false;
+
+					if ( strcmp( myState.GetTest(), "GE" ) == 0 )
+					{
+						if ( iValue >= myState.GetValue() )
+						{
+							bProcess = true;
+						}
+					}
+					else if ( strcmp( myState.GetTest(), "GT" ) == 0 )
+					{
+						if ( iValue > myState.GetValue() )
+						{
+							bProcess = true;
+						}
+					}
+					else if ( strcmp( myState.GetTest(), "EQ" ) == 0 )
+					{
+						if ( iValue == myState.GetValue() )
+						{
+							bProcess = true;
+						}
+					}
+					else if ( strcmp( myState.GetTest(), "LE" ) == 0 )
+					{
+						if ( iValue <= myState.GetValue() )
+						{
+							bProcess = true;
+						}
+					}
+					else if ( strcmp( myState.GetTest(), "LT" ) == 0 )
+					{
+						if ( iValue < myState.GetValue() )
+						{
+							bProcess = true;
+						}
+					}
+					else
+					{
+						LogMessage( E_MSG_WARN, "Plc unhandled Test type '%s'", myState.GetTest() );
+					}
+				}
+
+				LogMessage( E_MSG_INFO, "PLC State %d, %d '%s' vs %d: %s", iStateNo, iValue, myState.GetTest(), myState.GetValue(), (bProcess ? "action" : "skip") );
+				gThreadMsg.PutMessage( "PLC State %d, %d '%s' vs %d: %s", iStateNo, iValue, myState.GetTest(), myState.GetValue(), (bProcess ? "action" : "skip") );
 			}
 
 			if ( bProcess )

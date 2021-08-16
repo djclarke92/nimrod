@@ -111,12 +111,42 @@ int main( int argc, char** argv )
 		printf( "                       2 Voltage device and temperature devices\n" );
 		printf( "                       3 Thermocouple devices PD3064\n" );
 		printf( "                       4 HDL300 water level sensor\n" );
+		printf( "                       5 Rotary Encoder MT-5208 series\n" );
+		printf( "                       6 PZEM-016 AC V/A Monitor\n" );
 	}
 
 	return 0;
 }
 
-
+// PZEM-016 AC V/I Monitor
+// Does not reply to the broadcast address 0x00
+// Uses read_input_registers()
+// Only 9600 baud is supported
+// Input Register 0x00 voltage, lsb = 0.1V
+// Input Register 0x01/2 current, lsb = 0.001A
+// Input Register 0x03/4 power, lsb = 0.1W
+// Input Register 0x05/6 energy, lsb = 1Wh
+// Input Register 0x07 frequency, lsb = 0.1Hz
+// Input Register 0x08 power factor, lsb = 0.01
+// Input Register 0x09 alarm status
+// Register 0x01 power alarm threshold
+// Register 0x02 address
+//
+// MT 5208 Rotary Encoder 12 bit
+// function code 0x03 = read
+// Register 0x00 angle
+// Register 0x01 turns
+// Register 0x02 address
+// Register 0x03 baud rate (1=9600, 2=19200, 3=38400)
+// Register 0x04 parity (1=N, 2=Odd, 3=even)
+// Register 0x05 set zero pos (write data 0xff)
+// Register 0x06 set counting dir (1=clockwise, 2=anticlockwise)
+// Cable red = +12V
+//       black = 0V
+//       green = rs485A
+//       yellow - rs486B
+//       white = factory reset (connect to 0V during use)
+//
 // HDL300 water level sensor
 // function code 0x03 = read
 // Register 0x00 = modbus address
@@ -154,6 +184,7 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 	int modBaud2 = 0;
 	int modBaud3 = 0;
 	int modBaud4 = 0;
+	int modBaud5 = 0;
 	int reg;
 
 	// check the baud rate
@@ -171,11 +202,13 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 		modBaud = 2;
 		modBaud2 = 0;
 		modBaud4 = 3;
+		modBaud5 = 1;
 		break;
 	case 19200:
 		modBaud = 3;
 		modBaud2 = 6;
 		modBaud4 = 4;
+		modBaud5 = 2;
 		break;
 	}
 
@@ -347,11 +380,84 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 				}
 			}
 		}
+		else if ( type == 5 )
+		{	// rotary encoder
+			if ( newAddr != oldAddr )
+			{
+				printf( "Setting new address 0x%02x -> 0x%02x\n", oldAddr, newAddr );
+
+				// MT-5208 modbus address is in register 0x02
+				reg = 0x02;
+				if ( modbus_write_register( ctx, reg, newAddr ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New slave address 0x%02x set\n", newAddr );
+
+					if ( modbus_set_slave( ctx, newAddr ) == -1 )
+					{
+						printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+					}
+				}
+			}
+			else
+			{
+				printf( "Warning: skip setting module address\n" );
+			}
+
+			if ( newBaud != oldBaud )
+			{
+				printf( "Setting new baud rate %d -> %d (%d)\n", oldBaud, newBaud, modBaud5 );
+
+				reg = 0x03;
+				if ( modbus_write_register( ctx, reg, modBaud5 ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New baud rate %d set\n", newBaud );
+				}
+			}
+		}
+		else if ( type == 6 )
+		{	// PZEM-016 AC V/I Monitor
+			if ( newAddr != oldAddr )
+			{
+				printf( "Setting new address 0x%02x -> 0x%02x\n", oldAddr, newAddr );
+
+				// MT-5208 modbus address is in register 0x02
+				reg = 0x02;
+				if ( modbus_write_register( ctx, reg, newAddr ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New slave address 0x%02x set\n", newAddr );
+
+					if ( modbus_set_slave( ctx, newAddr ) == -1 )
+					{
+						printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+					}
+				}
+			}
+			else
+			{
+				printf( "Warning: skip setting module address\n" );
+			}
+
+			if ( newBaud != oldBaud )
+			{
+				printf( "Only supports 9600 baud %d\n", oldBaud );
+			}
+		}
 		else
 		{
 			printf( "Error: invalid type = %d\n", type );
 		}
-
 	}
 
 	usleep( 30000 );
@@ -361,7 +467,7 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type )
 {
 	int rc;
 	int addr;
-	const int iLen = 8;
+	int iLen = 8;
 
 	if ( type == 0 )
 	{
@@ -389,7 +495,12 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type )
 		}
 		else
 		{
-			printf( "Read input bits: %u %u %u %u %u %u %u %u\n", uInputs[0], uInputs[1], uInputs[2], uInputs[3], uInputs[4], uInputs[5], uInputs[6], uInputs[7] );
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", uInputs[i] );
+			}
+			printf ( "\n" );
 		}
 	}
 	else if ( type == 1 )
@@ -421,7 +532,12 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type )
 		}
 		else
 		{
-			printf( "modbus_read_bits() %u %u %u %u %u %u %u %u\n", (uint8_t)cData[0], (uint8_t)cData[1], cData[2], cData[3], cData[4], cData[5], cData[6], cData[7] );
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", (uint8_t)cData[i] );
+			}
+			printf ( "\n" );
 		}
 
 		usleep( 30000 );
@@ -454,7 +570,12 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type )
 		}
 		else
 		{
-			printf( "Read registers: %u %u %u %u %u %u %u %u\n", ulInputs[0], ulInputs[1], ulInputs[2], ulInputs[3], ulInputs[4], ulInputs[5], ulInputs[6], ulInputs[7] );
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", ulInputs[i] );
+			}
+			printf ( "\n" );
 		}
 	}
 	else if ( type == 3 )
@@ -475,7 +596,12 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type )
 		}
 		else
 		{
-			printf( "Read registers: %u %u %u %u %u %u %u %u\n", ulInputs[0], ulInputs[1], ulInputs[2], ulInputs[3], ulInputs[4], ulInputs[5], ulInputs[6], ulInputs[7] );
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", ulInputs[i] );
+			}
+			printf ( "\n" );
 		}
 	}
 	else if ( type == 4 )
@@ -496,7 +622,12 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type )
 		}
 		else
 		{
-			printf( "Read registers: %u %u %u %u %u %u %u %u\n", ulInputs[0], ulInputs[1], ulInputs[2], ulInputs[3], ulInputs[4], ulInputs[5], ulInputs[6], ulInputs[7] );
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", ulInputs[i] );
+			}
+			printf ( "\n" );
 			printf( "Depth = %d mm\n", ulInputs[0] + (ulInputs[1]>>8) );
 		}
 
@@ -513,7 +644,65 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type )
 			}
 		} */
 	}
+	else if ( type == 5 )
+	{	// rotary encoder
+		printf( "Setting slave addr to %d\n", newAddr );
+		if ( modbus_set_slave( ctx, newAddr ) == -1 )
+		{
+			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+		}
 
+		iLen = 5;
+
+		addr = 0x00;
+		uint16_t ulInputs[iLen];
+
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", ulInputs[i] );
+			}
+			printf ( "\n" );
+			printf( "Angle %d (%.1f deg), Turns %d\n", ulInputs[0], 360 * (double)ulInputs[0]/4096, ulInputs[1] );
+		}
+	}
+	else if ( type == 6 )
+	{	// PZEM-016 AC V/A Monitor
+		printf( "Setting slave addr to %d\n", newAddr );
+		if ( modbus_set_slave( ctx, newAddr ) == -1 )
+		{
+			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+		}
+
+		iLen = 10;
+
+		addr = 0x00;
+		uint16_t ulInputs[iLen];
+
+		rc = modbus_read_input_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", ulInputs[i] );
+			}
+			printf ( "\n" );
+			printf( "V=%.1fV, I=%.2fA, P=%.0fW, E=%dWh, F=%.1fHz, PF=%.1f, Alrm=%d\n", (double)ulInputs[0] / 10, (double)(ulInputs[1] + (ulInputs[2]>>8)) / 1000, (double)(ulInputs[3] + (ulInputs[4]>>8)) / 10,
+					(int)(ulInputs[5] + (ulInputs[6]>>8)), (double)ulInputs[7] / 10, (double)ulInputs[8] / 100, ulInputs[9] );
+		}
+	}
 }
 
 

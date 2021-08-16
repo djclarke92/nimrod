@@ -8,7 +8,7 @@
 #include <time.h>
 
 #include <modbus/modbus.h>
-#include <errmsg.h>
+#include <mysql/errmsg.h>
 
 #include "mb_mysql.h"
 #include "mb_utils.h"
@@ -171,7 +171,7 @@ void CMysql::CleanupEventsTable()
 	}
 	FreeResult();
 
-	rc1 = RunQuery( "DELETE FROM events WHERE ev_Timestamp < DATE_SUB(NOW(), INTERVAL 13 MONTH)" );
+	rc1 = RunQuery( "DELETE FROM events WHERE ev_Timestamp < DATE_SUB(NOW(), INTERVAL 13 MONTH) and ev_Timestamp!='0000-00-00'" );
 	FreeResult();
 
 	rc2 = RunQuery( "optimize table events" );
@@ -181,15 +181,16 @@ void CMysql::CleanupEventsTable()
 	{
 		if ( (row = FetchRow( iNumFields )) )
 		{
-			iCount2 = atoi( row[0] );
+			iCount2 = atoi( (const char*)row[0] );
 		}
 	}
 	FreeResult();
 
-	LogMessage( E_MSG_INFO, "CleanupEventsTable() %s: %d records deleted (%d,%d)", (rc1 == 0 && rc2 == 0 ? "success" : "failed"), iCount2 - iCount1, rc1, rc2 );
+	// some records can be added to the table while these queries are running
+	LogMessage( E_MSG_INFO, "CleanupEventsTable() %s: %d -> %d, %d records deleted (%d,%d)", (rc1 == 0 && rc2 == 0 ? "success" : "failed"), iCount1, iCount2, iCount1 - iCount2, rc1, rc2 );
 }
 
-void CMysql::LogEvent( const int iDeviceNo, const int iIOChannel, enum E_EVENT_TYPE eEventType, const int iValue, const char* fmt, ... )
+void CMysql::LogEvent( const int iDeviceNo, const int iIOChannel, enum E_EVENT_TYPE eEventType, const double dValue, const char* fmt, ... )
 {
 	char szBuf[256];
 	char szOut[512];
@@ -204,7 +205,7 @@ void CMysql::LogEvent( const int iDeviceNo, const int iIOChannel, enum E_EVENT_T
 	AddSlashes( szBuf, szOut );
 
 	if ( RunQuery( "insert into events (ev_Timestamp,ev_DeviceNo,ev_IOChannel,ev_EventType,ev_Value,ev_Description) "
-			"values(now(),%d,%d,%d,%d,\"%s\")", iDeviceNo, iIOChannel, eEventType, iValue, szOut ) != 0 )
+			"values(now(),%d,%d,%d,%.3f,\"%s\")", iDeviceNo, iIOChannel, eEventType, dValue, szOut ) != 0 )
 	{	// error
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
 	}

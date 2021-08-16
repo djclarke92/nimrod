@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS `devices` (
 	`de_Name` varchar(100) NOT NULL default '',					# nice name for this device
 	`de_Status` int(10) NOT NULL default '0',					# device status: alive, dead, buried
 	`de_Hostname` varchar(20) NOT NULL default '',				# pi hostname or ip address
+	`de_BaudRate` int(10) NOT NULL default 19200,				# baud rate
 	PRIMARY KEY (`de_DeviceNo`),
 	UNIQUE KEY `de_address_index` (`de_Address`)
 ) ;
@@ -80,7 +81,7 @@ create TABLE IF NOT EXISTS `events` (
 	`ev_DeviceNo` int(10) NOT NULL default '0',					#
 	`ev_IOChannel` int(10) NOT NULL default '0',				#
 	`ev_EventType` int(10) NOT NULL default '0',				#
-	`ev_Value` int(10) NOT NULL default '0',					#
+	`ev_Value` decimal(10,3) NOT NULL default '0',				#
 	`ev_Description` varchar(250) NOT NULL default '',			#
 	PRIMARY KEY (`ev_EventNo`),
 	KEY `ev_device_index` (`ev_DeviceNo`,`ev_Timestamp`)

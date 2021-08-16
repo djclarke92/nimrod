@@ -15,14 +15,11 @@ define( 'DB_DATABASE_NAME', 'nimrod' );
 // remote mysql host (defaults to nimrod user)
 define( 'REMOTE_MYSQL_HOST', '192.168.1.188' );
 
-// log file directory
-define( 'NIMROD_LOG_DIR', '/home/nimrod' );
+// log file directory (symlinked to /var/tmp)
+define( 'NIMROD_LOG_DIR', '/home/nimrod/log' );
 
 // logout timer in seconds
 define( 'AUTO_REFRESH_LOGOUT', 1800 );	// 1800
-
-// modbus baud rate
-define( 'MODBUS_BAUD_RATE', '19200' );
 
 // plc state machine
 define( 'SHOW_PLC', 1 );

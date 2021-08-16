@@ -15,8 +15,10 @@
 #define TEMPERATURE_CHECK_PERIOD			5		// seconds
 #define VOLTAGE_CHECK_PERIOD				2		// seconds
 #define LEVEL_CHECK_PERIOD					5		// seconds
+#define ROTENC_CHECK_PERIOD					1		// seconds
+#define VIPF_CHECK_PERIOD					1		// seconds
 #define MAX_TCPIP_SOCKETS					16
-#define ESP_PING_TIMEOUT					90
+#define ESP_PING_TIMEOUT					60
 #define CAMERA_SNAPSHOT_PERIOD				60	// seconds
 
 
@@ -99,6 +101,7 @@ private:
 	int m_iActiveStateIdx;
 	int m_iInputDeviceNo[MAX_PLC_INPUT_EVENTS];
 	int m_iInputIOChannel[MAX_PLC_INPUT_EVENTS];
+	int m_iInputValue[MAX_PLC_INPUT_EVENTS];
 	CPlcState m_State[MAX_PLC_STATES];
 
 public:
@@ -115,8 +118,8 @@ public:
 	const int GetInitialAction( const int iStartIdx );
 	const int GetActiveStateIdx();
 	const bool FindInputDevice( const int iDeviceNo, const int iIOChannel );
-	void AddInputEvent( const int iDeviceNo, const int iIOChannel );
-	const int ReadInputEvent( int& iDeviceNo, int& iIOChannel );
+	void AddInputEvent( const int iDeviceNo, const int iIOChannel, const int iValue );
+	const int ReadInputEvent( int& iDeviceNo, int& iIOChannel, int& iValue );
 	void SetNextStateActive( const int idx, const time_t tTimenow );
 };
 
@@ -203,6 +206,7 @@ private:
 	time_t m_tLastConfigCheck;
 	time_t m_tLastPlcStatesCheck;
 	time_t m_tLastCameraSnapshot;
+	time_t m_tThreadStartTime;
 	struct in_addr m_xClientInAddr[MAX_TCPIP_SOCKETS];
 	SSL* m_xClientSSL[MAX_TCPIP_SOCKETS];
 	CDeviceList* m_pmyDevices;
@@ -244,6 +248,8 @@ public:
 	void HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
+	void HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
+	void HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int iButton );
 	void CheckForTimerOffTime( CMysql& myDB, const int idx );
@@ -252,6 +258,10 @@ public:
 	void ReadCameraRecords( CMysql& myDB, CCameraList& CameraList );
 	void ReadPlcStatesTable( CMysql& myDB, CPlcStates* pmyPlcStates );
 	void ProcessPlcStates( CMysql& myDB, CPlcStates* pmyPlcStates );
+	void ProcessTemperatureData( CMysql& myDB, const int idx, const int i );
+	void ProcessEspTemperatureEvent( CMysql& myDB, const char* szEspName, const int iChannel, const double dValue );
+	void HandleChannelThresholds( CMysql& myDB, const int idx, const int iChannel, const double dDiff, const E_EVENT_TYPE eEventType, const E_IO_TYPE eIOTypeL, const E_IO_TYPE eIOTypeH,
+			const E_IO_TYPE eIOTypeHL, const char* szName, const char* szDesc, const char* szUnits, const double dValNew, const double dValOld );
 
 	void websocket_init();
 	void websocket_process( const char* szMsg );

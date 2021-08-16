@@ -80,6 +80,8 @@ int main( int argc, char *argv[] )
 	CPlcStates myPlcStates;
 	pthread_mutexattr_t attr;
 	struct stat statbuf;
+	FILE* pStdout = NULL;
+	FILE* pStderr = NULL;
 	CThread* myThread[MAX_THREADS];
 	CMysql myDB;
 
@@ -109,12 +111,17 @@ int main( int argc, char *argv[] )
 
 	ReadSiteConfig( "NIMROD_LOG_DIR", gszLogDir, sizeof(gszLogDir) );
 
-	SetMyHostname();
-
-	if ( ReadSiteConfig( "MODBUS_BAUD_RATE", szBuf, sizeof(szBuf) ) )
+	// redirect stdout and stderr to a log file
+	snprintf( szBuf, sizeof(szBuf), "%s/nimrod-stdout.log", gszLogDir );
+	pStdout = freopen( szBuf, "a+", stdout );
+	snprintf( szBuf, sizeof(szBuf), "%s/nimrod-stdout.log", gszLogDir );
+	pStderr = freopen( szBuf, "a+", stderr );
+	if ( pStdout == NULL || pStderr == NULL )
 	{
-		gRS485.iBaud = atoi( szBuf );
+		LogMessage( E_MSG_ERROR, "Error redirecting stdout %p or stderr %p", pStdout, pStderr );
 	}
+
+	SetMyHostname();
 
 	snprintf( gszProgName, sizeof(gszProgName), "%s", basename(argv[0]) );
 
@@ -171,7 +178,6 @@ int main( int argc, char *argv[] )
 	myDB.LogEvent( 0, 0, E_ET_STARTUP, 0, "Nimrod %d.%d starting", NIMROD_RELEASE, NIMROD_BUILD_NUMBER );
 
 	LogMessage( E_MSG_INFO, "Nimrod build: %d.%d", NIMROD_RELEASE, NIMROD_BUILD_NUMBER );
-	LogMessage( E_MSG_INFO, "Com Port: %d %c %d %d", gRS485.iBaud, gRS485.cParity, gRS485.iDataBits, gRS485.iStopBits );
 	LogMessage( E_MSG_INFO, "Compiled against libmodbus v%s", LIBMODBUS_VERSION_STRING );
 	LogMessage( E_MSG_INFO, "Linked against libmodbus v%d.%d.%d", libmodbus_version_major, libmodbus_version_minor, libmodbus_version_micro );
 
@@ -439,6 +445,9 @@ int main( int argc, char *argv[] )
 			LogMessage( E_MSG_ERROR, "system() failed for restart script, errno %d", errno );
 		}
 	}
+
+	fclose( pStdout );
+	fclose( pStderr );
 
 	// sleep or the upgrade does not work - something to do with running from systemd
 	sleep( 2 );

@@ -18,6 +18,7 @@ function func_clear_de_array( &$de_array )
 {
 	$de_array['de_DeviceNo'] = 0;
 	$de_array['de_ComPort'] = "";
+	$de_array['de_BaudRate'] = "";
 	$de_array['de_Address'] = "";
 	$de_array['de_NumInputs'] = "";
 	$de_array['de_NumOutputs'] = "";
@@ -37,6 +38,11 @@ function func_check_de_array( &$de_array )
 	{
 		$de_array['error_msg'] = "You must enter the Com Port (e.g. /dev/ttyUSB0 or Timer or ESP).";
 		return false;
+	}
+	else if ( strncmp( $de_array['de_ComPort'], "/dev/", 5 ) == 0 && $de_array['de_BaudRate'] != 9600 && $de_array['de_BaudRate'] != 19200 )
+	{
+	    $de_array['error_msg'] = "The Baud Rate must be 9600 or 19200.";
+	    return false;
 	}
 	else if ( $de_array['de_Address'] == "" || ($de_array['de_Address'] < 2 && $de_array['de_Address'] != 0) || $de_array['de_Address'] > 0xfe ||
 	    ($de_array['de_Address'] == 0 && $de_array['de_ComPort'] != 'Timer' && strncmp( $de_array['de_ComPort'], 'ESP', 3 ) != 0) )
@@ -74,6 +80,16 @@ function func_check_de_array( &$de_array )
 	    $de_array['error_msg'] = "HDL Level devices can only have one input.";
 	    return false;
 	}
+	else if ( $de_array['de_Type'] == E_DT_ROTARY_ENC_12BIT && ($de_array['de_NumInputs'] > 1 || $de_array['de_NumOutputs'] > 0) )
+	{
+	    $de_array['error_msg'] = "Rotary Encoder devices can only have one input.";
+	    return false;
+	}
+	else if ( $de_array['de_Type'] == E_DT_VIPF_MON && ($de_array['de_NumInputs'] != 6 || $de_array['de_NumOutputs'] > 0) )
+	{
+	    $de_array['error_msg'] = "HDL Level devices can only have 6 inputs.";
+	    return false;
+	}
 	
 	return true;
 }
@@ -92,6 +108,8 @@ if ( isset( $_POST['de_DeviceNo']) )
 	$de_array['de_DeviceNo'] = $_POST['de_DeviceNo'];
 if ( isset( $_POST['de_ComPort']) )
 	$de_array['de_ComPort'] = $_POST['de_ComPort'];
+if ( isset( $_POST['de_BaudRate']) )
+    $de_array['de_BaudRate'] = $_POST['de_BaudRate'];
 if ( isset( $_POST['de_Address']) )
 	$de_array['de_Address'] = $_POST['de_Address'];
 if ( isset( $_POST['de_NumInputs']) )
@@ -113,7 +131,7 @@ if ( isset($_GET['DeviceNo']) )
     {
         $new_device = true;
     }
-	else if ( ($line=$db->GetFields( 'devices', 'de_DeviceNo', $de_array['de_DeviceNo'], "de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname" )) !== false )
+	else if ( ($line=$db->GetFields( 'devices', 'de_DeviceNo', $de_array['de_DeviceNo'], "de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate" )) !== false )
 	{	// success
 		$de_array['de_ComPort'] = $line[0];
 		$de_array['de_Address'] = $line[1];
@@ -122,6 +140,7 @@ if ( isset($_GET['DeviceNo']) )
 		$de_array['de_Type'] = $line[4];
 		$de_array['de_Name'] = $line[5];
 		$de_array['de_Hostname'] = $line[6];
+		$de_array['de_BaudRate'] = $line[7];
 	}
 	else
 	{
@@ -162,12 +181,15 @@ else if ( isset($_POST['NewDevice']) || isset($_POST['UpdateDevice']) )
 	else if ( func_check_de_array( $de_array ) )
 	{
 		if ( $db->UpdateDevicesTable( $de_array['de_DeviceNo'], $de_array['de_ComPort'], $de_array['de_Address'],
-			$de_array['de_NumInputs'], $de_array['de_NumOutputs'], $de_array['de_Type'], $de_array['de_Name'], $de_array['de_Hostname'] ) )
+			$de_array['de_NumInputs'], $de_array['de_NumOutputs'], $de_array['de_Type'], $de_array['de_Name'], $de_array['de_Hostname'], $de_array['de_BaudRate'] ) )
 		{	// success
-		    $new_device = false;
 			func_clear_de_array( $de_array );
-			
-			$de_array['info_msg'] = "New device saved successfully.";
+		
+			if ( $new_device )
+    			$de_array['info_msg'] = "New device saved successfully.";
+			else
+			    $de_array['info_msg'] = "Device updated successfully.";
+			$new_device = false;
 		}
 		else
 		{
@@ -270,10 +292,22 @@ $devices_list = $db->ReadDevicesTable();
 
     		printf( "<div class='form-row'>" );
     		printf( "<div class='col'>" );
-    		printf( "<label for='de_Name'>Name: </label>" );
+    		printf( "<label for='de_BaudRate'>BaudRate: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='de_Name' id='de_Name' size='15' value='%s'> ", $de_array['de_Name'] );
+    		printf( "<select class='form-control custom-select' name='de_BaudRate' id='de_BaudRate' size='1'>" );
+    		printf( "<option %s>9600</option>", ($de_array['de_BaudRate'] == 9600 ? "selected" : "") );
+    		printf( "<option %s>19200</option>", ($de_array['de_BaudRate'] == 19200 ? "selected" : "") );
+    		printf( "</select>" );
+  			printf( "</div>" );
+  			printf( "</div>" );
+  			
+  			printf( "<div class='form-row'>" );
+  			printf( "<div class='col'>" );
+  			printf( "<label for='de_Name'>Name: </label>" );
+  			printf( "</div>" );
+  			printf( "<div class='col'>" );
+  			printf( "<input type='text' class='form-control' name='de_Name' id='de_Name' size='15' value='%s'> ", $de_array['de_Name'] );
   			printf( "</div>" );
   			printf( "</div>" );
   			
@@ -321,13 +355,12 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<div class='col'>" );
   			printf( "<select size='1' class='form-control custom-select' name='de_Type' id='de_Type'>" );
   			printf( "<option></option>" );
-  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_DIGITAL_IO ? "selected" : ""), E_DTD_DIGITAL_IO );
-  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_TEMPERATURE_DS ? "selected" : ""), E_DTD_TEMPERATURE_DS );
-  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_TIMER ? "selected" : ""), E_DTD_TIMER );
-  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_VOLTAGE ? "selected" : ""), E_DTD_VOLTAGE );
-  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_TEMPERATURE_K1 ? "selected" : ""), E_DTD_TEMPERATURE_K1 );
-  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_LEVEL_K02 ? "selected" : ""), E_DTD_LEVEL_K02 );
-  			printf( "<option %s>%s</option>", ($de_array['de_Type'] == E_DT_LEVEL_HDL ? "selected" : ""), E_DTD_LEVEL_HDL );
+  			$dt = 0;
+  			foreach ( $_SESSION['E_DTD'] as $dtd )
+  			{
+  			    printf( "<option %s>%s</option>", ($de_array['de_Type'] == $dt ? "selected" : ""), $dtd );
+  			    $dt += 1;
+  			}
   			printf( "</select>" );
   			printf( "</div>" );
   			printf( "</div>" );

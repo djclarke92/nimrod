@@ -56,7 +56,9 @@ typedef struct {
 	char szEspName[7];
 	char szEvent[4];
 	int iButton;
-	char szChipMac[13];
+	int iChannel;
+	double dTemperature;
+	char szChipMac[12+1];
 } MSG_ESP_TYPE;
 
 typedef struct {

@@ -27,7 +27,9 @@ enum E_DEVICE_TYPE {
 	E_DT_VOLTAGE,			// 4: analogue voltage
 	E_DT_TEMPERATURE_K1,	// 5: temperature, PD3064 K thermocouple
 	E_DT_LEVEL_K02,			// 6: ultrasonic level measurement type K02
-	E_DT_LEVEL_HDL			// 7: water level sensor type HDL300
+	E_DT_LEVEL_HDL,			// 7: water level sensor type HDL300
+	E_DT_ROTARY_ENC_12BIT,	// 8: rotary encoder 12 bit
+	E_DT_VIPF_MON,			// 9: PZEM-016 VIPF Monitor
 };
 
 enum E_IO_TYPE {
@@ -48,8 +50,25 @@ enum E_IO_TYPE {
 	E_IO_VOLT_HIGHLOW,		// 14:	voltage too high or too low
 	E_IO_LEVEL_MONITOR,		// 15:	level measurement K02
 	E_IO_LEVEL_HIGH,		// 16:	level too high
-	E_IO_LEVEL_LOW,		// 17:	level too low
-	E_IO_LEVEL_HIGHLOW,	// 18:	level too high or too low
+	E_IO_LEVEL_LOW,			// 17:	level too low
+	E_IO_LEVEL_HIGHLOW,		// 18:	level too high or too low
+	E_IO_ROTENC_MONITOR,	// 19:	rotary encoder measurement
+	E_IO_ROTENC_HIGH,		// 20:	rotary encoder too high
+	E_IO_ROTENC_LOW,		// 21:	rotary encoder too low
+	E_IO_ROTENC_HIGHLOW,	// 22:	rotary too high or too low
+	E_IO_CURRENT_MONITOR,	// 23:	current monitor only
+	E_IO_CURRENT_HIGH,		// 24:	current too high
+	E_IO_CURRENT_LOW,		// 25:	current too low
+	E_IO_CURRENT_HIGHLOW,	// 26:	current too high or too low
+	E_IO_FREQ_MONITOR,		// 27:	frequency monitor only
+	E_IO_FREQ_HIGH,			// 28:	frequency too high
+	E_IO_FREQ_LOW,			// 29:	frequency too low
+	E_IO_FREQ_HIGHLOW,		// 30:	frequency too high or too low
+	E_IO_PWRFACT_MONITOR,	// 31:	power factor monitor only
+	E_IO_POWER_MONITOR,		// 32:	power monitor only
+	E_IO_POWER_HIGH,		// 33:	power too high
+	E_IO_POWER_LOW,			// 34:	power too low
+	E_IO_POWER_HIGHLOW,		// 35:	power too high or too low
 };
 
 enum E_EVENT_TYPE {
@@ -63,6 +82,11 @@ enum E_EVENT_TYPE {
 	E_ET_VOLTAGE,			// 7:	voltage event
 	E_ET_STARTUP,			// 8:	program startup
 	E_ET_LEVEL,				// 9:	level event
+	E_ET_ROTARY_ENC,		// 10:	rotary encode
+	E_ET_CURRENT,			// 11:	current
+	E_ET_FREQUENCY,			// 12:	frequency
+	E_ET_POWERFACTOR,		// 13:	power factor
+	E_ET_POWER,				// 14:	power
 };
 
 enum E_DEVICE_STATUS {
@@ -173,6 +197,7 @@ private:
 	char m_szComPort[MAX_COMPORT_LEN+1];
 	char m_szDeviceName[MAX_DEVICE_NAME_LEN+1];
 	char m_szDeviceHostname[MAX_HOSTNAME_LEN+1];
+	int m_iBaudRate;
 	int m_iComHandle;
 	modbus_t* m_pCtx;
 	int m_iDeviceNo;
@@ -220,6 +245,8 @@ public:
 	const double CalcTemperature( const int iChannel, const bool bNew );
 	const double CalcVoltage( const int iChannel, const bool bNew );
 	const double CalcLevel( const int iChannel, const bool bNew );
+	const double CalcRotaryEncoderDistance( const int iChannel, const bool bNew );
+	const double CalcVIPFValue( const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int iChannel );
 	const bool WasSensorConnected( const int iChannel );
 	const bool IsTimerEnabledToday( const int iChannel );
@@ -229,6 +256,7 @@ public:
 	const int GetComHandle(){ return m_iComHandle; };
 	modbus_t* GetContext(){ return m_pCtx; };
 	const int GetDeviceNo(){ return m_iDeviceNo; };
+	const int GetBaudRate(){ return m_iBaudRate; };
 	const char* GetComPort(){ return m_szComPort; };
 	const char* GetDeviceName(){ return m_szDeviceName; };
 	const char* GetDeviceHostname(){ return m_szDeviceHostname; };
@@ -273,12 +301,13 @@ public:
 	void SetComHandle( int iHandle ){ m_iComHandle = iHandle; };
 	void SetContext( modbus_t* pCtx ){ m_pCtx = pCtx; };
 	void SetDeviceNo( const int iDeviceNo ){ m_iDeviceNo = iDeviceNo; };
+	void SetBaudRate( const int iBaudRate ){ m_iBaudRate = iBaudRate; };
 	void SetComPort( const char* szPort );
 	void SetDeviceName( const char* szName );
 	void SetDeviceHostname( const char* szDeviceHostname );
 	void SetAddress( const int iAddr ){ m_iAddress = iAddr; };
 	void SetDeviceType( const enum E_DEVICE_TYPE eType ){ m_eDeviceType = eType; };
-	void SetDeviceStatus( const enum E_DEVICE_STATUS eStatus );
+	void SetDeviceStatus( const enum E_DEVICE_STATUS eStatus, const bool bNoTimeout );
 	void SetTimeoutCount( const int iCount ){ m_iTimeoutCount = iCount; };
 	void SetNumInputs( const int iNumInputs ){ m_iNumInputs = iNumInputs; };
 	void SetNumOutputs( const int iNumOutputs ){ m_iNumOutputs = iNumOutputs; };
@@ -319,6 +348,7 @@ public:
 	const bool IsShared( const int idx );
 	const bool IsSharedWithNext( const int idx );
 	void FreeAllContexts();
+	const int GetBaudRateForPort( const char* szComPort );
 	int GetComPortsOnHost( CMysql& myDB, char szPort[MAX_DEVICES][MAX_COMPORT_LEN+1] );
 	const int GetTotalComPorts( char szPort[MAX_DEVICES][MAX_COMPORT_LEN+1] );
 	const int GetIdxForAddr( const int iAddr );
@@ -332,6 +362,8 @@ public:
 	const double CalcTemperature( const int idx, const int iChannel, const bool bNew );
 	const double CalcVoltage( const int idx, const int iChannel, const bool bNew );
 	const double CalcLevel( const int idx, const int iChannel, const bool bNew );
+	const double CalcRotaryEncoderDistance( const int idx, const int iChannel, const bool bNew );
+	const double CalcVIPFValue( const int idx, const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int idx, const int iChannel );
 	const bool WasSensorConnected( const int idx, const int iChannel );
 	const bool IsTimerEnabledToday( const int idx, const int iChannel );
@@ -341,6 +373,7 @@ public:
 	int GetComHandle( const int idx );
 	modbus_t* GetContext( const int idx );
 	const int GetDeviceNo( const int idx );
+	const int GetBaudRate( const int idx );
 	const char* GetComPort( const int idx );
 	const char* GetDeviceName( const int idx );
 	const char* GetDeviceHostname( const int idx );
@@ -390,12 +423,13 @@ public:
 
 	void SetContext( const int idx, modbus_t* pCtx );
 	void SetDeviceNo( const int idx, const int iDeviceNo );
+	void SetBaudRate( const int idx, const int iBaudRate );
 	void SetComPort( const int idx, const char* szPort );
 	void SetDeviceName( const int idx, const char* szName );
 	void SetDeviceHostname( const int idx, const char* szHostname );
 	void SetEspResponseMsg( const char* szEspName, const char* szResponseMsg );
 	void SetDeviceType( const int idx, const enum E_DEVICE_TYPE eType );
-	bool SetDeviceStatus( const int idx, const enum E_DEVICE_STATUS eStatus );
+	bool SetDeviceStatus( const int idx, const enum E_DEVICE_STATUS eStatus, const bool bNoTimeout = false );
 	void SetAddress( const int idx, const int iAddr );
 	void SetNumInputs( const int idx, const int iNum );
 	void SetNumOutputs( const int idx, const int iNum );

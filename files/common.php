@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 110 );
+define( "THIS_DATABASE_VERSION", 112 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -32,7 +32,6 @@ define( "E_UFD_HOMECAMERAS", "Show Cameras on Home Page" );
 
 define( "MAX_CAMERAS", 9 );
 
-
 define( "E_DT_UNUSED", 0 );
 define( "E_DT_DIGITAL_IO", 1 );		// digital input and/or output
 define( "E_DT_TEMPERATURE_DS", 2 );	// temperature, DS18B20 
@@ -41,14 +40,19 @@ define( "E_DT_VOLTAGE", 4 );		// voltage
 define( "E_DT_TEMPERATURE_K1", 5 );	// temperature, PD3064 K thermocouple
 define( "E_DT_LEVEL_K02", 6 );	     // level, K02 module
 define( "E_DT_LEVEL_HDL", 7 );	     // level, HDL300 sensor
-define( "E_DTD_UNUSED", "Unused" );
-define( "E_DTD_DIGITAL_IO", "Digital IO" );
-define( "E_DTD_TEMPERATURE_DS", "Temperature DS" );	
-define( "E_DTD_TIMER", "Timer" );
-define( "E_DTD_VOLTAGE", "Voltage" );
-define( "E_DTD_TEMPERATURE_K1", "Temperature K" );
-define( "E_DTD_LEVEL_K02", "Level K02" );
-define( "E_DTD_LEVEL_HDL", "Level HDL" );
+define( "E_DT_ROTARY_ENC_12BIT", 8 );	     // rotary encoder, 12 bit
+define( "E_DT_VIPF_MON", 9 );           // PZEM-016 V/I Monitor
+$_SESSION['E_DTD'] = array();
+$_SESSION['E_DTD'][] = "Unused";
+$_SESSION['E_DTD'][] = "Digital IO"; 
+$_SESSION['E_DTD'][] = "Temperature DS";
+$_SESSION['E_DTD'][] = "Timer";
+$_SESSION['E_DTD'][] = "Voltage";
+$_SESSION['E_DTD'][] = "Temperature K";
+$_SESSION['E_DTD'][] = "Level K02";
+$_SESSION['E_DTD'][] = "Level HDL";
+$_SESSION['E_DTD'][] = "Rotary Encoder 12bit";
+$_SESSION['E_DTD'][] = "AC VIPF Monitor";
 
 
 define( "E_IO_UNUSED", 0 );
@@ -67,49 +71,95 @@ define( "E_IO_VOLT_DAYNIGHT", 12 );		// 12:	voltage monitor day/night
 define( "E_IO_TEMP_HIGHLOW", 13 );		// 13:	temperature too high or too low
 define( "E_IO_VOLT_HIGHLOW", 14 );		// 14:	temperature too high or too low
 define( "E_IO_LEVEL_MONITOR", 15 );     // 15:  level measurement K02
-define( "E_IO_LEVEL_HIGH", 16 );        // 16:  level measurement K02 too hig
+define( "E_IO_LEVEL_HIGH", 16 );        // 16:  level measurement K02 too high
 define( "E_IO_LEVEL_LOW", 17 );         // 17:  level measurement K02 too low
 define( "E_IO_LEVEL_HIGHLOW", 18 );     // 18:  level measurement K02 too high or too low
-define( "E_IOD_UNUSED", "Unused" );
-define( "E_IOD_ON_OFF", "Manual On Off Switch" );
-define( "E_IOD_ON_TIMER", "Manual On, Off by Timer" );
-define( "E_IOD_TOGGLE", "Toggle On / Off" );
-define( "E_IOD_ON_OFF_TIMER", "Manual On, Off by Timer/Button" );
-define( "E_IOD_OUTPUT", "Output" );
-define( "E_IOD_TEMP_HIGH", "Temperature Too High" );
-define( "E_IOD_TEMP_LOW", "Temperature Too Low" );
-define( "E_IOD_VOLT_HIGH", "Voltage Too High" );
-define( "E_IOD_VOLT_LOW", "Voltage Too Low" );
-define( "E_IOD_TEMP_MONITOR", "Temperature Monitor Only" );
-define( "E_IOD_VOLT_MONITOR", "Voltage Monitor Only" );
-define( "E_IOD_VOLT_DAYNIGHT", "Voltage Monitor Day/Night" );
-define( "E_IOD_TEMP_HIGHLOW", "Temperature Too High or Low" );
-define( "E_IOD_VOLT_HIGHLOW", "Temperature Too High or Low" );
-define( "E_IOD_LEVEL_MONITOR", "Level Monitor Only" );
-define( "E_IOD_LEVEL_HIGH", "Level Too High" );
-define( "E_IOD_LEVEL_LOW", "Level Too Low" );
-define( "E_IOD_LEVEL_HIGHLOW", "Level Too High or Low" );
+define( "E_IO_ROTENC_MONITOR", 19 );    // 19:  rotary encoder measurement
+define( "E_IO_ROTENC_HIGH", 20 );       // 20:  rotary encoder measurement too high
+define( "E_IO_ROTENC_LOW", 21 );        // 21:  rotary encoder measurement too low
+define( "E_IO_ROTENC_HIGHLOW", 22 );    // 22:  rotary encoder measurement too high or too low
+define( "E_IO_CURRENT_MONITOR", 23 );   // 23:  current monitor only
+define( "E_IO_CURRENT_HIGH", 24 );      // 24:  current too high
+define( "E_IO_CURRENT_LOW", 25 );       // 25:  current too low
+define( "E_IO_CURRENT_HIGHLOW", 26 );   // 26:  current too high or too low
+define( "E_IO_FREQ_MONITOR", 27 );      // 27:  frequency measurement
+define( "E_IO_FREQ_HIGH", 28 );         // 28:  frequency measurement too high
+define( "E_IO_FREQ_LOW", 29 );          // 29:  frequency measurement too low
+define( "E_IO_FREQ_HIGHLOW", 30 );      // 30:  frequency measurement too high or too low
+define( "E_IO_PWRFACT_MONITOR", 31 );   // 31:  power factor monitor only
+define( "E_IO_POWER_MONITOR", 32 );     // 32:  power measurement monitor
+define( "E_IO_POWER_HIGH", 33 );        // 33:  power measurement K02 too high
+define( "E_IO_POWER_LOW", 34 );         // 34:  power measurement K02 too low
+define( "E_IO_POWER_HIGHLOW", 35 );     // 35:  power measurement K02 too high or too low
+$_SESSION['E_IOD'] = array();
+$_SESSION['E_IOD'][] = "Unused";
+$_SESSION['E_IOD'][] = "Manual On Off Switch";
+$_SESSION['E_IOD'][] = "Manual On, Off by Timer";
+$_SESSION['E_IOD'][] = "Toggle On / Off";
+$_SESSION['E_IOD'][] = "Manual On, Off by Timer/Button";
+$_SESSION['E_IOD'][] = "Output";
+$_SESSION['E_IOD'][] = "Temperature Too High";
+$_SESSION['E_IOD'][] = "Temperature Too Low";
+$_SESSION['E_IOD'][] = "Voltage Too High";
+$_SESSION['E_IOD'][] = "Voltage Too Low";
+$_SESSION['E_IOD'][] = "Temperature Monitor Only";
+$_SESSION['E_IOD'][] = "Voltage Monitor Only";
+$_SESSION['E_IOD'][] = "Voltage Monitor Day/Night";
+$_SESSION['E_IOD'][] = "Temperature Too High or Low";
+$_SESSION['E_IOD'][] = "Temperature Too High or Low";
+$_SESSION['E_IOD'][] = "Level Monitor Only";
+$_SESSION['E_IOD'][] = "Level Too High";
+$_SESSION['E_IOD'][] = "Level Too Low";
+$_SESSION['E_IOD'][] = "Level Too High or Low";
+$_SESSION['E_IOD'][] = "Rot. Encoder Monitor Only";
+$_SESSION['E_IOD'][] = "Rot. Encoder Too High";
+$_SESSION['E_IOD'][] = "Rot. Encoder Too Low";
+$_SESSION['E_IOD'][] = "Rot. Encoder Too High or Low";
+$_SESSION['E_IOD'][] = "Current Monitor Only";
+$_SESSION['E_IOD'][] = "Current Too High";
+$_SESSION['E_IOD'][] = "Current Too Low";
+$_SESSION['E_IOD'][] = "Current Too High or Low";
+$_SESSION['E_IOD'][] = "Frequency Monitor Only";
+$_SESSION['E_IOD'][] = "Frequency Too High";
+$_SESSION['E_IOD'][] = "Frequency Too Low";
+$_SESSION['E_IOD'][] = "Frequency Too High or Low";
+$_SESSION['E_IOD'][] = "Power Factor Monitor Only";
+$_SESSION['E_IOD'][] = "Power Monitor Only";
+$_SESSION['E_IOD'][] = "Power Too High";
+$_SESSION['E_IOD'][] = "Power Too Low";
+$_SESSION['E_IOD'][] = "Power Too High or Low";
 
 define( "E_ET_CLICK", 0 );			// 0: single click
-define( "E_ETD_CLICK", "Click" );
 define( "E_ET_DBLCLICK", 1 );		// 1: double click
-define( "E_ETD_DBLCLICK", "Dbl CLick" );
 define( "E_ET_LONGPRESS", 2 );		// 2: long press
-define( "E_ETD_LONGPRESS", "Long Press" );
 define( "E_ET_TIMER", 3 );			// 3: timer
-define( "E_ETD_TIMER", "Timer" );		
 define( "E_ET_TEMPERATURE", 4 );	// 4: temperature
-define( "E_ETD_TEMPERATURE", "Temperature" );		
 define( "E_ET_DEVICE_NG", 5 );		// 5: device ng
-define( "E_ETD_DEVICE_NG", "Device NG" );
 define( "E_ET_DEVICE_OK", 6 );		// 6: device ok
-define( "E_ETD_DEVICE_OK", "Device OK" );
 define( "E_ET_VOLTAGE", 7 );		// 7: voltage
-define( "E_ETD_VOLTAGE", "Voltage" );
 define( "E_ET_STARTUP", 8 );		// 8: startup
-define( "E_ETD_STARTUP", "Startup" );
 define( "E_ET_LEVEL", 9 );		    // 9: level
-define( "E_ETD_LEVEL", "Level" );
+define( "E_ET_ROTARY_ENC", 10 );    // 10: rotary encoder
+define( "E_ET_CURRENT", 11 );		// 11: current
+define( "E_ET_FREQUENCY", 12 );		// 12: frequency
+define( "E_ET_POWERFACTOR", 13 );	// 13: power factor
+define( "E_ET_POWER", 14 );		    // 14: power
+$_SESSION['E_ETD'] = array();
+$_SESSION['E_ETD'][] = "Click";
+$_SESSION['E_ETD'][] = "Dbl CLick";
+$_SESSION['E_ETD'][] = "Long Press";
+$_SESSION['E_ETD'][] = "Timer";
+$_SESSION['E_ETD'][] = "Temperature";
+$_SESSION['E_ETD'][] = "Device NG";
+$_SESSION['E_ETD'][] = "Device OK";
+$_SESSION['E_ETD'][] = "Voltage";
+$_SESSION['E_ETD'][] = "Startup";
+$_SESSION['E_ETD'][] = "Level";
+$_SESSION['E_ETD'][] = "Rotary Encoder";
+$_SESSION['E_ETD'][] = "Current";
+$_SESSION['E_ETD'][] = "Frequency";
+$_SESSION['E_ETD'][] = "Power Factor";
+$_SESSION['E_ETD'][] = "Power";
 
 define( "E_DS_ALIVE", 0 );			// 0:	alive
 define( "E_DSD_ALIVE", "Alive" );	
@@ -403,10 +453,59 @@ function func_check_database( $db )
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
-            ReportDBError("Failed to create the cameras table", $db->db_link );
+            ReportDBError("Failed to create the plcstates table", $db->db_link );
         }
         
         $version = func_update_database_version( $db, 110 );
+    }
+    
+    if ( $version === false || $version < 111 )
+    {   // we have some work to do
+        $query = "alter table devices add de_BaudRate int(10) NOT NULL default 19200";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table devices", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 111 );
+    }
+ 
+    if ( $version === false || $version < 112 )
+    {   // we have some work to do
+        $query = "alter table events modify ev_value decimal(10,3) not null default 0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table events", $db->db_link );
+        }
+        
+        // adjust positive temperatures
+        $query = sprintf( "update events set ev_Value=ev_Value/10 where ev_Value<10000 and ev_EventType=%d", E_ET_TEMPERATURE );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to set ev_Value/10 in events table", $db->db_link );
+        }
+        
+        // adjust voltages
+        $query = sprintf( "update events set ev_Value=ev_Value/1000 where ev_Value>12000 and ev_EventType=%s", E_ET_VOLTAGE );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to set ev_Value/1000 in events table", $db->db_link );
+        }
+        
+        // adjust negative temperatures
+        $query = sprintf( "update events set ev_Value=-(ev_Value-10000)/10 where ev_Value>10000 and ev_EventType=%d", E_ET_TEMPERATURE );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to set -(ev_Value-10000)/10 in events table", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 112 );
     }
 }
 
@@ -423,6 +522,7 @@ function func_db_warning_count( $db )
     
     return $count;
 }
+
 function func_update_database_version( $db, $ver )
 {
     // update the database version
@@ -654,19 +754,21 @@ class MySQLDB
 	}
 
 
-	function UpdateDevicesTable( $de_no, $com_port, $addr, $num_inputs, $num_outputs, $type, $name, $hostname )
+	function UpdateDevicesTable( $de_no, $com_port, $addr, $num_inputs, $num_outputs, $type, $name, $hostname, $baud )
 	{
 		if ( $de_no == 0 )
 		{	// insert
-			$query = sprintf( "insert into devices (de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname)
-					values('%s',%d,%d,%d,%d,'%s','%s')",
-					addslashes($com_port), $addr, $num_inputs, $num_outputs, $type, addslashes($name), addslashes($hostname) );
+			$query = sprintf( "insert into devices (de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate)
+					values('%s',%d,%d,%d,%d,'%s','%s',%d)",
+					addslashes($com_port), $addr, $num_inputs, $num_outputs, $type, addslashes($name), addslashes($hostname), $baud );
 		}
 		else
 		{
 			$query = sprintf( "update devices set de_ComPort='%s',de_Address=%d,de_NumInputs=%d,
-					de_NumOutputs=%d,de_Type=%d,de_Name='%s',de_Hostname='%s' where de_DeviceNo=%d",
-					addslashes($com_port), $addr, $num_inputs, $num_outputs, $type, addslashes($name), addslashes($hostname), $de_no );
+					de_NumOutputs=%d,de_Type=%d,de_Name='%s',de_Hostname='%s',de_BaudRate=%d 
+                    where de_DeviceNo=%d",
+					addslashes($com_port), $addr, $num_inputs, $num_outputs, $type, addslashes($name), addslashes($hostname), $baud,
+			         $de_no );
 		}
 		$result = $this->RunQuery( $query );
 		if ( mysqli_affected_rows($this->db_link) >= 0 )
@@ -681,14 +783,15 @@ class MySQLDB
 	function ReadDevicesTable()
 	{
 		$info = array();
-		$query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname 
+		$query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate 
 				from devices order by de_Address" ); 
 		$result = $this->RunQuery( $query );
 		while ( $line = mysqli_fetch_row($result) )
 		{
 			$info[] = array( 'de_DeviceNo'=>$line[0], 'de_ComPort'=>stripslashes($line[1]), 'de_Address'=>$line[2],
 							'de_NumInputs'=>$line[3], 'de_NumOutputs'=>$line[4], 'de_Type'=>$line[5],
-							'de_Name'=>stripslashes($line[6]), 'de_Status'=>$line[7], 'de_Hostname'=>$line[8] );
+							'de_Name'=>stripslashes($line[6]), 'de_Status'=>$line[7], 'de_Hostname'=>$line[8],
+			                 'de_BaudRate'=>$line[9] );
 		}
 
 		$this->FreeQuery($result);
@@ -733,7 +836,7 @@ class MySQLDB
 	function ReadDeviceWithAddress( $addr )
 	{
 		$info = false;
-		$query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname from devices 
+		$query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate from devices 
 				where de_Address=%d", $addr ); 
 		
 		$result = $this->RunQuery( $query );
@@ -741,7 +844,7 @@ class MySQLDB
 		{
 			$info = array( 'de_DeviceNo'=>$line[0], 'de_ComPort'=>stripslashes($line[1]), 'de_Address'=>$line[2],
 							'de_NumInputs'=>$line[3], 'de_NumOutputs'=>$line[4], 'de_Type'=>$line[5],
-							'de_Name'=>$line[6], 'de_Status'=>$line[7], 'de_Hostname'=>$line[8] );
+							'de_Name'=>$line[6], 'de_Status'=>$line[7], 'de_Hostname'=>$line[8], 'de_BaudRate'=>$line[9] );
 		}
 
 		$this->FreeQuery($result);
@@ -752,14 +855,14 @@ class MySQLDB
 	function ReadDeviceWithName( $name )
 	{
 	    $info = false;
-	    $query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname from devices
+	    $query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate from devices
 				where de_Name='%s'", $name );
 	    $result = $this->RunQuery( $query );
 	    if ( $line = mysqli_fetch_row($result) )
 	    {
 	        $info = array( 'de_DeviceNo'=>$line[0], 'de_ComPort'=>stripslashes($line[1]), 'de_Address'=>$line[2],
 	            'de_NumInputs'=>$line[3], 'de_NumOutputs'=>$line[4], 'de_Type'=>$line[5],
-	            'de_Name'=>$line[6], 'de_Status'=>$line[7], 'de_Hostname'=>$line[8] );
+	            'de_Name'=>$line[6], 'de_Status'=>$line[7], 'de_Hostname'=>$line[8], 'de_BaudRate'=>$line[9] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -790,16 +893,18 @@ class MySQLDB
 		
 		$ss = "";
 		if ( $in )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
 					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
-			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW );
+			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW,
+    			    E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW );
 		else if ( $out )
 			$ss = sprintf( "and di_IOType in (%d)", E_IO_OUTPUT );
 		
 		if ( $in && $out )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
 					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
-			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW );
+			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW,
+			         E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW );
 			
 		$query = sprintf( "select de_DeviceNo,de_Address,de_Hostname,di_IOChannel,di_IOName,di_IOType from
 				deviceinfo,devices where di_DeviceNo=de_DeviceNo %s order by de_Hostname,de_Address,di_IOChannel",
@@ -998,7 +1103,7 @@ class MySQLDB
 		$info = array();
 		$query = sprintf( "select il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,
 				di_IOName,di_OutOnStartTime,di_OutOnPeriod from 
-				iolinks,deviceinfo where il_OutDeviceNo=di_DeviceNo and il_OutChannel=di_IOChannel order by il_OutDeviceNo,il_OutChannel" );
+				iolinks,deviceinfo where il_OutDeviceNo=di_DeviceNo and il_OutChannel=di_IOChannel and di_IOType=%d order by il_OutDeviceNo,il_OutChannel", E_IO_OUTPUT );
 				 
 		$result = $this->RunQuery( $query );
 		while ( $line = mysqli_fetch_row($result) )
@@ -1377,7 +1482,7 @@ class MySQLDB
 	    {
 	        $name = $dd['di_IOName'];
 	        $de_no = $dd['di_DeviceNo'];
-	        $ch = 0;
+	        $ch = $dd['di_IOChannel'];
 	        $atype = "V";
 	        $tt = 0.0;
 	        $mon_hi = 0.0;
@@ -1392,6 +1497,9 @@ class MySQLDB
 					ev_Timestamp>=date_sub(from_unixtime(%d), interval %d minute) and ev_Timestamp<=from_unixtime(%d)
 					order by ev_Timestamp",
 	            $event_type, $dd['di_DeviceNo'], $dd['di_IOChannel'], $datetime, 60*$hours, $datetime );
+	        
+	        
+	        //echo $query;
 	        $result = $this->RunQuery( $query );
 	        while ( $line = mysqli_fetch_row($result) )
 	        {
@@ -1428,10 +1536,40 @@ class MySQLDB
 	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_VOLTAGE );
 	}
 	
+	function GetLatestCurrents( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_CURRENT_HIGH, E_IO_CURRENT_LOW, E_IO_CURRENT_MONITOR, E_IO_CURRENT_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_CURRENT );
+	}
+	
 	function GetLatestLevels( $hours, $datetime )
 	{
 	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGHLOW );
 	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_LEVEL );
+	}
+	
+	function GetLatestPowers( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_POWER_HIGH, E_IO_POWER_LOW, E_IO_POWER_MONITOR, E_IO_POWER_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_POWER );
+	}
+	
+	function GetLatestFrequencies( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_FREQ_HIGH, E_IO_FREQ_LOW, E_IO_FREQ_MONITOR, E_IO_FREQ_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_FREQUENCY );
+	}
+	
+	function GetLatestPowerFactors( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d)", E_IO_PWRFACT_MONITOR );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_POWERFACTOR );
+	}
+	
+	function GetLatestRotaryPos( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_ROTARY_ENC );
 	}
 	
 	function GetCurrentValue( $device_no, $channel )
@@ -1477,12 +1615,21 @@ class MySQLDB
 		
 		if ( $de_no > 0 && $di_no >= 0 )
 		{
-			$query = sprintf( "delete from events where ev_DeviceNo=%d and ev_IOChannel=%d and ev_EventType=%d", $de_no, $di_no, E_ET_DEVICE_NG );
+   			$query = sprintf( "delete from events where ev_DeviceNo=%d and ev_IOChannel=%d and ev_EventType=%d", $de_no, $di_no, E_ET_DEVICE_NG );
 			$result = $this->RunQuery( $query );
 			if ( mysqli_affected_rows($this->db_link) == 1 )
 			{	// success
 				return true;
 			}
+		}
+		else if ( $de_no == -3 )
+		{ // failed login attempts
+		    $query = sprintf( "delete from events where ev_DeviceNo=%d and ev_Value=0", $de_no );
+		    $result = $this->RunQuery( $query );
+		    if ( mysqli_affected_rows($this->db_link) == 1 )
+		    {	// success
+		        return true;
+		    }
 		}
 		
 		return false;
@@ -1942,17 +2089,13 @@ function func_calc_temperature( $cc )
 	{	// not connected
 		$temp = "N/A";
 	}
-	else if ( $cc < 10000 )
-	{	// temp is > 0
-	    if ( $cc > 999 )
-	      	$temp = sprintf( "%.0f", ($cc / 10 ) );
+	else
+	{	
+	    if ( $cc > 99 )
+	      	$temp = sprintf( "%.0f", $cc );
 	    else
-    		$temp = sprintf( "%.1f", ($cc / 10 ) );
+    		$temp = sprintf( "%.1f", $cc );
 	}	
-	else 
-	{	// temp is < 0
-		$temp = sprintf( "-%.1f", (($cc - 10000) / 10 ) );
-	}
 	
 	return $temp;
 }
@@ -1965,11 +2108,29 @@ function func_calc_level( $cc )
         $temp = "N/A";
     }
     else
-    {	// value is a percentage x 10
-        $temp = sprintf( "%.1f", $cc/10 );
+    {	// value is a percentage
+        $temp = sprintf( "%.1f", $cc );
     }
     
     return $temp;
+}
+
+function func_calc_power( $cc )
+{
+    return sprintf( "%.1f", $cc );
+}
+
+function func_calc_frequency( $cc )
+{
+    return sprintf( "%.1f", $cc );
+}
+
+function func_calc_current( $cc )
+{
+    if ( $cc < 1 )
+        return sprintf( "%.2f", $cc );
+    else
+        return sprintf( "%.1f", $cc );
 }
 
 function func_calc_voltage( $cc, $atype )
@@ -1983,14 +2144,14 @@ function func_calc_voltage( $cc, $atype )
 	{	
 		if ( $atype == "V" )
 		{
-		    if ( $cc > 100000 )
-    			$temp = sprintf( "%.0f", ($cc / 1000) );
+		    if ( $cc > 100 )
+    			$temp = sprintf( "%.0f", $cc );
 		    else
-    			$temp = sprintf( "%.1f", ($cc / 1000) );
+    			$temp = sprintf( "%.1f", $cc );
 		}
 		else if ( $cc != 0 )
 		{
-			$temp = sprintf( "%.2f", ($cc / 1000) );
+			$temp = sprintf( "%.2f", $cc );
 		}
 	}
 	// TODO: handle negative voltages	
@@ -2083,36 +2244,9 @@ function func_get_device_type_desc( $dt )
 {
 	$desc = "?";
 	
-	switch ( $dt )
+	if ( isset($_SESSION['E_DTD'][$dt]) )
 	{
-	default:
-	case E_DT_UNUSED:
-		$desc = E_DTD_UNUSED;
-		break;
-	case E_DT_DIGITAL_IO:
-		$desc = E_DTD_DIGITAL_IO;
-		break;
-	case E_DT_TEMPERATURE_DS:
-		$desc = E_DTD_TEMPERATURE_DS;
-		break;
-	case E_DT_TIMER:
-		$desc = E_DTD_TIMER;
-		break;
-	case E_DT_VOLTAGE:
-		$desc = E_DTD_VOLTAGE;
-		break;
-	case E_DT_TEMPERATURE_K1:
-	    $desc = E_DTD_TEMPERATURE_K1;
-	    break;
-	case E_DT_LEVEL_K02:
-	    $desc = E_DTD_LEVEL_K02;
-	    break;
-	case E_DT_LEVEL_K02:
-	    $desc = E_DTD_LEVEL_K02;
-	    break;
-	case E_DT_LEVEL_HDL:
-	    $desc = E_DTD_LEVEL_HDL;
-	    break;
+    	$desc = $_SESSION['E_DTD'][$dt];
 	}
 	
 	return $desc;
@@ -2120,155 +2254,66 @@ function func_get_device_type_desc( $dt )
 
 function func_get_device_type( $desc )
 {
-	if ( $desc == E_DTD_DIGITAL_IO )
-		return E_DT_DIGITAL_IO;
-	else if ( $desc == E_DTD_TEMPERATURE_DS )
-		return E_DT_TEMPERATURE_DS;
-	else if ( $desc == E_DTD_TIMER )
-		return E_DT_TIMER;
-	else if ( $desc == E_DTD_VOLTAGE )
-		return E_DT_VOLTAGE;
-    else if ( $desc == E_DTD_TEMPERATURE_K1 )
-	    return E_DT_TEMPERATURE_K1;
-	else if ( $desc == E_DTD_LEVEL_K02 )
-	    return E_DT_LEVEL_K02;
-    else if ( $desc == E_DTD_LEVEL_HDL )
-        return E_DT_LEVEL_HDL;
-	        
+    $e_dt = 0;
+    foreach ( $_SESSION['E_DTD'] as $dtd )
+    {
+        if ( $desc == $dtd )
+        {
+            return $e_dt;
+        }
+        $e_dt += 1;
+    }
+            
 	return E_DT_UNUSED;
 }
 
 function func_get_io_type_desc( $io )
 {
 	$desc = "?";
-	switch ( $io )
+	if ( isset($_SESSION['E_IOD'][$io]) )
 	{
-		default:
-		case E_IO_UNUSED:
-			$desc = E_IOD_UNUSED;
-			break;
-		case E_IO_ON_OFF:
-			$desc = E_IOD_ON_OFF;
-			break;
-		case E_IO_ON_TIMER:
-			$desc = E_IOD_TIMER;
-			break;
-		case E_IO_TOGGLE:
-			$desc = E_IOD_TOGGLE;
-			break;
-		case E_IO_ON_OFF_TIMER:
-			$desc = E_IOD_ON_OFF_TIMER;
-			break;
-		case E_IO_OUTPUT:
-			$desc = E_IOD_OUTPUT;
-			break;
-		case E_IO_TEMP_HIGH:
-			$desc = E_IOD_TEMP_HIGH;
-			break;
-		case E_IO_TEMP_LOW:
-			$desc = E_IOD_TEMP_LOW;
-			break;
-		case E_IO_VOLT_HIGH:
-			$desc = E_IOD_VOLT_HIGH;
-			break;
-		case E_IO_VOLT_LOW:
-			$desc = E_IOD_VOLT_LOW;
-			break;
-		case E_IO_TMEP_MONITOR:
-			$desc = E_IOD_TEMP_MONITOR;
-			break;
-		case E_IO_VOLT_MONITOR:
-			$desc = E_IOD_VOLT_MONITOR;
-			break;
-		case E_IO_VOLT_DAYNIGHT:
-			$desc = E_IOD_VOLT_DAYNIGHT;
-			break;
-		case E_IO_TEMP_HIGHLOW:
-		    $desc = E_IOD_TEMP_HIGHLOW;
-		    break;
-		case E_IO_VOLT_HIGHLOW:
-		    $desc = E_IOD_VOLT_HIGHLOW;
-		    break;
-		case E_IO_LEVEL_MONITOR:
-		    $desc = E_IOD_LEVEL_MONITOR;
-		    break;
-		case E_IO_LEVEL_HIGH:
-		    $desc = E_IOD_LEVEL_HIGH;
-		    break;
-		case E_IO_LEVEL_LOW:
-		    $desc = E_IOD_LEVEL_LOW;
-		    break;
-		case E_IO_LEVEL_HIGHLOW:
-		    $desc = E_IOD_LEVEL_HIGHLOW;
-		    break;
-	}	
+	    $desc = $_SESSION['E_IOD'][$io];
+	}
 	
 	return $desc;
+}
+
+function func_get_io_type( $desc )
+{
+    $e_io = 0;
+    foreach ( $_SESSION['E_IOD'] as $iod )
+    {
+        if ( $desc == $iod )
+        {
+            return $e_io;
+        }
+        $e_io += 1;
+    }
+            
+	return E_IO_UNUSED;
 }
 
 function func_get_daynight_desc( $dn )
 {
-	$desc = "?";
-	switch ( $dn )
-	{
-	default:
-	case E_DN_NIGHT:
-		$desc = E_DND_NIGHT;
-		break;
-	case E_DN_DAWNDUSK:
-		$desc = E_DND_DAWNDUSK;
-		break;
-	case E_DN_OVERCAST:
-		$desc = E_DND_OVERCAST;
-		break;
-	case E_DN_DAY:
-		$desc = E_DND_DAY;
-		break;
-	}
-
-	return $desc;
-}
-	
-function func_get_io_type( $desc )
-{
-	if ( $desc == E_IOD_ON_OFF )
-		return E_IO_ON_OFF;
-	else if ( $desc == E_IOD_ON_TIMER )
-		return E_IO_ON_TIMER;
-	else if ( $desc == E_IOD_TOGGLE )
-		return E_IO_TOGGLE;
-	else if ( $desc == E_IOD_ON_OFF_TIMER )
-		return E_IO_ON_OFF_TIMER;
-	else if ( $desc == E_IOD_OUTPUT )
-		return E_IO_OUTPUT;
-	else if ( $desc == E_IOD_TEMP_HIGH )
-		return E_IO_TEMP_HIGH;
-	else if ( $desc == E_IOD_TEMP_LOW )
-		return E_IO_TEMP_LOW;
-	else if ( $desc == E_IOD_VOLT_HIGH )
-		return E_IO_VOLT_HIGH;
-	else if ( $desc == E_IOD_VOLT_LOW )
-		return E_IO_VOLT_LOW;
-	else if ( $desc == E_IOD_TEMP_MONITOR )
-		return E_IO_TEMP_MONITOR;
-	else if ( $desc == E_IOD_VOLT_MONITOR )
-		return E_IO_VOLT_MONITOR;
-	else if ( $desc == E_IOD_VOLT_DAYNIGHT )
-		return E_IO_VOLT_DAYNIGHT;
-	else if ( $desc == E_IOD_TEMP_HIGHLOW )
-	    return E_IO_TEMP_HIGHLOW;
-	else if ( $desc == E_IOD_VOLT_HIGHLOW )
-	    return E_IO_VOLT_HIGHLOW;
-	else if ( $desc == E_IOD_LEVEL_MONITOR )
-	    return E_IO_LEVEL_MONITOR;
-	else if ( $desc == E_IOD_LEVEL_HIGH )
-	    return E_IO_LEVEL_HIGH;
-	else if ( $desc == E_IOD_LEVEL_LOW )
-	    return E_IO_LEVEL_LOW;
-	else if ( $desc == E_IOD_LEVEL_HIGHLOW )
-	    return E_IO_LEVEL_HIGHLOW;
-	                
-	return 0;
+    $desc = "?";
+    switch ( $dn )
+    {
+    default:
+    case E_DN_NIGHT:
+        $desc = E_DND_NIGHT;
+        break;
+    case E_DN_DAWNDUSK:
+        $desc = E_DND_DAWNDUSK;
+        break;
+    case E_DN_OVERCAST:
+        $desc = E_DND_OVERCAST;
+        break;
+    case E_DN_DAY:
+        $desc = E_DND_DAY;
+        break;
+    }
+    
+    return $desc;
 }
 
 function func_get_daynight( $desc )
@@ -2287,40 +2332,11 @@ function func_get_daynight( $desc )
 	
 function func_get_eventtype_desc( $ev )
 {
-	$desc = E_ETD_CLICK;
-	switch ( $ev )
+	$desc = "?";
+	
+	if ( isset($_SESSION['E_ETD'][$ev]) )
 	{
-		default:
-		case E_ET_CLICK:
-			$desc = E_ETD_CLICK;
-			break;
-		case E_ET_DBLCLICK:
-			$desc = E_ETD_DBLCLICK;
-			break;
-		case E_ET_LONGPRESS:
-			$desc = E_ETD_LONGPRESS;
-			break;
-		case E_ET_TIMER:
-			$desc = E_ETD_TIMER;
-			break;
-		case E_ET_TEMPERATURE:
-			$desc = E_ETD_TEMPERATURE;
-			break;
-		case E_ET_DEVICE_NG:
-			$desc = E_ETD_DEVICE_NG;
-			break;
-		case E_ET_DEVICE_OK:
-			$desc = E_ETD_DEVICE_OK;
-			break;
-		case E_ET_VOLTAGE:
-		    $desc = E_ETD_VOLTAGE;
-		    break;
-		case E_ET_STARTUP:
-		    $desc = E_ETD_STARTUP;
-		    break;
-		case E_ET_LEVEL:
-		    $desc = E_ETD_LEVEL;
-		    break;
+	    $desc = $_SESSION['E_ETD'][$ev];
 	}
 
 	return $desc;
@@ -2328,45 +2344,17 @@ function func_get_eventtype_desc( $ev )
 
 function func_get_eventtype( $desc )
 {
-	$ev = E_ET_CLICK;
-	switch ( $desc )
+	$e_et = 0;
+	foreach ( $_SESSION['E_ETD'] as $e_etd )
 	{
-		default:
-			$ev = "";
-			break;
-		case E_ETD_CLICK:
-			$ev = E_ET_CLICK;
-			break;
-		case E_ETD_DBLCLICK:
-			$ev = E_ET_DBLCLICK;
-			break;
-		case E_ETD_LONGPRESS:
-			$ev = E_ET_LONGPRESS;
-			break;
-		case E_ETD_TIMER:
-			$ev = E_ET_TIMER;
-			break;
-		case E_ETD_TEMPERATURE:
-			$ev = E_ET_TEMPERATURE;
-			break;
-		case E_ETD_DEVICE_NG:
-			$ev = E_ET_DEVICE_NG;
-			break;
-		case E_ETD_DEVICE_OK:
-			$ev = E_ET_DEVICE_OK;
-			break;
-		case E_ETD_VOLTAGE:
-		    $ev = E_ET_VOLTAGE;
-		    break;
-		case E_ETD_STARTUP:
-		    $ev = E_ET_STARTUP;
-		    break;
-		case E_ETD_LEVEL:
-		    $ev = E_ET_LEVEL;
-		    break;
+	    if ( $desc == $e_etd )
+	    {
+	        return $e_et;
+	    }
+	    $e_et += 1;
 	}
 
-	return $ev;
+	return $e_et;
 }
 
 function func_get_device_status_desc( $st )
@@ -2628,7 +2616,7 @@ function func_disabled_non_user()
 //  Graph Functions
 //
 //****************************************************************************
-function func_get_graph_data( $temperatures, $voltages, $levels, $devices )
+function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $devices )
 {
     $data = array();
     foreach ( $devices as $gg )
@@ -2679,6 +2667,51 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $devices )
                 }
             }
         }
+        if ( $found == false )
+        {
+            $gvoltage = false;
+            foreach ( $currents as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['di_DeviceNo'] && $tt['di_IOChannel'] == $gg['di_IOChannel'] )
+                {
+                    $found = true;
+                    $myarray = $tt;
+                    $gname = $tt['di_IOName'];
+                    $atype = "A";
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            $gvoltage = false;
+            foreach ( $powers as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['di_DeviceNo'] && $tt['di_IOChannel'] == $gg['di_IOChannel'] )
+                {
+                    $found = true;
+                    $myarray = $tt;
+                    $gname = $tt['di_IOName'];
+                    $atype = "W";
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            $gvoltage = false;
+            foreach ( $frequencies as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['di_DeviceNo'] && $tt['di_IOChannel'] == $gg['di_IOChannel'] )
+                {
+                    $found = true;
+                    $myarray = $tt;
+                    $gname = $tt['di_IOName'];
+                    $atype = "F";
+                    break;
+                }
+            }
+        }
         
         if ( $found )
         {
@@ -2694,7 +2727,19 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $devices )
                 {
                     $alert = true;
                 }
+                else if ( $atype == "A" && func_calc_current($val) < $myarray['di_MonitorLo'] || func_calc_current($val) > $myarray['di_MonitorHi'] )
+                {
+                    $alert = true;
+                }
                 else if ( $atype == "L" && func_calc_level($val) < $myarray['di_MonitorLo'] || func_calc_level($val) > $myarray['di_MonitorHi'] )
+                {
+                    $alert = true;
+                }
+                else if ( $atype == "W" && func_calc_power($val) < $myarray['di_MonitorLo'] || func_calc_power($val) > $myarray['di_MonitorHi'] )
+                {
+                    $alert = true;
+                }
+                else if ( $atype == "F" && func_calc_frequency($val) < $myarray['di_MonitorLo'] || func_calc_frequency($val) > $myarray['di_MonitorHi'] )
                 {
                     $alert = true;
                 }
@@ -2742,6 +2787,12 @@ function func_create_graph( $gdata, $divname )
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_voltage($data['ev_Value'],"V"), 'SeqNo'=>$graph['SeqNo'] );
             else if ( $graph['atype'] == "L" )
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_level($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
+            else if ( $graph['atype'] == "A" )
+                $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_current($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
+            else if ( $graph['atype'] == "W" )
+               $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_power($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
+            else if ( $graph['atype'] == "F" )
+               $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_frequency($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
             else
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_voltage($data['ev_Value'],"A"), 'SeqNo'=>$graph['SeqNo'] );
         }
@@ -2997,10 +3048,25 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
                 $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>V</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_voltage($val,"V"), $hh );
             }
+            else if ( $dat['atype'] == "A" )
+            {
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_current($val), $hh );
+            }
             else if ( $dat['atype'] == "L" )
             {
                 $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_level($val), $hh );
+            }
+            else if ( $dat['atype'] == "W" )
+            {
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_power($val), $hh );
+            }
+            else if ( $dat['atype'] == "F" )
+            {
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_frequency($val), $hh );
             }
             else
             {

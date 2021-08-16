@@ -1,7 +1,7 @@
 #ifndef _INC_MB_MYSQL_H
 #define _INC_MB_MYSQL_H
 
-#include <mysql.h>
+#include <mysql/mysql.h>
 #include "mb_devices.h"
 
 
@@ -20,7 +20,7 @@ public:
 	CMysql();
 	~CMysql();
 
-	void LogEvent( const int iDeviceNo, const int iChannel, enum E_EVENT_TYPE eEventType, const int iValue, const char* fmt, ... );
+	void LogEvent( const int iDeviceNo, const int iChannel, enum E_EVENT_TYPE eEventType, const double dValue, const char* fmt, ... );
 
 	void Init();
 	bool Connect();

@@ -53,7 +53,7 @@ void CMyDevice::Init()
 	SetAddress( -1 );
 	SetTimeoutCount( 0 );
 	SetDeviceType( E_DT_UNUSED );
-	SetDeviceStatus( E_DS_DEAD );
+	SetDeviceStatus( E_DS_DEAD, true );
 	SetNumInputs( 8 );
 	SetNumOutputs( 8 );
 	for ( j = 0; j < MAX_IO_PORTS; j++ )
@@ -260,11 +260,15 @@ void CMyDevice::SetDeviceHostname( const char* szHostname )
 	snprintf( m_szDeviceHostname, sizeof(m_szDeviceHostname), "%s", szHostname );
 }
 
-void CMyDevice::SetDeviceStatus( const enum E_DEVICE_STATUS eStatus )
+void CMyDevice::SetDeviceStatus( const enum E_DEVICE_STATUS eStatus, const bool bNoTimeout )
 {
 	if ( eStatus == E_DS_ALIVE )
 	{
 		m_iTimeoutCount = 0;
+	}
+	else if ( bNoTimeout && m_iTimeoutCount < 10 )
+	{
+		m_iTimeoutCount = 11;
 	}
 	else
 	{
@@ -391,7 +395,7 @@ const double CMyDevice::CalcVoltage( const int iChannel, const bool bNew )
 	return dVal;
 }
 
-// data ifrom K02 is in mm
+// data from K02 is in mm
 // water height = <max_water_height> - (<measured_value> - <offset_above_max_level>)
 // CalcFactor is the max water level height in mm
 // Offset if the sensor height above the max level in mm
@@ -433,6 +437,97 @@ const double CMyDevice::CalcLevel( const int iChannel, const bool bNew )
 	return dVal;
 }
 
+// return distance in mm
+// channel 0 is the current angle,
+// channel 1 is the number of turns
+const double CMyDevice::CalcRotaryEncoderDistance( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dMMperRotation;
+	double dUnit;
+	double dTurns;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		dMMperRotation = m_dCalcFactor[iChannel];
+
+		if ( bNew )
+		{
+			dUnit = (double)(m_uNewData[iChannel]);
+			dTurns = (double)(m_uNewData[iChannel+1]);
+		}
+		else
+		{
+			dUnit = (double)(m_uLastData[iChannel]);
+			dTurns = (double)(m_uLastData[iChannel+1]);
+		}
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 || dMMperRotation == 0 )
+		{	// sensor is not connected
+
+		}
+		else
+		{	// assume 12 bit encoder, 4096 = 360 degrees
+			dVal = (dUnit / 4096) * dMMperRotation + dTurns * dMMperRotation;
+		}
+	}
+
+	return dVal;
+}
+
+const double CMyDevice::CalcVIPFValue( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		//dMMperRotation = m_dCalcFactor[iChannel];
+
+		if ( bNew )
+		{
+			dUnit = (double)(m_uNewData[iChannel]);
+		}
+		else
+		{
+			dUnit = (double)(m_uLastData[iChannel]);
+		}
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 )
+		{	// sensor is not connected
+
+		}
+		else
+		{	// assume 12 bit encoder, 4096 = 360 degrees
+			switch ( iChannel )
+			{
+			default:
+				break;
+			case 0:		// voltage, volts
+				dVal = (double)dUnit / 10;
+				break;
+			case 1:		// current, amps
+				dVal = (double)dUnit / 1000;
+				break;
+			case 2:		// power, watts
+				dVal = (double)dUnit / 10;
+				break;
+			case 3:		// energy, Watt Hours
+				dVal = (double)dUnit;
+				break;
+			case 4:		// frequency, Hz
+				dVal = (double)dUnit / 10;
+				break;
+			case 5:		// power factor
+				dVal = (double)dUnit / 100;
+				break;
+			}
+		}
+	}
+
+	return dVal;
+}
+
 const bool CMyDevice::IsSensorConnected( const int iChannel )
 {
 	bool bRc = false;
@@ -444,6 +539,10 @@ const bool CMyDevice::IsSensorConnected( const int iChannel )
 			bRc = true;
 		}
 		else if ( m_eDeviceType == E_DT_TEMPERATURE_K1 && m_uNewData[iChannel] != 64536 )
+		{
+			bRc = true;
+		}
+		else if ( m_eDeviceType == E_DT_DIGITAL_IO && strncmp( GetComPort(), "ESP", 3 ) == 0 )
 		{
 			bRc = true;
 		}
@@ -582,6 +681,21 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 			dVal = CalcTemperature( iLinkChannel, true );
 			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
 			break;
+
+		case E_DT_LEVEL_HDL:
+			dVal = CalcLevel( iLinkChannel, true );
+			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
+			break;
+
+		case E_DT_ROTARY_ENC_12BIT:
+			dVal = CalcRotaryEncoderDistance( iLinkChannel, true );
+			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
+			break;
+
+		case E_DT_VIPF_MON:
+			dVal = CalcVIPFValue( iLinkChannel, true );
+			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
+			break;
 		}
 	}
 
@@ -696,6 +810,22 @@ void CDeviceList::UpdateDeviceComPort( CMysql& myDB, const char* szNewComPort, c
 
 }
 
+const int CDeviceList::GetBaudRateForPort( const char* szComPort )
+{
+	int iBaudRate = 9600;
+
+	for ( int i = 0; i < MAX_DEVICES; i++ )
+	{
+		if ( strcmp( szComPort, GetComPort(i) ) == 0 )
+		{
+			iBaudRate = GetBaudRate(i);
+			break;
+		}
+	}
+
+	return iBaudRate;
+}
+
 int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][MAX_COMPORT_LEN+1] )
 {
 	bool bFound;
@@ -705,6 +835,7 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 	int j;
 	int idx;
 	int iPos = 0;
+	int iBaudRate;
 	struct stat statbuf;
 	char szPort[PATH_MAX];
 
@@ -726,7 +857,8 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 	{
 		if ( m_szHostComPort[i][0] != '\0' )
 		{	// found a real com port
-			m_pHostCtx[i] = modbus_new_rtu( m_szHostComPort[i], gRS485.iBaud, gRS485.cParity, gRS485.iDataBits, gRS485.iStopBits );
+			iBaudRate = GetBaudRateForPort( m_szHostComPort[i] );
+			m_pHostCtx[i] = modbus_new_rtu( m_szHostComPort[i], iBaudRate, gRS485.cParity, gRS485.iDataBits, gRS485.iStopBits );
 			if ( m_pHostCtx[i] == NULL )
 			{	// failed
 				LogMessage( E_MSG_ERROR, "modbus ctx in is null for '%s': %s", m_szHostComPort[i], modbus_strerror(errno) );
@@ -740,7 +872,7 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 			}
 			else
 			{	// connected
-				LogMessage( E_MSG_INFO, "Checking Modbus serial connection on '%s'", m_szHostComPort[i] );
+				LogMessage( E_MSG_INFO, "Checking Modbus serial connection on '%s' (%d)", m_szHostComPort[i], iBaudRate );
 			}
 		}
 		else
@@ -829,7 +961,7 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 
 			if ( !bFound )
 			{
-				LogMessage( E_MSG_ERROR, "Device address %d did not respond", GetAddress(idx) );
+				LogMessage( E_MSG_ERROR, "Device address %d did not respond (%d)", GetAddress(idx), GetBaudRate(idx) );
 			}
 		}
 		else if ( GetDeviceNo(idx) == 0 )
@@ -975,9 +1107,9 @@ bool CDeviceList::InitContext()
 		}
 		else if ( !bFound )
 		{
-			LogMessage( E_MSG_INFO, "Create ctx for serial connection on %s for DeviceNo %d", m_Device[idx].GetComPort(), m_Device[idx].GetDeviceNo() );
+			LogMessage( E_MSG_INFO, "Create ctx for serial connection on %s %d baud for DeviceNo %d", m_Device[idx].GetComPort(), m_Device[idx].GetBaudRate(), m_Device[idx].GetDeviceNo() );
 
-			m_Device[idx].SetContext( modbus_new_rtu( m_Device[idx].GetComPort(), gRS485.iBaud, gRS485.cParity, gRS485.iDataBits, gRS485.iStopBits ) );
+			m_Device[idx].SetContext( modbus_new_rtu( m_Device[idx].GetComPort(), m_Device[idx].GetBaudRate(), gRS485.cParity, gRS485.iDataBits, gRS485.iStopBits ) );
 			if ( m_Device[idx].GetContext() == NULL )
 			{
 				LogMessage( E_MSG_FATAL, "modbus ctx in is null for DeviceNo %d, aborting: %s", m_Device[idx].GetDeviceNo(), modbus_strerror(errno) );
@@ -985,25 +1117,33 @@ bool CDeviceList::InitContext()
 				bRc = false;
 				break;
 			}
-			else if ( modbus_connect(m_Device[idx].GetContext()) == -1 )
-			{	// com port does not exist...
-				iFailure += 1;
-//				FreeAllContexts();
-
-				// try to continue with other devices
-				modbus_close( m_Device[i].GetContext() );
-
-				modbus_free( m_Device[i].GetContext() );
-				m_Device[i].SetContext( NULL );
-
-				LogMessage( E_MSG_ERROR, "modbus_connect() failed for DeviceNo %d, aborting: %s", m_Device[idx].GetDeviceNo(), modbus_strerror(errno) );
-				//bRc = false;
-				//break;
-			}
 			else
 			{
-				iSuccess += 1;
-				LogMessage( E_MSG_INFO, "Serial connection started on %s, ctx %p", m_Device[idx].GetComPort(), m_Device[idx].GetContext() );
+				if ( modbus_rtu_set_serial_mode(m_Device[i].GetContext(), MODBUS_RTU_RS232) == -1)
+				{
+					LogMessage( E_MSG_ERROR, "modbus_rtu_set_serial_mode() failed for DeviceNo %d, %s", m_Device[idx].GetDeviceNo(), modbus_strerror(errno) );
+				}
+
+				if ( modbus_connect(m_Device[idx].GetContext()) == -1 )
+				{	// com port does not exist...
+					iFailure += 1;
+	//				FreeAllContexts();
+
+					// try to continue with other devices
+					modbus_close( m_Device[i].GetContext() );
+
+					modbus_free( m_Device[i].GetContext() );
+					m_Device[i].SetContext( NULL );
+
+					LogMessage( E_MSG_ERROR, "modbus_connect() failed for DeviceNo %d, aborting: %s", m_Device[idx].GetDeviceNo(), modbus_strerror(errno) );
+					//bRc = false;
+					//break;
+				}
+				else
+				{
+					iSuccess += 1;
+					LogMessage( E_MSG_INFO, "Serial connection started on %s, ctx %p", m_Device[idx].GetComPort(), m_Device[idx].GetContext() );
+				}
 			}
 		}
 		else
@@ -1121,6 +1261,16 @@ modbus_t* CDeviceList::GetContext( const int idx )
 	}
 
 	return NULL;
+}
+
+const int CDeviceList::GetBaudRate( const int idx )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetBaudRate();
+	}
+
+	return 9600;
 }
 
 const char* CDeviceList::GetComPort( const int idx )
@@ -1615,6 +1765,26 @@ const double CDeviceList::CalcLevel( const int idx, const int iChannel, const bo
 	return 0.0;
 }
 
+const double CDeviceList::CalcRotaryEncoderDistance( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcRotaryEncoderDistance( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
+const double CDeviceList::CalcVIPFValue( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcVIPFValue( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
 const bool CDeviceList::IsSensorConnected( const int idx, const int iChannel )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
@@ -1660,6 +1830,14 @@ void CDeviceList::SetDeviceNo( const int idx, const int iDeviceNo )
 	if ( idx >= 0 && idx < MAX_DEVICES )
 	{
 		m_Device[idx].SetDeviceNo( iDeviceNo );
+	}
+}
+
+void CDeviceList::SetBaudRate( const int idx, const int iBaudRate )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		m_Device[idx].SetBaudRate( iBaudRate );
 	}
 }
 
@@ -1718,7 +1896,7 @@ void CDeviceList::SetDeviceType( const int idx, const enum E_DEVICE_TYPE eType )
 	}
 }
 
-bool CDeviceList::SetDeviceStatus( const int idx, const enum E_DEVICE_STATUS eStatus )
+bool CDeviceList::SetDeviceStatus( const int idx, const enum E_DEVICE_STATUS eStatus, const bool bNoTimeout )
 {
 	bool bChanged = false;
 	enum E_DEVICE_STATUS eLastStatus;
@@ -1727,7 +1905,7 @@ bool CDeviceList::SetDeviceStatus( const int idx, const enum E_DEVICE_STATUS eSt
 	{
 		eLastStatus = m_Device[idx].GetDeviceStatus();
 
-		m_Device[idx].SetDeviceStatus( eStatus );
+		m_Device[idx].SetDeviceStatus( eStatus, bNoTimeout );
 
 		if ( eLastStatus != m_Device[idx].GetDeviceStatus() )
 		{	// update the database
@@ -2097,12 +2275,12 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 
 		m_Device[i].SetComHandle( iHandle );
 		m_Device[i].SetContext( pCtx );
-		m_Device[i].SetDeviceStatus( eStatus );
+		m_Device[i].SetDeviceStatus( eStatus, false );
 	}
 
 	// read from mysql
-	//                          0           1          2          3            4             5       6       7
-	if ( myDB.RunQuery( "SELECT de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname FROM devices order by de_DeviceNo") != 0 )
+	//                          0           1          2          3            4             5       6       7           8
+	if ( myDB.RunQuery( "SELECT de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate FROM devices order by de_DeviceNo") != 0 )
 	{
 		bRet = false;
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
@@ -2120,9 +2298,10 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 			SetDeviceType( i, (enum E_DEVICE_TYPE)atoi( (const char*)row[5] ) );
 			SetDeviceName( i, (const char*)row[6] );
 			SetDeviceHostname( i, (const char*)row[7] );
+			SetBaudRate( i, atoi( (const char*)row[8] ) );
 
-			LogMessage( E_MSG_INFO, "Device(%d): DeNo:%d, Port:'%s', Addr:%d, DType:%d, Name:'%s', Host:'%s'", i, GetDeviceNo(i), GetComPort(i), GetAddress(i), GetDeviceType(i),
-					GetDeviceName(i), GetDeviceHostname(i) );
+			LogMessage( E_MSG_INFO, "Device(%d): DeNo:%d, Port:'%s', Addr:%d, DType:%d, Name:'%s', Host:'%s', Baud %d", i, GetDeviceNo(i), GetComPort(i), GetAddress(i), GetDeviceType(i),
+					GetDeviceName(i), GetDeviceHostname(i), GetBaudRate(i) );
 
 			i += 1;
 			if ( i >= MAX_DEVICES )
@@ -2639,6 +2818,7 @@ bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, i
 
 					}
 				}
+				//LogMessage( E_MSG_INFO, "Find() found %d %d %d %d", iOutDeviceNo, iOutChannel, iOnPeriod, bLinkTestPassed );
 
 				idx += 1;
 				break;

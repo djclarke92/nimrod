@@ -126,7 +126,7 @@ Modbus RS485 devices from Wellpro and others
 * ./uploads							Create this directory manually and change the owner:group to www-data:www-data
 
 
-# Raspberry Pi Model 2 B+
+# Raspberry Pi Model 4
 
 ## Create Pi bootable SD card
 
@@ -196,6 +196,7 @@ Raspbian buster
 - (old mysql-client libmysqlclient-dev)
 - msmtp msmtp-mta mailutils
 - libwebsockets8 libwebsockets-dev libwebsockets-test-server
+- gparted
 
 - Secure the mariadb installation
 > sudo mysql_secure_installation
@@ -211,17 +212,43 @@ Raspbian buster
 - make apache a member of the nimrod group
 > sudo adduser www-data nimrod
 
-- create the web uploads directory
-> sudo mkdir /var/www/html/uploads
-> sudo chown nimrod:nimrod /var/www/html/uploads
-> sudo chmod g+w /var/www/html/uploads
+## remove the swap file from the SD card
+
+> sudo dphys-swapfile swapoff
+> sudo dphys-swapfile uninstall
+> sudo update-rc.d dphys-swapfile remove
+
+## Move the /var directory onto a USB3 drive
+
+- Once you transfer /var onto the USB3 drive the Pi will not boot without the USB3 drive connected
+- Don't try and connect a second USB drive, the Pi4 can't cope with that
+- Connect and the USB3 drive, format a large ext4 partition and a smaller swap partition
+> sudo gparted
+
+- Get the partition uuid's
+> sudo blkid /dev/sda1
+> sudo blkid /dev/sda2
+
+- Edit the /etc/fstab to add in the new partitions
+> sudo vi /etc/fstab
+  # /dev/sda1
+  PARTUUID=9ee98a25-97e4-xxxx-xxxx-dd0a23e1f247   swap    swap    defaults        0       0
+  # /dev/sda2
+  PARTUUID=51b819e6-8fd1-xxxx-xxxx-7ffbb871917e   /var    ext4    defaults        0       2
+  
+- Mount the new var partition and copy the files across
+> sudo mount /dev/sda2 /mnt
+> sudo rsync -axov /var/* /mnt
+
+- Reboot and your /var partition and swap are on the USB3 drive
+> sudo reboot
 
 ## Setup msmtp mail on the Pi
 
 > sudo vi /etc/msmtprc
 	# Set default values for all following accounts.
 	defaults
-	#logfile /home/pi/msmtp.log
+	logfile /var/tmp/msmtp.log
 
 	# Use the mail submission port 587 instead of the SMTP port 25.
 	port 465
@@ -295,7 +322,9 @@ Raspbian buster
 	# Map local users to mail addresses (for crontab)
 	aliases /etc/aliases
 	
->sudo chown pi:pi /etc/msmtp
+> sudo chown pi:pi /etc/msmtprc
+> sudo chmod 0600 /etc/msmtprc
+> sudo chmod 0777 /var/tmp
 
 > sudo vi /etc/aliases
 	root: pi@<your_domain>
@@ -307,9 +336,110 @@ Raspbian buster
 ## Create a certificate so NodeMCU (ESP8266) WiFi devices can connect
 
 > ssh nimrod@nimrod
-> openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout nimrod-cert.pem -out nimrod-cert.pem
+> openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout nimrod-cert.key -out nimrod-cert.pem
 
 
+# MySQL Database server
+
+The MySQL database will contain the nimrod configuration and record events and monitoring data.
+1.	Create nimrod user with password
+2.	Create pub/priv key
+	> ssh-keygen -t rsa
+3.	Copy pub key to nimrod@pi
+4.	Create nimrod database
+5.	Create the nimrod tables
+	
+## Database username and password
+
+If you want to change the default database username or password you need to edit the tables.sql and files/site_config.php files
+to specify your required username and password before you create the tables. 
+File:	./files/site_config.php			defines DB_USER_NAME and DB_PASSWORD
+File:	./scripts/tables.sql			grant select,insert,update,delete on .......
+	
+## Database ssh tunnel
+
+Nimrod sets up a tunnel to a remote mysql server as per the IP address in the site_config.php file. On the remote mysql host you need to add nimrod as a user and add 
+the ssh keys for all nimrod hosts
+
+# Installing Nimrod on the Pi into /var/www/html for the first time
+
+1.	Copy the install tar file from your PC to the Pi
+> scp nimrod-x.y.z.tgz nimrod@nimrod:/var/www/html/.
+		
+2.	Set permissions and untar the package as the nimrod user
+> ssh nimrod@nimrod 
+> sudo chown -R nimrod:nimrod /var/www/html
+> cd /var/www/html
+> tar xvzf nimrod.x.y.z.tgz
+> cp files/site_config.php.sample files/site_config.php
+> vi site_config.php
+	- set REMOTE_MYSQL_HOST and DB_PASSWORD
+	
+3.	Establish the SSH tennel to the database host to accept the host key as the nimrod user
+> ssh nimrod@REMOTE_DB_HOST
+> yes
+> ctrl-d		
+
+4.	Create the guest user fir camera ftp login
+> adduser guest
+	- Set password to something
+
+4.	Apache2 setup
+> Create the cctv symlink
+	cd /var/www/html
+	sudo ln -s /var/cctv cctv
+> Add apache to the guest group
+	sudo adduser www-data guest
+> Restart apache
+	sudo service apache2 restart
+
+5.	Move the nimrod.log file onto /var/tmp
+> cd /home/nimrod
+> sudo ln -s /var/tmp log
+> sudo vi /var/www/html/files/site_config.php
+			
+6.	Add nimrod to the guest group
+> sudo useradd nimrod guest
+
+7. create the web uploads directory
+> sudo mkdir /var/www/html/uploads
+> sudo chown -R nimrod:nimrod /var/www/html
+> sudo chmod g+w /var/www/html/uploads
+
+8.	Set nimrod to start automatically
+> ssh pi@nimrod
+> cd /var/www/html
+> sudo cp scripts/nimrod.service.arm7 /lib/systemd/system/nimrod.service
+> sudo chown root:root /lib/systemd/system/nimrod.service
+> sudo systemctl enable nimrod.service
+> sudo systemctl start nimrod
+
+9.	Nimrod should now be running
+
+See the log in /home/nimrod/nimrod.log.  Point your browser to https://nimrod/index.php
+	
+	
+#Installing a signed ssl cert for apache2
+
+See https://peppe8o.com/use-lets-encrypt-and-certbot-to-secure-raspberry-pi-hosted-websites-automatically/ for details
+This gives you a 3 month signed certificate
+
+> sudo apt update
+> sudo apt install snapd
+> sudo reboot
+> sudo snap install core; sudo snap refresh core
+
+># remove certbot if it is already installed
+> sudo apt remove certbot
+
+> sudo snap install --classic certbot
+> sudo ln -s /snap/bin/certbot /usr/bin/certbot
+> sudo certbot --apache -d <your_domain_name> -d www.<your_domain_name>
+
+To renew the certificate use the following command
+> sudo certbot renew
+	
+	
 # Setup the cross compiler environment on your linux desktop PC
 
 On your linux desktop PC:
@@ -333,108 +463,6 @@ export PATH=$PATH:$HOME/raspberrypi/tools/arm-bcm2708/gcc-linaro-arm-linux-gnuea
 	
 Add gcc/g++ compiler packages to your desktop including 32bit gcc support packages, lib32gcc-6-dev, lib32z1
 	
-	
-# MySQL Database server
-
-The MySQL database will contain the nimrod configuration and record events and monitoring data.
-1.	Create nimrod user with password
-2.	Create pub/priv key
-	> ssh-keygen -t rsa
-3.	Copy pub key to nimrod@pi
-4.	Create nimrod database
-5.	Create the nimrod tables
-	
-## Database username and password
-
-If you want to change the default database username or password you need to edit the tables.sql and files/site_config.php files
-to specify your required username and password before you create the tables. 
-File:	./files/site_config.php			defines DB_USER_NAME and DB_PASSWORD
-File:	./scripts/tables.sql			grant select,insert,update,delete on .......
-	
-## Database ssh tunnel
-
-Nimrod sets up a tunnel to a remote mysql server as per the IP address in the site_config.php file. On the remote mysql host you need to add nimrod as a user and add 
-the ssh keys for all nimrod hosts
-
-## Setup basic auth for apache on the nimrod host
-
-> ssh pi@nimrod
-> sudo htpasswd -c /etc/apache2/.htpasswd nimrod@nimrod.co.nz
-	Replace nimrod@nimrod.co.nz with your own email
-> sudo htpasswd /etc/apache2/.htpasswd another_user
-
-> sudo vi /etc/apache2/apache2.conf
-	<Directory "/var/www/html">
-        Options +FollowSymLinks +Multiviews -Indexes
-        AllowOverride None
-        AuthType basic
-        AuthName "Nimrod - restricted site"
-        AuthUserFile /etc/apache2/.htpasswd
-        Require valid-user
-	</Directory>
-
-
-# Installing Nimrod on the Pi into /var/www/html for the first time
-
-1.	Copy the install tar file from your PC to the Pi
-> scp nimrod-x.y.z.tgz pi@nimrod:/var/www/html/.
-		
-2.	Set permissions and untar the package as the nimrod user
-> ssh nimrod@nimrod 
-> sudo chown -R nimrod:nimrod /var/www/html
-> cd /var/www/html
-> tar xvzf nimrod.x.y.z.tgz
-> cp files/site_config.php.sample files/site_config.php
-> vi site_config.php
-	- set REMOTE_MYSQL_HOST and DB_PASSWORD
-	
-3.	Establish the SSH tennel to the database host to accept the host key as the nimrod user
-> ssh nimrod@REMOTE_DB_HOST
-> yes
-> ctrl-d		
-
-4.	Apache2 setup
-> Create the cctv symlink
-	cd /var/www/html
-	sudo ln -s /var/cctv cctv
-> Add apache to the guest group
-	sudo adduser www-data guest
-> Restart apache
-	sudo service apache2 restart
-
-5.	Move the nimrod.log file onto /var
-> cd /home/nimrod
-> sudo touch /var/tmp/nimrod.log
-> sudo chown nimrod:nimrod /var/tmp/nimrod.log
-> sudo ln -s /var/tmp/nimrod.log .
-			
-6.	Add nimrod to the guest group
-> sudo usermod -a -G guest nimrod
-
-6.	Set nimrod to start automatically
-> ssh pi@nimrod
-> cd /var/www/html
-> sudo cp scripts/nimrod.service /lib/systemd/system/.
-> sudo chown root:root /lib/systemd/system/nimrod.service
-> sudo systemctl enable nimrod.service
-> sudo systemctl start nimrod
-
-6.	Nimrod should now be running
-
-See the log in /home/nimrod/nimrod.log.  Point your browser to https://nimrod/index.php
-	
-	
-# Setting up a new Pi
-
-1. 	Use dd to write the nimrod image file onto a new micro flash card
-2.	Boot the Pi using the new flash card
-3.	Set the correct hostname
-	> sudo vi /etc/hostname
-	> sudo vi /etc/hosts
-4.	Set the correct IP address
-	> sudo vi /etc/dhcpcd.conf
-5.	Reboot
-	> sudo reboot
 	
 # Development and debugging
 
