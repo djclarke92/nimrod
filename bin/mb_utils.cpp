@@ -390,7 +390,7 @@ bool CreateRestartScript( const char* szTar )
 
 		if ( szTar != NULL )
 		{
-			snprintf( szBuf, sizeof(szBuf), "tar xvf %s 2>&1 >> ~/nimrod.log\n", szTar );
+			snprintf( szBuf, sizeof(szBuf), "tar xvf %s 2>&1 >> %s/nimrod.log\n", szTar, gszLogDir );
 			fputs( szBuf, pFile );
 		}
 
@@ -400,11 +400,11 @@ bool CreateRestartScript( const char* szTar )
 
 		if ( szTar != NULL )
 		{
-			snprintf( szBuf, sizeof(szBuf), "rm -rf %s 2>&1 >> ~/nimrod.log\n", szTar );
+			snprintf( szBuf, sizeof(szBuf), "rm -rf %s 2>&1 >> %s/nimrod.log\n", szTar, gszLogDir );
 			fputs( szBuf, pFile );
 		}
 
-		snprintf( szBuf, sizeof(szBuf), "rm -rf nohup.out 2>&1 >> ~/nimrod.log\n" );
+		snprintf( szBuf, sizeof(szBuf), "rm -rf nohup.out 2>&1 >> %s/nimrod.log\n", gszLogDir );
 		fputs( szBuf, pFile );
 		fputs( "\n", pFile );
 

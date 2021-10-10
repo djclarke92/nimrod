@@ -7,6 +7,11 @@
 Nimrod Release Notes and History
 
 
+Version 0.2.1		October 2021
+1.	Use a local copy of the bootstrap and jquery js and css files
+2.	
+
+
 Version 0.2.0		July 2021
 1.	Added support for MT-52 series 12 bit multi turn rotary encoders
 2.	Added support for ESP32 WiFi devices - 4 digial inputs, 4 digital outputs, 4 DS18B20 temperature sensors
@@ -14,7 +19,6 @@ Version 0.2.0		July 2021
 4.	Allow each RS485 COM port to have a different baud rate, 9600 or 19200
 5.	The events table ev_Value column type has changed to record the measured value in volts, deg C, etc instead of the sensor value
 6.	Information on how to apply a signed certificate using snap and certbot
-7.	
 
 
 Version 0.1.8		May 2021

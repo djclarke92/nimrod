@@ -196,7 +196,7 @@ Raspbian buster
 - (old mysql-client libmysqlclient-dev)
 - msmtp msmtp-mta mailutils
 - libwebsockets8 libwebsockets-dev libwebsockets-test-server
-- gparted
+- gparted vsftpd
 
 - Secure the mariadb installation
 > sudo mysql_secure_installation
@@ -414,7 +414,14 @@ the ssh keys for all nimrod hosts
 > sudo systemctl enable nimrod.service
 > sudo systemctl start nimrod
 
-9.	Nimrod should now be running
+9.	Setup vsftpd if you have cameras attached so nimrod and apache can view the video files
+> sudo vi /etc/vsftpd.conf
+  write_enable=YES
+  local_umask=002
+> sudo vi /home/guest/.bashrc
+  umask 002
+
+10.	Nimrod should now be running
 
 See the log in /home/nimrod/nimrod.log.  Point your browser to https://nimrod/index.php
 	

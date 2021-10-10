@@ -396,11 +396,14 @@ void CThread::Worker()
 				GetCameraSnapshots( myDB, m_CameraList );
 			}
 
-			if ( tLastCurlCheckTime + 60 <= time(NULL) )
-			{
+			if ( tLastCurlCheckTime + 300 <= time(NULL) )
+			{	// every 5 minutes
+				// ping back to flatcatit.co.nz for those hosts where flatcatit is managing their DNS records
 				char szCmd[256];
-				//snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 http://flatcatit.co.nz/helo-nimrod/$HOSTNAME > /dev/null &" );
-				LogMessage( E_MSG_INFO, "Running '%s'", szCmd );
+				char szHostname[50] = "";
+				gethostname( szHostname, sizeof(szHostname) );
+				snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 \"http://flatcatit.co.nz/helo-nimrod/%s\" > /dev/null &", szHostname );
+				//LogMessage( E_MSG_INFO, "Running '%s'", szCmd );
 				int rc = system( szCmd );
 				if ( rc != 0 )
 				{
