@@ -29,6 +29,7 @@ function func_clear_pl_array( &$pl_array )
 	$pl_array['pl_NextStateName'] = "";
 	$pl_array['pl_Order'] = 0;
 	$pl_array['pl_DelayTime'] = 0;
+	$pl_array['pl_TimerValues'] = "";
 	$pl_array['error_msg'] = "";
 	$pl_array['info_msg'] = "";
 	$pl_array['state_filter'] = "";
@@ -78,7 +79,7 @@ function func_check_pl_array( &$pl_array, $marker, $next_marker )
 	}
 	else if ( $pl_array['pl_RuleType'] == "I" && ($pl_array['pl_Test'] != "" || $pl_array['pl_NextStateName'] != "") )
 	{
-	    $pl_array['error_msg'] = "The Operator and Next State Name can only be entered for Init rules.";
+	    $pl_array['error_msg'] = "The Operator and Next State Name can only be entered for Event rules.";
 	    return false;
 	}
 	else if ( $pl_array['pl_RuleType'] != "" && $pl_array['pl_DeviceNo'] == 0 && $pl_array['pl_IOChannel'] != -1 )
@@ -100,6 +101,18 @@ function func_check_pl_array( &$pl_array, $marker, $next_marker )
 	{
 	    $pl_array['error_msg'] = "The 'Next State Name' must be different to the current 'State Name'.";
 	    return false;
+	}
+	else if ( $pl_array['pl_TimerValues'] != "" )
+	{  // only numbers, s, m or comma
+	    for ( $i = 0; $i < strlen($pl_array['pl_TimerValues']); $i++ )
+	    {
+	        $ch = substr($pl_array['pl_TimerValues'],$i,1);
+	        if ( is_numeric($ch) == false && $ch != 's' && $ch != 'm' && $ch != ',' )
+	        {
+	            $pl_array['error_msg'] = sprintf( "The Timer Values must be in the format 'XXs,XYs,...' or 'XXm,XYm,...' (%s)", $ch );
+	            return false;
+	        }
+	    }
 	}
 	
 	return true;
@@ -144,9 +157,19 @@ if ( isset( $_POST['pl_StateTimestamp']) )
     $pl_array['pl_StateTimestamp'] = $_POST['pl_StateTimestamp'];
 if ( isset( $_POST['pl_RuleType']) )
     $pl_array['pl_RuleType'] = substr($_POST['pl_RuleType'],0,1);
-if ( isset( $_POST['pl_DeviceChannel']) )
+if ( isset( $_POST['pl_DeviceChannelIn']) )
 {   // xx,xx: name
-    $expl = explode( ":", $_POST['pl_DeviceChannel'] );
+    $expl = explode( ":", $_POST['pl_DeviceChannelIn'] );
+    $expl2 = explode( ",", $expl[0] );
+    if ( isset( $expl2[0]) && isset($expl2[1]) )
+    {
+        $pl_array['pl_DeviceNo'] = intval($expl2[0]);
+        $pl_array['pl_IOChannel'] = intval($expl2[1])-1;
+    }
+}
+if ( isset( $_POST['pl_DeviceChannelOut']) )
+{   // xx,xx: name
+    $expl = explode( ":", $_POST['pl_DeviceChannelOut'] );
     $expl2 = explode( ",", $expl[0] );
     if ( isset( $expl2[0]) && isset($expl2[1]) )
     {
@@ -170,6 +193,8 @@ if ( isset( $_POST['pl_Order']) )
     $pl_array['pl_Order'] = $_POST['pl_Order'];
 if ( isset( $_POST['pl_DelayTime']) )
     $pl_array['pl_DelayTime'] = $_POST['pl_DelayTime'];
+if ( isset( $_POST['pl_TimerValues']) )
+    $pl_array['pl_TimerValues'] = $_POST['pl_TimerValues'];
 if (isset($_GET['StateFilter']))
     $pl_array['state_filter'] = $_GET['StateFilter'];
 if (isset($_POST['StateFilter']))
@@ -181,6 +206,19 @@ if (isset($_POST['OpFilter']))
         
     
 $di_list = $db->ReadDeviceInfoTable();
+$di_list_out = array();
+$di_list_in = array();
+foreach ( $di_list as $di )
+{
+    if ( $di['di_IOType'] == E_IO_OUTPUT )
+    {
+        $di_list_out[] = $di;
+    }
+    else
+    {
+        $di_list_in[] = $di;
+    }
+}
     
     
 if ( isset($_POST['ClearState']) )
@@ -218,6 +256,7 @@ else if ( isset($_GET['StateNo']) )
             $pl_array['pl_NextStateName'] = $info[0]['pl_NextStateName'];
             $pl_array['pl_Order'] = $info[0]['pl_Order'];
             $pl_array['pl_DelayTime'] = $info[0]['pl_DelayTime'];
+            $pl_array['pl_TimerValues'] = $info[0]['pl_TimerValues'];
             
             if ( strstr( $pl_array['pl_StateTimestamp'], "0000-00-00" ) != false )
                 $pl_array['pl_StateTimestamp'] = "";
@@ -243,16 +282,16 @@ else if ( isset($_POST['UpdateState']) || isset($_POST['NewState']) )
     if ( $pl_array['pl_Operation'] != "" && $pl_array['pl_NextStateName'] != "" )
         $next_marker = $db->OperationStateNameExists( $pl_array['pl_Operation'], $pl_array['pl_NextStateName'] );
             
-    // check the device is on this host
+    
     if ( $pl_array['pl_DeviceNo'] != 0 && func_check_device_hostname($di_list,$pl_array['pl_DeviceNo']) == false )
-    {
+    {   // check the device is on this host
         $pl_array['error_msg'] = sprintf( "All devices in the PLC state machine must be on this host '%s'", gethostname() );
     }
     else if ( func_check_pl_array( $pl_array, $marker, $next_marker ) )
     {
         if ( $db->SavePlcState( $pl_array['pl_StateNo'], $pl_array['pl_Operation'], $pl_array['pl_StateName'], 
             $pl_array['pl_StateIsActive'], $pl_array['pl_StateTimestamp'], $pl_array['pl_RuleType'], $pl_array['pl_DeviceNo'], $pl_array['pl_IOChannel'], $pl_array['pl_Value'],
-            $pl_array['pl_Test'], $pl_array['pl_NextStateName'], $pl_array['pl_Order'], $pl_array['pl_DelayTime'] ) )
+            $pl_array['pl_Test'], $pl_array['pl_NextStateName'], $pl_array['pl_Order'], $pl_array['pl_DelayTime'], $pl_array['pl_TimerValues'] ) )
         {	// success
             //func_clear_pl_array( $pl_array );
             
@@ -324,11 +363,25 @@ if ( $pl_array['op_filter'] == "" )
     if ( isset($state_list[0]) )
     {
         $pl_array['op_filter'] = $state_list[0]['pl_Operation'];
-}
+    }
 }
 
 
 ?>
+<script language='javascript'>
+function onChangeRuleType()
+{
+    var val = document.getElementById('pl_RuleType').value;
+    if ( val.substr(0,1) == 'I' ) {
+        document.getElementById('pl_DeviceChannelOut').removeAttribute('disabled');
+        document.getElementById('pl_DeviceChannelIn').setAttribute('disabled','disabled');        
+    } else if ( val.substr(0,1) == 'E' ) {
+        document.getElementById('pl_DeviceChannelIn').removeAttribute('disabled');
+        document.getElementById('pl_DeviceChannelOut').setAttribute('disabled','disabled');
+    }
+}
+</script>
+
 <div class="container" style="margin-top:30px">
 
     <!-- *************************************************************************** -->
@@ -373,9 +426,12 @@ if ( $pl_array['op_filter'] == "" )
 			    }
 			}
 			?>
-			</select> 
-			&nbsp;
-			<button type='submit' class='btn btn-outline-dark mt-2' name='Refresh' id='Refresh'>Filter</button>
+			</select>
+			</div>
+		</div> 
+		<div class="col-sm-1">
+			<div class='input-group'>
+			<button type='submit' class='btn btn-outline-dark' name='Refresh' id='Refresh'>Filter</button>
 			</div>
 		</div>
         
@@ -411,6 +467,7 @@ if ( $pl_array['op_filter'] == "" )
               <th>Next State</th>
               <th>Value</th>
               <th>Active</th>
+              <th>Delay</th>
             </thead>
 
             <?php
@@ -434,7 +491,7 @@ if ( $pl_array['op_filter'] == "" )
                 }
                 else if ( $state['pl_DeviceNo'] == 0 && $state['pl_IOChannel'] == -1 )
                 {
-                    printf( "<td>Immediate</td>" );
+                    printf( "<td>Immediate/Timer</td>" );
                 }
                 else
                 {
@@ -464,6 +521,8 @@ if ( $pl_array['op_filter'] == "" )
                 printf( "<td>%s</td>", (intval($state['pl_Value']) != 0 ? sprintf( "%.1f", $state['pl_Value'] / 10) : "0") );
                 
                 printf( "<td>%s</td>", ($state['pl_StateIsActive'] == "Y" ? "Yes" : "") );
+                
+                printf( "<td>%s</td>", (intval($state['pl_DelayTime']) != 0 ? $state['pl_DelayTime'] : "") );
                 
                 printf( "<tr>" );
             }
@@ -545,7 +604,7 @@ if ( $pl_array['op_filter'] == "" )
     		printf( "<label for='pl_RuleType'>Rule Type: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<select size='1' class='form-control custom-select' name='pl_RuleType' id='pl_RuleType' %s>", $disabled2 );
+    		printf( "<select size='1' class='form-control custom-select' name='pl_RuleType' id='pl_RuleType' onLoad='onChangeRuleType();' onChange='onChangeRuleType();' %s>", $disabled2 );
     		printf( "<option></option>" );
     		printf( "<option %s>I. Init</option>", ($pl_array['pl_RuleType'] == "I" ? "selected" : "") );
     		printf( "<option %s>E. Event</option>", ($pl_array['pl_RuleType'] == "E" ? "selected" : "") );
@@ -555,13 +614,13 @@ if ( $pl_array['op_filter'] == "" )
     		
     		printf( "<div class='form-row'>" );
     		printf( "<div class='col'>" );
-    		printf( "<label for='pl_DeviceChannel'>Device: </label>" );
+    		printf( "<label for='pl_DeviceChannelOut'>Init Devices: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<select size='1' class='form-control custom-select' name='pl_DeviceChannel' id='pl_DeviceChannel' %s>", $disabled2 );
+    		printf( "<select size='1' class='form-control custom-select' name='pl_DeviceChannelOut' id='pl_DeviceChannelOut' %s>", $disabled2 );
     		printf( "<option></option>" );
-    		printf( "<option %s>0,0: Immediate</option>", ($pl_array['pl_DeviceNo'] == 0 && $pl_array['pl_RuleType'] == 'E' ? "selected" : "") );
-    		foreach ( $di_list as $di )
+//    		printf( "<option %s>0,0: Immediate</option>", ($pl_array['pl_DeviceNo'] == 0 && $pl_array['pl_RuleType'] == 'E' ? "selected" : "") );
+    		foreach ( $di_list_out as $di )
     		{
     		    $sel = "";
     		    if ( $pl_array['pl_RuleType'] == "I" && $di['di_IOType'] == E_IO_OUTPUT && $pl_array['pl_DeviceNo'] == $di['di_DeviceNo'] && $pl_array['pl_IOChannel'] == $di['di_IOChannel'] )
@@ -570,6 +629,28 @@ if ( $pl_array['op_filter'] == "" )
 		            $sel = "selected";
     		            
     		    printf( "<option %s>%d,%d: %s</option>", $sel, $di['di_DeviceNo'], $di['di_IOChannel']+1, $di['di_IOName'] );
+    		}
+    		printf( "</select>" );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col'>" );
+    		printf( "<label for='pl_DeviceChannelIn'>Event Devices: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<select size='1' class='form-control custom-select' name='pl_DeviceChannelIn' id='pl_DeviceChannelIn' %s>", $disabled2 );
+    		printf( "<option></option>" );
+    		printf( "<option %s>0,0: Immediate/Timer</option>", ($pl_array['pl_DeviceNo'] == 0 && $pl_array['pl_RuleType'] == 'E' ? "selected" : "") );
+    		foreach ( $di_list_in as $di )
+    		{
+    		    $sel = "";
+    		    if ( $pl_array['pl_RuleType'] == "I" && $di['di_IOType'] == E_IO_OUTPUT && $pl_array['pl_DeviceNo'] == $di['di_DeviceNo'] && $pl_array['pl_IOChannel'] == $di['di_IOChannel'] )
+    		        $sel = "selected";
+ 		        else if ( $pl_array['pl_RuleType'] == "E" && $di['di_IOType'] != E_IO_OUTPUT && $pl_array['pl_DeviceNo'] == $di['di_DeviceNo'] && $pl_array['pl_IOChannel'] == $di['di_IOChannel'] )
+  		            $sel = "selected";
+    		            
+                printf( "<option %s>%d,%d: %s</option>", $sel, $di['di_DeviceNo'], $di['di_IOChannel']+1, $di['di_IOName'] );
     		}
     		printf( "</select>" );
     		printf( "</div>" );
@@ -599,6 +680,15 @@ if ( $pl_array['op_filter'] == "" )
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		printf( "<input type='text' class='form-control' name='pl_DelayTime' id='pl_DelayTime' size='2' value='%s' %s> <i>(seconds)</i>", $pl_array['pl_DelayTime'], $disabled2 );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col'>" );
+    		printf( "<label for='pl_TimerValues'>Timer Values: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='pl_TimerValues' id='pl_TimerValues' size='16' value='%s' %s>", $pl_array['pl_TimerValues'], $disabled2 );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -675,6 +765,11 @@ if ( $pl_array['op_filter'] == "" )
 	}
     ?>
     		
+<script type="text/javascript">
+	window.addEventListener("load",function(){
+    	onChangeRuleType();
+	},false);
+</script>
 
 <?php 
 

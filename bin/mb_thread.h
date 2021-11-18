@@ -58,6 +58,7 @@ private:
 	char m_szNextStateName[51];
 	int m_iOrder;
 	int m_iDelayTime;
+	char m_szTimerValues[51];
 
 public:
 	CPlcState();
@@ -77,6 +78,7 @@ public:
 	const char* GetNextStateName(){ return m_szNextStateName; }
 	const int GetOrder(){ return m_iOrder; }
 	const int GetDelayTime(){ return m_iDelayTime; }
+	const char* GetTimerValues(){ return m_szTimerValues; }
 
 	void SetStateNo( const int iStateNo );
 	void SetOperation( const char* szOperation );
@@ -91,6 +93,7 @@ public:
 	void SetNextStateName( const char* szNextStateName );
 	void SetOrder( const int iOrder );
 	void SetDelayTime( const int iDelayTime );
+	void SetTimerValues( const char* szTimerValues );
 };
 
 #define MAX_PLC_STATES				500
@@ -116,6 +119,7 @@ public:
 	void SetActiveStateIdx( int idx );
 	const int FindStateNo( int iStateNo );
 	const int GetInitialAction( const int iStartIdx );
+	const int GetEvent( const int iStartIdx );
 	const int GetActiveStateIdx();
 	const bool FindInputDevice( const int iDeviceNo, const int iIOChannel );
 	void AddInputEvent( const int iDeviceNo, const int iIOChannel, const int iValue );

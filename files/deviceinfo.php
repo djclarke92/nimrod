@@ -460,7 +460,7 @@ if (isset($_GET['DeviceInfoNo']))
 else if (isset($_POST['DeleteDeviceInfo'])) 
 {
     $info = $db->ReadDeviceInfo($_POST['di_DeviceInfoNo']);
-    if ($db->DeleteDeviceInfo($info['di_DeviceInfoNo'], $info['di_DeviceNo'], $info['di_IOChannel'])) 
+    if ($db->DeleteDeviceInfo($info['di_DeviceInfoNo'], $info['di_DeviceNo'], $info['di_IOChannel'], $info['di_IOType'])) 
     {
         $addr_filter = $di_array['addr_filter'];
         $dir_filter = $di_array['dir_filter'];
@@ -473,7 +473,7 @@ else if (isset($_POST['DeleteDeviceInfo']))
     } 
     else 
     {
-        $di_array['error_msg'] = sprintf("Failed to delete deviceinfo with DeviceInfoNo=%d (delete related IO Links first)", $info['di_DeviceInfoNo']);
+        $di_array['error_msg'] = sprintf("Failed to delete deviceinfo with DeviceInfoNo=%d (delete related IO Links and/or PLCStates first)", $info['di_DeviceInfoNo']);
     }
 } 
 else if (isset($_POST['NewDeviceInfo']) || isset($_POST['UpdateDeviceInfo'])) 
@@ -729,7 +729,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
 			?>
 			</select> 
 			&nbsp;
-			<button type='submit' class='btn btn-outline-dark mt-2' name='Refresh' id='Refresh'>Filter</button>
+			<button type='submit' class='btn btn-outline-dark' name='Refresh' id='Refresh'>Filter</button>
 			</div>
 		</div>
 	</div>

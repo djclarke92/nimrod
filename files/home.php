@@ -15,6 +15,21 @@ if ( !isset($_SESSION['us_AuthLevel']) )
 }
 
 
+function func_get_mdalarm_count($dir)
+{
+    $count = -1;
+    
+    $file = sprintf( "%s/file_count.txt", $dir );
+    $fp = fopen( $file, "r" );
+    if ( $fp !== false )
+    {
+        $count = fgets( $fp );
+        fclose( $fp );
+    }
+    
+    return $count;
+}
+
 function func_find_graph_device( $de_no, $ch )
 {
 	$rc = false;
@@ -920,6 +935,8 @@ foreach ( $camera_list as $camera )
             
             $file = sprintf( "%s/latest_snapshot.jpg", func_make_camera_web_dir( "", $camera['ca_Directory'] ) );
             
+            $count = func_get_mdalarm_count($camera['ca_Directory']);
+            
             $stat = stat( sprintf( "%s/latest_snapshot.jpg", $camera['ca_Directory'] ) );
             if ( $stat !== false )
             {
@@ -928,9 +945,14 @@ foreach ( $camera_list as $camera )
                 {
                     $class = "text-danger";
                 }
+                $class2 = "";
+                if ( $count <= 0 )
+                {
+                    $class2 = "text-danger";
+                }
                 $date = getdate( $stat['mtime'] );
-                printf( "%s: <span class='%s'>%02d/%02d/%d %02d:%02d:%02d</span><br>", $camera['ca_Name'], $class, 
-                    $date['mday'], $date['mon'], $date['year'], $date['hours'], $date['minutes'], $date['seconds'] );
+                printf( "%s: <span class='%s'>%02d/%02d/%d %02d:%02d:%02d</span> - </span class='%s'>%d files today</span><br>", $camera['ca_Name'], $class, 
+                    $date['mday'], $date['mon'], $date['year'], $date['hours'], $date['minutes'], $date['seconds'], $class2, $count );
             }
             printf( "<img src='%s' width='400px' alt='No snapshot from %s'>", $file, $camera['ca_Name'] );
         

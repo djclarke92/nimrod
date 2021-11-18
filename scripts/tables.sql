@@ -141,6 +141,7 @@ create table IF NOT EXISTS `plcstates` (
 	`pl_NextStateName` varchar(50) NOT NULL default "",				# link to the next state
 	`pl_Order` int(10) NOT NULL default 0,							# optional execution order
 	`pl_DelayTime` int(10) NOT NULL default 0,						# time delay in seconds to ignore the event
+	`pl_TimerValues` varchar(50) NOT NULL default '',				# comma separated list of timer values, e.g. 10s,30s,2m
 	PRIMARY KEY (`pl_StateNo`),
 	KEY `pl_statename_index` (`pl_StateName`)
 ) ;

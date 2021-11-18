@@ -349,7 +349,7 @@ public:
 	const bool IsSharedWithNext( const int idx );
 	void FreeAllContexts();
 	const int GetBaudRateForPort( const char* szComPort );
-	int GetComPortsOnHost( CMysql& myDB, char szPort[MAX_DEVICES][MAX_COMPORT_LEN+1] );
+	const bool GetComPortsOnHost( CMysql& myDB, char szPort[MAX_DEVICES][MAX_COMPORT_LEN+1], bool bSwapBaud );
 	const int GetTotalComPorts( char szPort[MAX_DEVICES][MAX_COMPORT_LEN+1] );
 	const int GetIdxForAddr( const int iAddr );
 	const int GetIdxForName( const char* szName );

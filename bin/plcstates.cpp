@@ -60,6 +60,7 @@ void CPlcState::Init()
 	m_szNextStateName[0] = '\0';
 	m_iOrder = 0;
 	m_iDelayTime = 0;
+	m_szTimerValues[0] = '\0';
 }
 
 void CPlcState::SetStateNo( const int iStateNo )
@@ -125,6 +126,11 @@ void CPlcState::SetOrder( const int iOrder )
 void CPlcState::SetDelayTime( const int iDelayTime )
 {
 	m_iDelayTime = iDelayTime;
+}
+
+void CPlcState::SetTimerValues( const char* szTimerValues )
+{
+	snprintf( m_szTimerValues, sizeof(m_szTimerValues), "%s", szTimerValues );
 }
 
 
@@ -220,6 +226,30 @@ const int CPlcStates::GetInitialAction( const int iStartIdx )
 			 strcmp( m_State[iStartIdx].GetStateName(), m_State[i].GetStateName() ) == 0 )
 		{	// same operation and state
 			if ( m_State[i].GetRuleType()[0] == 'I' )
+			{	// found one
+				idx = i;
+				break;
+			}
+		}
+		else
+		{	// end of list
+			break;
+		}
+	}
+
+	return idx;
+}
+
+const int CPlcStates::GetEvent( const int iStartIdx )
+{
+	int idx = -1;
+
+	for ( int i = iStartIdx+1; i < m_iStateCount; i++ )
+	{
+		if ( strcmp( m_State[iStartIdx].GetOperation(), m_State[i].GetOperation() ) == 0 &&
+			 strcmp( m_State[iStartIdx].GetStateName(), m_State[i].GetStateName() ) == 0 )
+		{	// same operation and state
+			if ( m_State[i].GetRuleType()[0] == 'E' )
 			{	// found one
 				idx = i;
 				break;

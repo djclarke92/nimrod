@@ -390,21 +390,21 @@ bool CreateRestartScript( const char* szTar )
 
 		if ( szTar != NULL )
 		{
-			snprintf( szBuf, sizeof(szBuf), "tar xvf %s 2>&1 >> %s/nimrod.log\n", szTar, gszLogDir );
+			snprintf( szBuf, sizeof(szBuf), "tar xvf %s >> %s/nimrod.log 2>&1\n", szTar, gszLogDir );
 			fputs( szBuf, pFile );
 		}
 
 		// we will be restarted by inittab
-		//snprintf( szBuf, sizeof(szBuf), "nohup ./scripts/%s 2>&1 >/dev/null &\n", gszProgName );
+		//snprintf( szBuf, sizeof(szBuf), "nohup ./scripts/%s >/dev/null 2>&1 &\n", gszProgName );
 		//fputs( szBuf, pFile );
 
 		if ( szTar != NULL )
 		{
-			snprintf( szBuf, sizeof(szBuf), "rm -rf %s 2>&1 >> %s/nimrod.log\n", szTar, gszLogDir );
+			snprintf( szBuf, sizeof(szBuf), "rm -rf %s >> %s/nimrod.log 2>&1\n", szTar, gszLogDir );
 			fputs( szBuf, pFile );
 		}
 
-		snprintf( szBuf, sizeof(szBuf), "rm -rf nohup.out 2>&1 >> %s/nimrod.log\n", gszLogDir );
+		snprintf( szBuf, sizeof(szBuf), "rm -rf nohup.out >> %s/nimrod.log 2>&1\n", gszLogDir );
 		fputs( szBuf, pFile );
 		fputs( "\n", pFile );
 

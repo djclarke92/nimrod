@@ -7,9 +7,11 @@
 Nimrod Release Notes and History
 
 
-Version 0.2.1		October 2021
+Version 0.2.1		November 2021
 1.	Use a local copy of the bootstrap and jquery js and css files
-2.	
+2.	Prevent DeviceInof records from being deleted if they are linked to plcstate records
+3.	Add timer events to the PLC state machine processing
+4.	
 
 
 Version 0.2.0		July 2021

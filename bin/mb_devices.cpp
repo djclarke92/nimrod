@@ -826,10 +826,11 @@ const int CDeviceList::GetBaudRateForPort( const char* szComPort )
 	return iBaudRate;
 }
 
-int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][MAX_COMPORT_LEN+1] )
+const bool CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][MAX_COMPORT_LEN+1], bool bSwapBaud )
 {
 	bool bFound;
 	bool bFirstTime;
+	bool bSomeoneIsAlive = false;
 	int iCount = 0;
 	int i;
 	int j;
@@ -858,6 +859,10 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 		if ( m_szHostComPort[i][0] != '\0' )
 		{	// found a real com port
 			iBaudRate = GetBaudRateForPort( m_szHostComPort[i] );
+			if ( bSwapBaud )
+			{	// TODO: handle more baud rates
+				iBaudRate = (iBaudRate == 9600 ? 19200 : 9600 );
+			}
 			m_pHostCtx[i] = modbus_new_rtu( m_szHostComPort[i], iBaudRate, gRS485.cParity, gRS485.iDataBits, gRS485.iStopBits );
 			if ( m_pHostCtx[i] == NULL )
 			{	// failed
@@ -930,6 +935,7 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 
 						if ( (bFound = IsDeviceAlive( m_pHostCtx[i], m_szHostComPort[i], GetAddress(idx) )) )
 						{	// modbus devices exist on this com port
+							bSomeoneIsAlive = true;
 							m_bHostComPortModbus[i] = true;
 							if ( strcmp( m_szHostComPort[i], GetComPort(idx) ) != 0 )
 							{	// com port has changed
@@ -1040,7 +1046,7 @@ int CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][M
 
 	LogMessage( E_MSG_INFO, "Com port reconfiguration complete, %d ports", iCount );
 
-	return iCount;
+	return bSomeoneIsAlive;
 }
 
 bool CDeviceList::InitContext()

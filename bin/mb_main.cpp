@@ -193,7 +193,10 @@ int main( int argc, char *argv[] )
 	LogMessage( E_MSG_INFO, "Total com ports: %d", iTotalComPorts );
 
 	// check if com ports have been swapped
-	myDevices.GetComPortsOnHost( myDB, szComPortList );
+	if ( !myDevices.GetComPortsOnHost( myDB, szComPortList, false ) )
+	{	// com ports have swapped so try swapping the baud rates
+		myDevices.GetComPortsOnHost( myDB, szComPortList, true );
+	}
 
 
 	// init libmodbus and connect the com ports

@@ -525,6 +525,8 @@ void CThread::Worker()
 						{	// only check rotary encoder devices every 1 seconds
 							tLastRotEncCheck = time(NULL);
 
+							// to avoid "response not from requested slave" error
+							//usleep( 20000 );
 							HandleRotaryEncoderDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
@@ -2139,6 +2141,13 @@ void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int 
 			count = 2;
 
 		rc = modbus_read_registers( ctx, addr, count, m_pmyDevices->GetNewData(idx) );
+
+		if ( rc == -1 && errno == EMBMDATA+1 )	// EMBBADSLAVE
+		{	// response not from requested slave
+			// devices seems to set the hi bit of the slave address on replies some times but all other data is correct
+			// ignore this error
+			rc = 0;
+		}
 		if ( rc == -1 )
 		{	// failed
 			err = errno;
@@ -2162,7 +2171,7 @@ void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int 
 			}
 			else
 			{	// retry
-				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d retry", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) %d '%s' (0x%x->%d) failed: %s, loop %d retry", ctx, err, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
 
 				usleep( 10000 + (10000*iLoop) );
 
@@ -3200,8 +3209,11 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 			char szParms[250];
 			char szCmd[512];
 			char szOutput[256];
+			char szOutput2[256];
 
 			snprintf( szOutput, sizeof(szOutput), "%s/latest_snapshot.jpg", CameraList.GetSnapshotCamera().GetDirectory() );
+			snprintf( szOutput2, sizeof(szOutput), "%s/file_count.txt", CameraList.GetSnapshotCamera().GetDirectory() );
+
 			snprintf( szParms, sizeof(szParms), "cmd=snapPicture2&usr=%s&pwd=%s", CameraList.GetSnapshotCamera().GetUserId(), CameraList.GetSnapshotCamera().GetPassword() );
 			snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" -o %s",
 					CameraList.GetSnapshotCamera().GetIPAddress(), urlEncode(szParms).c_str(), szOutput );
@@ -3218,6 +3230,8 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 				fputs( "chmod 0666 ", fp );
 				fputs( szOutput, fp );
 				fputs( "\n", fp );
+				snprintf( szCmd, sizeof(szCmd), "find %s -mtime 0 | wc -l > %s\n", CameraList.GetSnapshotCamera().GetDirectory(), szOutput2 );
+				fputs( szCmd, fp );
 
 				fclose( fp );
 			}
@@ -3309,8 +3323,8 @@ void CThread::ReadPlcStatesTable( CMysql& myDB, CPlcStates* pPlcStates )
 	// read from mysql
 	//                          0          1            2            3                               4                  5
 	if ( myDB.RunQuery( "SELECT pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,unix_timestamp(pl_StateTimestamp),pl_RuleType,"
-		//   6           7            8        9       10               11       12
-			"pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime "
+		//   6           7            8        9       10               11       12           13
+			"pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues "
 			"FROM plcstates order by pl_Operation,pl_StateName,pl_RuleType,pl_Order") != 0 )
 	{
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
@@ -3334,6 +3348,7 @@ void CThread::ReadPlcStatesTable( CMysql& myDB, CPlcStates* pPlcStates )
 			pPlcStates->GetState(i).SetNextStateName( (const char*)row[10] );
 			pPlcStates->GetState(i).SetOrder( (const int)atoi((const char*)row[11]) );
 			pPlcStates->GetState(i).SetDelayTime( (const int)atoi((const char*)row[12]) );
+			pPlcStates->GetState(i).SetTimerValues( (const char*)row[13] );
 			pPlcStates->AddState();
 
 			if ( pPlcStates->GetState(i).GetStateIsActive() )
@@ -3341,11 +3356,11 @@ void CThread::ReadPlcStatesTable( CMysql& myDB, CPlcStates* pPlcStates )
 				pPlcStates->SetActiveStateIdx( i );
 			}
 
-			LogMessage( E_MSG_INFO, "StateNo:%d, Op:%s, State:%s, Active:%d, RuleType:%s, DeviceNo:%d, IOChannel:%d, Value:%d, Test:'%s', NextState:%s, Order:%d, Delay:%d",
+			LogMessage( E_MSG_INFO, "StateNo:%d, Op:%s, State:%s, Active:%d, RuleType:%s, DeviceNo:%d, IOChannel:%d, Value:%d, Test:'%s', NextState:%s, Order:%d, Delay:%d, TValues:%s",
 					pPlcStates->GetState(i).GetStateNo(), pPlcStates->GetState(i).GetOperation(), pPlcStates->GetState(i).GetStateName(),
 					pPlcStates->GetState(i).GetStateIsActive(), pPlcStates->GetState(i).GetRuleType(), pPlcStates->GetState(i).GetDeviceNo(), pPlcStates->GetState(i).GetIOChannel(),
 					pPlcStates->GetState(i).GetValue(), pPlcStates->GetState(i).GetTest(), pPlcStates->GetState(i).GetNextStateName(), pPlcStates->GetState(i).GetOrder(),
-					pPlcStates->GetState(i).GetDelayTime() );
+					pPlcStates->GetState(i).GetDelayTime(), pPlcStates->GetState(i).GetTimerValues() );
 
 			i += 1;
 		}
@@ -3384,12 +3399,42 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 			}
 		}
 
+
+		time_t tTimenow = time(NULL);
+		if ( iStateNo == 0 )
+		{	// check for timer event
+			int idx;
+			int iDelay;
+			int iStartIdx = pPlcStates->GetActiveStateIdx();
+			while ( (idx = pPlcStates->GetEvent(iStartIdx)) >= 0 )
+			{
+				iDelay = pPlcStates->GetState(idx).GetDelayTime();
+				if ( pPlcStates->GetState(idx).GetRuleType()[0] == 'E' && pPlcStates->GetState(idx).GetDeviceNo() == 0 && iDelay > 0 )
+				{
+					if ( pPlcStates->GetActiveState().GetStateTimestamp() + iDelay > tTimenow )
+					{
+						if ( tTimenow - pPlcStates->GetActiveState().GetStateTimestamp() <= 0 )
+						{	// only log once
+							LogMessage( E_MSG_INFO, "PLC: timer event disabled for another %ld seconds", pPlcStates->GetActiveState().GetStateTimestamp() + iDelay - tTimenow );
+						}
+					}
+					else
+					{	// event time - change states
+						iStateNo = pPlcStates->GetState(idx).GetStateNo();
+						LogMessage( E_MSG_INFO, "PLC: timer event due, StateNo %d", iStateNo );
+						break;
+					}
+				}
+
+				iStartIdx = idx;
+			}
+		}
+
 		if ( iStateNo != 0 )
 		{
 			bool bProcess = true;
 			int rc;
 			int idx;
-			time_t tTimenow = time(NULL);
 
 			idx = pPlcStates->FindStateNo( iStateNo );
 
@@ -3489,6 +3534,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 				int iInAddress = m_pmyDevices->GetAddressForDeviceNo( pPlcStates->GetState(idx).GetDeviceNo() );
 				int iInIdx = m_pmyDevices->GetIdxForAddr(iInAddress);
 				int iInChannel = pPlcStates->GetState(idx).GetIOChannel();
+				//LogMessage( E_MSG_INFO, "Operation op change de_no %d: %d,%d,%d", pPlcStates->GetState(idx).GetDeviceNo(), iInIdx, iInAddress, iInChannel );
 
 
 				// set intital outputs for the new state
@@ -3512,6 +3558,15 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 					int iOutOnPeriod = 0;
 
 					enum E_IO_TYPE eSwType = m_pmyDevices->GetInChannelType( iInIdx, iInChannel );
+					if ( eSwType == E_IO_UNUSED )
+					{	// timer event
+						eSwType = E_IO_ON_OFF;
+					}
+
+					if ( uLinkState > 1 )
+					{
+						uLinkState = 1;
+					}
 
 					strcpy( szOutHostname, m_pmyDevices->GetDeviceHostname( iOutIdx ) );
 					strcpy( szOutDeviceName, m_pmyDevices->GetDeviceName( iOutIdx ) );
