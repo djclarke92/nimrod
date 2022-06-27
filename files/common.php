@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 113 );
+define( "THIS_DATABASE_VERSION", 115 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -42,6 +42,7 @@ define( "E_DT_LEVEL_K02", 6 );	     // level, K02 module
 define( "E_DT_LEVEL_HDL", 7 );	     // level, HDL300 sensor
 define( "E_DT_ROTARY_ENC_12BIT", 8 );	     // rotary encoder, 12 bit
 define( "E_DT_VIPF_MON", 9 );           // PZEM-016 V/I Monitor
+define( "E_DT_CARD_READER", 10 );       // card reader
 $_SESSION['E_DTD'] = array();
 $_SESSION['E_DTD'][] = "Unused";
 $_SESSION['E_DTD'][] = "Digital IO"; 
@@ -53,6 +54,7 @@ $_SESSION['E_DTD'][] = "Level K02";
 $_SESSION['E_DTD'][] = "Level HDL";
 $_SESSION['E_DTD'][] = "Rotary Encoder 12bit";
 $_SESSION['E_DTD'][] = "AC VIPF Monitor";
+$_SESSION['E_DTD'][] = "Card Reader";
 
 
 define( "E_IO_UNUSED", 0 );
@@ -91,6 +93,7 @@ define( "E_IO_POWER_MONITOR", 32 );     // 32:  power measurement monitor
 define( "E_IO_POWER_HIGH", 33 );        // 33:  power measurement K02 too high
 define( "E_IO_POWER_LOW", 34 );         // 34:  power measurement K02 too low
 define( "E_IO_POWER_HIGHLOW", 35 );     // 35:  power measurement K02 too high or too low
+define( "E_IO_ON_OFF_INV", 36 );		// 36: 	manual on off switch inverted levels
 $_SESSION['E_IOD'] = array();
 $_SESSION['E_IOD'][] = "Unused";
 $_SESSION['E_IOD'][] = "Manual On Off Switch";
@@ -128,6 +131,7 @@ $_SESSION['E_IOD'][] = "Power Monitor Only";
 $_SESSION['E_IOD'][] = "Power Too High";
 $_SESSION['E_IOD'][] = "Power Too Low";
 $_SESSION['E_IOD'][] = "Power Too High or Low";
+$_SESSION['E_IOD'][] = "Manual On Off Switch Inverted";
 
 define( "E_ET_CLICK", 0 );			// 0: single click
 define( "E_ET_DBLCLICK", 1 );		// 1: double click
@@ -144,6 +148,7 @@ define( "E_ET_CURRENT", 11 );		// 11: current
 define( "E_ET_FREQUENCY", 12 );		// 12: frequency
 define( "E_ET_POWERFACTOR", 13 );	// 13: power factor
 define( "E_ET_POWER", 14 );		    // 14: power
+define( "E_ET_CARDREADER", 15 );    // 15: card reader
 $_SESSION['E_ETD'] = array();
 $_SESSION['E_ETD'][] = "Click";
 $_SESSION['E_ETD'][] = "Dbl CLick";
@@ -160,6 +165,7 @@ $_SESSION['E_ETD'][] = "Current";
 $_SESSION['E_ETD'][] = "Frequency";
 $_SESSION['E_ETD'][] = "Power Factor";
 $_SESSION['E_ETD'][] = "Power";
+$_SESSION['E_ETD'][] = "Card Reader";
 
 define( "E_DS_ALIVE", 0 );			// 0:	alive
 define( "E_DSD_ALIVE", "Alive" );	
@@ -519,6 +525,71 @@ function func_check_database( $db )
 
         $version = func_update_database_version( $db, 113 );
     }
+    
+    if ( $version === false || $version < 114 )
+    {   // we have some work to do
+        $query = "alter table plcstates modify pl_Value decimal(8,2) not null default 0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table events", $db->db_link );
+        }
+
+        $query = sprintf( "update plcstates set pl_Value=pl_Value/10 where pl_Value>0" );
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to set pl_Value/10 in plcstates table", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 114 );
+    }
+
+    if ( $version === false || $version < 115 )
+    {   // we have some work to do
+        $query = "alter table users add us_CardNumber char(10) not null default ''";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table devices", $db->db_link );
+        }
+        
+        $query = "alter table users add us_CardPin char(6) not null default ''";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table devices", $db->db_link );
+        }
+        
+        $query = "alter table users add us_CardEnabled char(1) not null default 'N'";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table devices", $db->db_link );
+        }
+        
+        $query = "alter table users add us_PinFailCount int(10) not null default 0";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table devices", $db->db_link );
+        }
+        
+        $query = "alter table users add key us_cardnumber_index (us_CardNumber)";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table devices", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 115 );
+    }
+    
 }
 
 function func_db_warning_count( $db )
@@ -905,18 +976,18 @@ class MySQLDB
 		
 		$ss = "";
 		if ( $in )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
 					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
 			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW,
-    			    E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW );
+    			    E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW, E_IO_ON_OFF_INV );
 		else if ( $out )
 			$ss = sprintf( "and di_IOType in (%d)", E_IO_OUTPUT );
 		
 		if ( $in && $out )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
 					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
 			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW,
-			         E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW );
+			         E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW, E_IO_ON_OFF_INV );
 			
 		$query = sprintf( "select de_DeviceNo,de_Address,de_Hostname,di_IOChannel,di_IOName,di_IOType from
 				deviceinfo,devices where di_DeviceNo=de_DeviceNo %s order by de_Hostname,de_Address,di_IOChannel",
@@ -1148,7 +1219,7 @@ class MySQLDB
 	function ReadIOLinks( $de_no )
 	{
 		$info = false;
-		$query = sprintf( "select il_LinkNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,
+		$query = sprintf( "select il_LinkNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod
 				from iolinks where il_InDeviceNo=%d", $de_no );
 
 		$result = $this->RunQuery( $query );
@@ -1699,12 +1770,12 @@ class MySQLDB
 	function ReadUsers()
 	{
 	    $info = array();
-	    $query = sprintf( "Select us_Username,us_name,us_Password,us_AuthLevel,us_Features from users" );
+	    $query = sprintf( "Select us_Username,us_name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount from users" );
 	    $result = $this->RunQuery( $query );
 	    while ( $line = mysqli_fetch_row($result) )
 	    {
 	        $info[] = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
-	            'us_Features'=>$line[4] );
+	            'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -1740,24 +1811,27 @@ class MySQLDB
 	    return false;
 	}
 	
-	function UpdateUserTable( $newuser, $username, $name, $password, $auth_level, $features )
+	function UpdateUserTable( $newuser, $username, $name, $password, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count )
 	{
 	    $hash = hash( "sha256", $password, FALSE );
 	    
 	    if ( $newuser )
 	    {
-	        $query = sprintf( "insert into users (us_Username,us_Name,us_Password,us_AuthLevel,us_Features) values('%s','%s','%s',%d,'%s')",
-	            addslashes($username), addslashes($name), $hash, $auth_level, $features );
-	    }
-	    else if ( $password != "" )
-	    {
-	        $query = sprintf( "update users set us_Name='%s',us_Password='%s',us_AuthLevel=%d,us_Features='%s' where us_Username='%s'",
-	            $name, $hash, $auth_level, $features, $username );
+	        $query = sprintf( "insert into users (us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount)  
+                values('%s','%s','%s',%d,'%s','%s','%s','%s',%d)",
+	            addslashes($username), addslashes($name), $hash, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count );
 	    }
 	    else
 	    {
-	        $query = sprintf( "update users set us_Name='%s',us_AuthLevel=%d,us_Features='%s' where us_Username='%s'",
-	            $name, $auth_level, $features, $username );
+	        $query = sprintf( "update users set us_Name='%s',us_AuthLevel=%d,us_Features='%s',us_CardNumber='%s',us_CardEnabled='%s',us_PinFailCount=%d",
+	            $name, $auth_level, $features, $card_number, $card_enabled, $pin_fail_count );
+	        
+	        if ( $password != "" )
+	            $query .= sprintf( ",us_Password='%s'", $hash );
+	        if ( $card_pin != "" )
+	            $query .= sprintf( ",us_CardPin='%s'", $card_pin );
+	                
+	        $query .= sprintf( " where us_Username='%s'", $username );
 	    }
 	    
 	    $result = $this->RunQuery( $query );
@@ -1773,12 +1847,12 @@ class MySQLDB
 	{
 	    $info = false;
 	    
-        $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features from users where us_Username='%s'", addslashes($username) );
+        $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount from users where us_Username='%s'", addslashes($username) );
         $result = $this->RunQuery( $query );
         if ( $line = mysqli_fetch_row($result) )
         {  
            $info = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
-               'us_Features'=>$line[4] ); 
+               'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8] ); 
         }
         
         $this->FreeQuery($result);
@@ -1786,6 +1860,26 @@ class MySQLDB
 	    return $info;
 	}
 
+	function SelectCardNumber( $card_number, $username )
+	{
+	    $info = false;
+	    
+	    if ( $username == "" )
+    	    $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount from users where us_CardNumber='%s'", $card_number );
+	    else
+	        $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount from users where us_CardNumber='%s' and us_Username!='%s'", $card_number, addslashes($username) );
+	    $result = $this->RunQuery( $query );
+	    if ( $line = mysqli_fetch_row($result) )
+	    {
+	        $info = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
+	            'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8] );
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $info;
+	}
+	
 	
 	//*******************************************
 	//
@@ -1945,7 +2039,7 @@ class MySQLDB
 	        $query = sprintf( "insert into plcstates (pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,pl_RuleType,
 	               pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues) values ('%s','%s','%s','%s','%s',%d,%d,%d,'%s','%s',%d,%d,'%s')",
 	               addslashes($op), addslashes($state_name), $state_active, $state_timestamp, $rule_type,
-	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay_time );
+	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay_time, $tvalues );
 	    }
 	    else
 	    {  // update

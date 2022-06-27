@@ -24,6 +24,11 @@ function func_clear_us_array( &$us_array )
 	$us_array['us_UF_Cameras'] = "N";
 	$us_array['us_UF_Upgrade'] = "N";
 	$us_array['us_UF_HomeCameras'] = "N";
+	$us_array['us_CardNumber'] = "";
+	$us_array['us_CardPin'] = "";
+	$us_array['us_CardPin2'] = "";
+	$us_array['us_CardEnabled'] = 'N';
+	$us_array['us_PinFailCount'] = "";
 	$us_array['error_msg'] = "";
 	$us_array['info_msg'] = "";
 }
@@ -32,6 +37,15 @@ function func_check_us_array( &$us_array )
 {
 	$us_array['error_msg'] = "";
 	$us_array['info_msg'] = "";
+	
+	if ( $us_array['us_Password'] != "" && $us_array['us_Password2'] == "" )
+	{  // handle autocomplete
+	    $us_array['us_Password'] = "";
+	}
+	if ( $us_array['us_CardPin'] != "" && $us_array['us_CardPin2'] == "" )
+	{  // handle autocomplete
+	    $us_array['us_CardPin'] = "";
+	}
 	
 	if ( $us_array['us_Username'] == "" )
 	{
@@ -63,6 +77,21 @@ function func_check_us_array( &$us_array )
 		$us_array['error_msg'] = "Your must select the Security Level.";
 		return false;
 	}
+	else if ( $us_array['us_CardNumber'] != "" && (strlen($us_array['us_CardNumber']) < 6 || strlen($us_array['us_CardNumber']) > 10) )
+	{
+	    $us_array['error_msg'] = "The Card Number must be from 6 to 10 digits long";
+	    return false;
+	}
+	else if ( $us_array['us_CardPin'] != "" && (strlen($us_array['us_CardPin']) < 4 || strlen($us_array['us_CardPin']) > 6) )
+	{
+	    $us_array['error_msg'] = "The Card Pin must be from 4 to 6 digits long";
+	    return false;
+	}
+	else if ( $us_array['us_CardPin'] != "" && $us_array['us_CardPin'] != $us_array['us_CardPin2'] )
+	{
+	    $us_array['error_msg'] = "The PIN and confirmation must match.";
+	    return false;
+	}
 	
 	return true;
 }
@@ -92,6 +121,14 @@ if ( isset( $_POST['us_UF_Upgrade']) )
     $us_array['us_UF_Upgrade'] = "Y";
 if ( isset( $_POST['us_UF_HomeCameras']) )
     $us_array['us_UF_HomeCameras'] = "Y";
+if ( isset( $_POST['us_CardNumber']) )
+    $us_array['us_CardNumber'] = $_POST['us_CardNumber'];
+if ( isset( $_POST['us_CardPin']) )
+    $us_array['us_CardPin'] = $_POST['us_CardPin'];
+if ( isset( $_POST['us_CardPin2']) )
+    $us_array['us_CardPin2'] = $_POST['us_CardPin2'];
+if ( isset( $_POST['us_CardEnabled']) )
+    $us_array['us_CardEnabled'] = "Y";
         
 if ( isset( $_FILES['us_FileName']) )        
 {
@@ -153,7 +190,7 @@ if ( isset( $_FILES['us_FileName']) )
 
 if ( isset($_GET['Username']) )
 {
-	if ( ($line=$db->GetFields( 'users', 'us_Username', $us_array['us_Username'], "us_Username,us_Name,us_AuthLevel,us_Features" )) !== false )
+	if ( ($line=$db->GetFields( 'users', 'us_Username', $us_array['us_Username'], "us_Username,us_Name,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount" )) !== false )
 	{	// success
 		$us_array['us_Username'] = stripslashes($line[0]);
 		$us_array['us_Name'] = stripslashes($line[1]);
@@ -161,6 +198,10 @@ if ( isset($_GET['Username']) )
 		$us_array['us_UF_Cameras'] = substr( $line[3], E_UF_CAMERAS, 1 );
 		$us_array['us_UF_Upgrade'] = substr( $line[3], E_UF_UPGRADE, 1 );
 		$us_array['us_UF_HomeCameras'] = substr( $line[3], E_UF_HOMECAMERAS, 1 );
+		$us_array['us_CardNumber'] = $line[4];
+		$us_array['us_CardPin'] = $line[5];
+		$us_array['us_CardEnabled'] = $line[6];
+		$us_array['us_PinFailCount'] = $line[7];
 	}
 	else
 	{
@@ -205,14 +246,22 @@ else if ( isset($_POST['NewUser']) || isset($_POST['UpdateUser']) )
 	{
 	    $us_array['error_msg'] = sprintf( "Username %s already exists in the database.", $us_array['us_Username'] );
 	}
+	else if ( $db->SelectCardNumber($us_array['us_CardNumber'], $us_array['us_Username']) !== false )
+	{
+	    $us_array['error_msg'] = sprintf( "The Card Number '%s' already exists in the database.", $us_array['us_CardNumber'] );
+	}
 	else if ( func_check_us_array( $us_array ) )
 	{
+	    if ( $us_array['us_CardEnabled'] == "Y" )
+	        $us_array['us_PinFailCount'] = 0;
+	    
 	    $features = "";
 	    $features .= $us_array['us_UF_Cameras'];
 	    $features .= $us_array['us_UF_Upgrade'];
 	    $features .= $us_array['us_UF_HomeCameras'];
 	    $features .= "NNNNNNN";
-		if ( $db->UpdateUserTable( $new_user, $us_array['us_Username'], $us_array['us_Name'], $us_array['us_Password'], $us_array['us_AuthLevel'], $features ) )
+		if ( $db->UpdateUserTable( $new_user, $us_array['us_Username'], $us_array['us_Name'], $us_array['us_Password'], $us_array['us_AuthLevel'], $features, $us_array['us_CardNumber'], 
+		    $us_array['us_CardPin'], $us_array['us_CardEnabled'], $us_array['us_PinFailCount'] ) )
 		{	// success
 			//func_clear_us_array( $us_array );
 			
@@ -308,7 +357,7 @@ $user_list = $db->ReadUsers();
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-5">
+		<div class="col-sm-6">
 			<h3>User Detail</h3>
 
             <?php 
@@ -369,10 +418,41 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
 
     		printf( "<div class='form-row'>" );
-    		printf( "<div class='col form-check'>" );
-    		printf( "<label class='form-check-label'>" );
-    		printf( "<input type='checkbox' class='form-check-input' name='us_UF_Cameras' id='us_UF_Cameras' %s> ", ($us_array['us_UF_Cameras'] == "Y" ? "checked" : "") );
-    		printf( "Camera Access</label>" );
+    		printf( "<div class='col'>" );
+    		printf( "<label for='us_Name'>Card Number: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='us_CardNumber' id='us_CardNumber' size='8' value='%s'> ", $us_array['us_CardNumber'] );
+    		//printf( "<label class='form-check-label'>" );
+    		printf( "<input type='checkbox' class='form-check-input' name='us_CardEnabled' id='us_CardEnabled' %s> ", ($us_array['us_CardEnabled'] == "Y" ? "checked" : "") );
+    		printf( "Card Enabled" );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col'>" );
+    		printf( "<label for='us_Password'>PIN: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='password' class='form-control' name='us_CardPin' id='us_CardPin' size='6' value='%s'> ", $us_array['us_CardPin'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col'>" );
+    		printf( "<label for='us_CardPin2'>Confirmation: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='password' class='form-control' name='us_CardPin2' id='us_CardPin2' size='6' value='%s'> ", $us_array['us_CardPin2'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col'>" );
+    		printf( "<label for='us_PinFailCount'>Pin Fail Count: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='test' class='form-control' name='us_PinFailCount' id='us_PinFailCount' size='6' value='%s'> ", $us_array['us_PinFailCount'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -383,7 +463,15 @@ $user_list = $db->ReadUsers();
     		printf( "Show Cameras on Home Page</label>" );
     		printf( "</div>" );
     		printf( "</div>" );
-
+    		
+    		printf( "<div class='form-row'>" );
+    		printf( "<div class='col form-check'>" );
+    		printf( "<label class='form-check-label'>" );
+    		printf( "<input type='checkbox' class='form-check-input' name='us_UF_Cameras' id='us_UF_Cameras' %s> ", ($us_array['us_UF_Cameras'] == "Y" ? "checked" : "") );
+    		printf( "Camera Access</label>" );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
     		printf( "<div class='form-row'>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );

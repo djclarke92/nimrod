@@ -55,6 +55,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_tLastConfigCheck = time(NULL);
 	m_tLastPlcStatesCheck = 0;
 	m_tLastCameraSnapshot = time(NULL);
+	m_tCardReaderStart = 0;
 	m_iLevelMessage = 0;
 
 	m_sslServerCtx = NULL;
@@ -295,6 +296,11 @@ void CThread::Worker()
 					for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
 					{
 						m_pmyDevices->GetLastRecorded(idx,i) = 0;
+
+						if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_ON_OFF_INV )
+						{	// invert the state
+							m_pmyDevices->GetLastData(idx,i) = 1;
+						}
 					}
 				}
 			}
@@ -444,6 +450,10 @@ void CThread::Worker()
 					}
 
 					HandleLevelDevice( myDB, idx, bSendPrompt, bAllDead );
+				}
+				else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_CARD_READER )
+				{
+					HandleCardReaderDevice( myDB, idx, bAllDead );
 				}
 				else if ( m_pmyDevices->GetContext(idx) == NULL )
 				{	// com port for this context does not exist
@@ -831,6 +841,187 @@ void CThread::HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPr
 		else
 		{	// ignore other characters
 		}
+	}
+}
+
+// card reader and PIN pad
+// always assumed to be alive
+void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDead )
+{
+	bool bCardError = false;
+	int iLen;
+	int n;
+	int iCount = 0;
+	char* cptr;
+	char szPin[7] = "";
+	char szPinDB[7] = "";
+	unsigned char szByte[2] = "";
+	unsigned char szCard[11] = "";
+
+
+	// success
+	bAllDead = false;
+	if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+	{
+		LogMessage( E_MSG_INFO, "DIO device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+	}
+
+	if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+	{
+		m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+	}
+
+	while ( (n = read( m_pmyDevices->GetComHandle(idx), szByte, 1 )) > 0 )
+	{	// read 1 byte at a time
+		szByte[0] &= 0xff;
+		LogMessage( E_MSG_INFO, "Data: 0x%02x", szByte[0] );
+
+		// pretend its a card read
+		szCard[iCount] = szByte[0];
+		szCard[iCount+1] = '\0';
+		iCount += 1;
+		if ( iCount >= (int)sizeof(szCard) )
+		{	// error
+			bCardError = true;
+			LogMessage( E_MSG_ERROR, "Too many card digits, %d", iCount );
+			break;
+		}
+	}
+
+	if ( iCount == 1 )
+	{	// pin digit - always ends with #
+		if ( szByte[0] == 0x0a )
+			szByte[0] = '*';
+		else if ( szByte[0] == 0x0b )
+			szByte[0] = '#';
+		else
+			szByte[0] += '0';
+
+		// add to the com buffer
+		iLen = strlen(m_szComBuffer);
+		m_szComBuffer[iLen] = szByte[0];
+		if ( iLen+1 < (int)sizeof(m_szComBuffer) )
+		{
+			m_szComBuffer[iLen+1] = '\0';
+		}
+		else
+		{
+			LogMessage( E_MSG_ERROR, "ComBuf too small !" );
+			m_szComBuffer[0] = '\0';
+		}
+
+		LogMessage( E_MSG_INFO, "CardReader: [****] pin hidden" );
+	}
+	else if ( iCount > 0 && !bCardError )
+	{	// card number 3 or more bytes
+		m_szComBuffer[0] = 0;
+
+		int iShift = iCount-1;
+		unsigned long uVal = 0;
+		for ( int i = 0; i < iCount; i++ )
+		{
+			uVal += (szCard[i] << (8 * iShift));
+			iShift -= 1;
+		}
+
+		m_tCardReaderStart = time(NULL);
+		snprintf( m_szComBuffer, sizeof(m_szComBuffer), "%lu;", uVal );
+
+		LogMessage( E_MSG_INFO, "CardReader: '%s'", m_szComBuffer );
+	}
+
+	if ( m_szComBuffer[strlen(m_szComBuffer)-1] == '#' )
+	{
+		if ( (cptr = strchr( m_szComBuffer, ';' )) != NULL )
+		{	// card + pin
+			bool bEnabled = false;
+			int iPinFailCount = 0;
+
+			LogMessage( E_MSG_INFO, "Process card+pin '%s'", m_szComBuffer );
+
+			// split card number and pin
+			snprintf( szPin, sizeof(szPin), "%s", cptr+1 );
+
+			szPin[strlen(szPin)-1] = '\0';	// strip trailing #
+			*cptr = '\0';
+
+			// find card in users table
+			if ( strlen(szPin) < 4 )
+			{	// pin too short
+				LogMessage( E_MSG_WARN, "Pin too short" );
+				bCardError = true;
+			}
+			else if ( m_pmyDevices->SelectCardNumber( myDB, m_szComBuffer, szPinDB, sizeof(szPinDB), bEnabled, iPinFailCount ) )
+			{
+				if ( !bEnabled )
+				{	// card is disabled
+					bCardError = true;
+					LogMessage( E_MSG_WARN, "Card '%s' is disabled", m_szComBuffer );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 2, "Access invalid: CardDisabled '%s'", m_szComBuffer );
+				}
+				else if ( strcmp( szPin, szPinDB ) == 0 )
+				{	// pin matches
+					LogMessage( E_MSG_INFO, "Card found and Pin matched" );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 0, "Access valid: Card+Pin '%s'", m_szComBuffer );
+
+					// TODO:
+
+
+
+
+				}
+				else
+				{	// bad pin
+					bCardError = true;
+					LogMessage( E_MSG_WARN, "Card PIN not matched '%s'", szPin );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 1, "Access invalid: BadPin '%s'", m_szComBuffer );
+
+					// disable the card after x pin failures
+					iPinFailCount += 1;
+					m_pmyDevices->UpdatePinFailCount( myDB, m_szComBuffer, iPinFailCount );
+
+					if ( iPinFailCount >= MAX_PIN_FAILURES )
+					{
+						LogMessage( E_MSG_WARN, "Card '%s' disabled, too many PIN failures", m_szComBuffer );
+					}
+				}
+			}
+			else
+			{	// card not found
+				bCardError = true;
+				LogMessage( E_MSG_WARN, "Card '%s' not found in the database", m_szComBuffer );
+				myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 3, "Access invalid: UnknownCard '%s'", m_szComBuffer );
+			}
+		}
+		else if ( strlen(m_szComBuffer) > 4 )
+		{	// pin only
+			// TODO
+			LogMessage( E_MSG_WARN, "Got PIN only - unhandled" );
+			bCardError = true;
+		}
+		else
+		{	// pin too short
+			LogMessage( E_MSG_WARN, "Got PIN only - too short" );
+			bCardError = true;
+		}
+	}
+
+
+	if ( strlen(m_szComBuffer) != 0 && m_tCardReaderStart != 0 && m_tCardReaderStart + CARD_READER_PIN_TIMEOUT < time(NULL) )
+	{	// pin entry timeout
+		bCardError = true;
+		LogMessage( E_MSG_INFO, "Pin Entry timeout for '%s'", m_szComBuffer );
+		myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 4, "Access invalid: PinTimeout '%s'", m_szComBuffer );
+	}
+
+	if ( bCardError )
+	{	// send beep to reader
+		// TODO
+
+		// red led on reader, long beep on reader
+
+
+		m_szComBuffer[0] = '\0';
 	}
 }
 
@@ -1974,6 +2165,14 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 
 			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
 			{
+				if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_ON_OFF_INV )
+				{	// invert the state
+					if ( m_pmyDevices->GetNewInput( idx, i ) )
+						m_pmyDevices->GetNewInput( idx, i ) = false;
+					else
+						m_pmyDevices->GetNewInput( idx, i ) = true;
+				}
+
 				// check for click file from web gui
 				if ( ClickFileExists( myDB, m_pmyDevices->GetDeviceNo(idx), i ) )
 				{
@@ -1992,7 +2191,7 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 					if ( m_pmyDevices->GetNewInput(idx,i) != 0 )
 					{	// button is pressed, check if this is a double click
 						lDiff = m_pmyDevices->GetEventTimeDiff( idx, i, tNow );
-						if ( lDiff <= DOUBLE_CLICK_MSEC )
+						if ( lDiff <= DOUBLE_CLICK_MSEC && lDiff > 0 )
 						{
 							eType = E_ET_DBLCLICK;
 						}
@@ -2249,6 +2448,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 			iCheckAgain = 0;
 			if ( time(NULL) % 10 == 0 || m_tThreadStartTime + 10 >= time(NULL) )
 			{	// check if the device has come alive every 10 seconds
+				//LogMessage( E_MSG_INFO, "Check VIPF again %d, address %d", m_pmyDevices->GetDeviceStatus(idx), m_pmyDevices->GetAddress(idx) );
 				iCheckAgain = -1;
 			}
 		}
@@ -2925,6 +3125,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 					break;
 
 				case E_IO_ON_OFF:
+				case E_IO_ON_OFF_INV:
 				case E_IO_TEMP_HIGH:
 				case E_IO_TEMP_LOW:
 				case E_IO_TEMP_HIGHLOW:
@@ -3119,6 +3320,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 					break;
 
 				case E_IO_ON_OFF:
+				case E_IO_ON_OFF_INV:
 				case E_IO_TEMP_HIGH:
 				case E_IO_TEMP_LOW:
 				case E_IO_TEMP_HIGHLOW:
@@ -3230,7 +3432,7 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 				fputs( "chmod 0666 ", fp );
 				fputs( szOutput, fp );
 				fputs( "\n", fp );
-				snprintf( szCmd, sizeof(szCmd), "find %s -mtime 0 | wc -l > %s\n", CameraList.GetSnapshotCamera().GetDirectory(), szOutput2 );
+				snprintf( szCmd, sizeof(szCmd), "find %s -mtime 0 -name \"MDalarm*.mkv\" | wc -l > %s\n", CameraList.GetSnapshotCamera().GetDirectory(), szOutput2 );
 				fputs( szCmd, fp );
 
 				fclose( fp );
@@ -3343,7 +3545,7 @@ void CThread::ReadPlcStatesTable( CMysql& myDB, CPlcStates* pPlcStates )
 			pPlcStates->GetState(i).SetRuleType( (const char*)row[5] );
 			pPlcStates->GetState(i).SetDeviceNo( (const int)atoi((const char*)row[6]) );
 			pPlcStates->GetState(i).SetIOChannel( (const int)atoi((const char*)row[7]) );
-			pPlcStates->GetState(i).SetValue( (const int)atoi((const char*)row[8]) );
+			pPlcStates->GetState(i).SetValue( (const double)atof((const char*)row[8]) );
 			pPlcStates->GetState(i).SetTest( (const char*)row[9] );
 			pPlcStates->GetState(i).SetNextStateName( (const char*)row[10] );
 			pPlcStates->GetState(i).SetOrder( (const int)atoi((const char*)row[11]) );
@@ -3356,8 +3558,8 @@ void CThread::ReadPlcStatesTable( CMysql& myDB, CPlcStates* pPlcStates )
 				pPlcStates->SetActiveStateIdx( i );
 			}
 
-			LogMessage( E_MSG_INFO, "StateNo:%d, Op:%s, State:%s, Active:%d, RuleType:%s, DeviceNo:%d, IOChannel:%d, Value:%d, Test:'%s', NextState:%s, Order:%d, Delay:%d, TValues:%s",
-					pPlcStates->GetState(i).GetStateNo(), pPlcStates->GetState(i).GetOperation(), pPlcStates->GetState(i).GetStateName(),
+			LogMessage( E_MSG_INFO, "%d: StateNo:%d, Op:%s, State:%s, Active:%d, RuleType:%s, DeviceNo:%d, IOChannel:%d, Value:%.1f, Test:'%s', NextState:%s, Order:%d, Delay:%d, TValues:%s",
+					i, pPlcStates->GetState(i).GetStateNo(), pPlcStates->GetState(i).GetOperation(), pPlcStates->GetState(i).GetStateName(),
 					pPlcStates->GetState(i).GetStateIsActive(), pPlcStates->GetState(i).GetRuleType(), pPlcStates->GetState(i).GetDeviceNo(), pPlcStates->GetState(i).GetIOChannel(),
 					pPlcStates->GetState(i).GetValue(), pPlcStates->GetState(i).GetTest(), pPlcStates->GetState(i).GetNextStateName(), pPlcStates->GetState(i).GetOrder(),
 					pPlcStates->GetState(i).GetDelayTime(), pPlcStates->GetState(i).GetTimerValues() );
@@ -3378,25 +3580,29 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 		int iStateNo = 0;
 		int iDeviceNo = 0;
 		int iIOChannel = 0;
-		int iValue = 0;
+		double dValue = 0;
 
 		iStateNo = myDB.ReadPlcStatesScreenButton();
 		if ( iStateNo == 0 )
 		{
 			pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
 			// lock required as the input event comes from the com port threads
-			iStateNo = pPlcStates->ReadInputEvent( iDeviceNo, iIOChannel, iValue );
+			iStateNo = pPlcStates->ReadInputEvent( iDeviceNo, iIOChannel, dValue );
 			pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
 
 			if ( iStateNo != 0 )
 			{
-				LogMessage( E_MSG_INFO, "PLC Input event %d,%d,%d StateNo %d", iDeviceNo, iIOChannel, iValue, iStateNo );
+				LogMessage( E_MSG_INFO, "PLC Input event %d,%d,%.1f StateNo %d", iDeviceNo, iIOChannel, dValue, iStateNo );
 			}
 			else if ( iDeviceNo != 0 )
 			{
-				LogMessage( E_MSG_WARN, "PLC invalid input event %d,%d,%d for state %s", iDeviceNo, iIOChannel, iValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
-				gThreadMsg.PutMessage( "PLC invalid input event %d,%d,%d for state %s", iDeviceNo, iIOChannel, iValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
+				LogMessage( E_MSG_WARN, "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
+				gThreadMsg.PutMessage( "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
 			}
+		}
+		else
+		{
+			LogMessage( E_MSG_INFO, "PLC screen button event, StateNo %d", iStateNo );
 		}
 
 
@@ -3425,6 +3631,20 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 						break;
 					}
 				}
+				else if ( pPlcStates->GetState(idx).GetRuleType()[0] == 'E' && strcmp( pPlcStates->GetState(idx).GetTest(), "EQ" ) == 0 )
+				{	// check button/switch condition value
+					int iInAddress = m_pmyDevices->GetAddressForDeviceNo( pPlcStates->GetState(idx).GetDeviceNo() );
+					int iInIdx = m_pmyDevices->GetIdxForAddr(iInAddress);
+					int iInChannel = pPlcStates->GetState(idx).GetIOChannel();
+
+					uint8_t uVal = m_pmyDevices->GetNewInput( iInIdx, iInChannel );
+					if ( pPlcStates->GetState(idx).GetValue() == (int)uVal )
+					{
+						iStateNo = pPlcStates->GetState(idx).GetStateNo();
+						LogMessage( E_MSG_INFO, "PLC: condition event, StateNo %d", iStateNo );
+						break;
+					}
+				}
 
 				iStartIdx = idx;
 			}
@@ -3435,6 +3655,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 			bool bProcess = true;
 			int rc;
 			int idx;
+			int idx2;
 
 			idx = pPlcStates->FindStateNo( iStateNo );
 
@@ -3464,35 +3685,35 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 					if ( strcmp( myState.GetTest(), "GE" ) == 0 )
 					{
-						if ( iValue >= myState.GetValue() )
+						if ( dValue >= myState.GetValue() )
 						{
 							bProcess = true;
 						}
 					}
 					else if ( strcmp( myState.GetTest(), "GT" ) == 0 )
 					{
-						if ( iValue > myState.GetValue() )
+						if ( dValue > myState.GetValue() )
 						{
 							bProcess = true;
 						}
 					}
 					else if ( strcmp( myState.GetTest(), "EQ" ) == 0 )
 					{
-						if ( iValue == myState.GetValue() )
+						if ( dValue == myState.GetValue() )
 						{
 							bProcess = true;
 						}
 					}
 					else if ( strcmp( myState.GetTest(), "LE" ) == 0 )
 					{
-						if ( iValue <= myState.GetValue() )
+						if ( dValue <= myState.GetValue() )
 						{
 							bProcess = true;
 						}
 					}
 					else if ( strcmp( myState.GetTest(), "LT" ) == 0 )
 					{
-						if ( iValue < myState.GetValue() )
+						if ( dValue < myState.GetValue() )
 						{
 							bProcess = true;
 						}
@@ -3501,10 +3722,44 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 					{
 						LogMessage( E_MSG_WARN, "Plc unhandled Test type '%s'", myState.GetTest() );
 					}
-				}
 
-				LogMessage( E_MSG_INFO, "PLC State %d, %d '%s' vs %d: %s", iStateNo, iValue, myState.GetTest(), myState.GetValue(), (bProcess ? "action" : "skip") );
-				gThreadMsg.PutMessage( "PLC State %d, %d '%s' vs %d: %s", iStateNo, iValue, myState.GetTest(), myState.GetValue(), (bProcess ? "action" : "skip") );
+					LogMessage( E_MSG_INFO, "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
+					gThreadMsg.PutMessage( "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
+				}
+				else
+				{
+					LogMessage( E_MSG_INFO, "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
+					gThreadMsg.PutMessage( "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
+				}
+			}
+
+			if ( bProcess )
+			{	// check for condition failure
+				int iStartIdx = pPlcStates->GetNextStateIdx( pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetNextStateName() );
+				while ( (idx2 = pPlcStates->GetEvent(iStartIdx)) >= 0 )
+				{
+					if ( pPlcStates->GetState(idx2).GetRuleType()[0] == 'E' && strcmp( pPlcStates->GetState(idx2).GetTest(), "EQ" ) == 0 )
+					{	// check button/switch condition value
+						LogMessage( E_MSG_INFO, "checking idx2 %d '%s'", idx2, pPlcStates->GetState(idx2).GetStateName() );
+						int iInAddress = m_pmyDevices->GetAddressForDeviceNo( pPlcStates->GetState(idx2).GetDeviceNo() );
+						int iInIdx = m_pmyDevices->GetIdxForAddr(iInAddress);
+						int iInChannel = pPlcStates->GetState(idx2).GetIOChannel();
+
+						uint8_t uVal = m_pmyDevices->GetNewInput( iInIdx, iInChannel );
+						if ( pPlcStates->GetState(idx2).GetValue() == (int)uVal )
+						{
+							bProcess = false;
+
+							LogMessage( E_MSG_INFO, "PLC: initial condition exception, StateNo %d '%s' -> '%s'", iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ),
+									pPlcStates->GetState(idx2).GetNextStateName() );
+							gThreadMsg.PutMessage( "PLC: initial condition exception, StateNo %d '%s' -> '%s'", iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ),
+									pPlcStates->GetState(idx2).GetNextStateName() );
+							break;
+						}
+					}
+
+					iStartIdx = idx2;
+				}
 			}
 
 			if ( bProcess )
@@ -3536,59 +3791,69 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 				int iInChannel = pPlcStates->GetState(idx).GetIOChannel();
 				//LogMessage( E_MSG_INFO, "Operation op change de_no %d: %d,%d,%d", pPlcStates->GetState(idx).GetDeviceNo(), iInIdx, iInAddress, iInChannel );
 
+				// check for condition
+				bool bConditionsPassed = true;
 
-				// set intital outputs for the new state
-				int iCount = 0;
-				int iStartIdx = pPlcStates->GetActiveStateIdx();
-				while ( (idx = pPlcStates->GetInitialAction(iStartIdx)) >= 0 )
+
+				if ( bConditionsPassed )
 				{
-					iCount += 1;
-
-
-					LogMessage( E_MSG_INFO, "Operation %s: State %s: '%s' initial state %d,%d = %d", pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetStateName(),
-							pPlcStates->GetState(idx).GetRuleType(), pPlcStates->GetState(idx).GetDeviceNo(), pPlcStates->GetState(idx).GetIOChannel(), pPlcStates->GetState(idx).GetValue() );
-
-					uint8_t uLinkState = pPlcStates->GetState(idx).GetValue();
-					char szOutDeviceName[MAX_DEVICE_NAME_LEN+1];
-					char szOutHostname[HOST_NAME_MAX+1] = "";
-
-					int iOutAddress = m_pmyDevices->GetAddressForDeviceNo( pPlcStates->GetState(idx).GetDeviceNo() );
-					int iOutIdx = m_pmyDevices->GetIdxForAddr(iOutAddress);
-					int iOutChannel = pPlcStates->GetState(idx).GetIOChannel();
-					int iOutOnPeriod = 0;
-
-					enum E_IO_TYPE eSwType = m_pmyDevices->GetInChannelType( iInIdx, iInChannel );
-					if ( eSwType == E_IO_UNUSED )
-					{	// timer event
-						eSwType = E_IO_ON_OFF;
-					}
-
-					if ( uLinkState > 1 )
+					// set intital outputs for the new state
+					int iCount = 0;
+					int iStartIdx = pPlcStates->GetActiveStateIdx();
+					while ( (idx = pPlcStates->GetInitialAction(iStartIdx)) >= 0 )
 					{
-						uLinkState = 1;
+						iCount += 1;
+
+
+						LogMessage( E_MSG_INFO, "Operation %s: State %s: '%s' initial state %d,%d = %.1f", pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetStateName(),
+								pPlcStates->GetState(idx).GetRuleType(), pPlcStates->GetState(idx).GetDeviceNo(), pPlcStates->GetState(idx).GetIOChannel(), pPlcStates->GetState(idx).GetValue() );
+
+						uint8_t uLinkState = pPlcStates->GetState(idx).GetValue();
+						char szOutDeviceName[MAX_DEVICE_NAME_LEN+1];
+						char szOutHostname[HOST_NAME_MAX+1] = "";
+
+						int iOutAddress = m_pmyDevices->GetAddressForDeviceNo( pPlcStates->GetState(idx).GetDeviceNo() );
+						int iOutIdx = m_pmyDevices->GetIdxForAddr(iOutAddress);
+						int iOutChannel = pPlcStates->GetState(idx).GetIOChannel();
+						int iOutOnPeriod = 0;
+
+						enum E_IO_TYPE eSwType = m_pmyDevices->GetInChannelType( iInIdx, iInChannel );
+						if ( eSwType == E_IO_UNUSED )
+						{	// timer event
+							eSwType = E_IO_ON_OFF;
+						}
+
+						if ( uLinkState > 1 )
+						{
+							uLinkState = 1;
+						}
+
+						strcpy( szOutHostname, m_pmyDevices->GetDeviceHostname( iOutIdx ) );
+						strcpy( szOutDeviceName, m_pmyDevices->GetDeviceName( iOutIdx ) );
+
+						LogMessage( E_MSG_INFO, "Operation Output change for '%s' (0x%x->%d,%d), new state %u (%d), on %s", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
+								iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod, szOutHostname );
+
+						pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
+
+						// TODO: handle ESP devices
+						// TODO: handle sending to another pi
+						ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
+
+						pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
+
+
+						iStartIdx = idx;
 					}
 
-					strcpy( szOutHostname, m_pmyDevices->GetDeviceHostname( iOutIdx ) );
-					strcpy( szOutDeviceName, m_pmyDevices->GetDeviceName( iOutIdx ) );
-
-					LogMessage( E_MSG_INFO, "Operation Output change for '%s' (0x%x->%d,%d), new state %u (%d), on %s", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
-							iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod, szOutHostname );
-
-					pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
-
-					// TODO: handle ESP devices
-					// TODO: handle sending to another pi
-					ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
-
-					pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
-
-
-					iStartIdx = idx;
+					if ( iCount == 0 )
+					{
+						LogMessage( E_MSG_INFO, "Operation %s: State %s: No initial actions to process", pPlcStates->GetState(iStartIdx).GetOperation(), pPlcStates->GetState(iStartIdx).GetStateName() );
+					}
 				}
-
-				if ( iCount == 0 )
+				else
 				{
-					LogMessage( E_MSG_INFO, "Operation %s: State %s: No initial actions to process", pPlcStates->GetState(iStartIdx).GetOperation(), pPlcStates->GetState(iStartIdx).GetStateName() );
+					LogMessage( E_MSG_INFO, "Initial states skipped due to condition failure" );
 				}
 			}
 		}

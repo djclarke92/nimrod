@@ -7,11 +7,19 @@
 Nimrod Release Notes and History
 
 
-Version 0.2.1		November 2021
+Version 0.2.2		June 2022
 1.	Use a local copy of the bootstrap and jquery js and css files
 2.	Prevent DeviceInof records from being deleted if they are linked to plcstate records
 3.	Add timer events to the PLC state machine processing
-4.	
+4.	Add 'Reboot Camera' option to the cameras page
+5.	Add autologin option in site_config.php, only from 127.0.0.1
+6.	New E_IO_ON_OFF_INV input type for inverted state input
+7.	New E_DT_CARD_READER added to support Proximity card readers and PIN pads
+8.	New fields addded to the users table to support card readers - WIP
+9.	Com ports like '/dev/ttyUSB*' are now stored in the devices table as '/dev/serial/by-path/...' to avoid port swapping issues after reboots
+
+
+Version 0.2.1		Not released
 
 
 Version 0.2.0		July 2021

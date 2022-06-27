@@ -26,7 +26,7 @@ if ( isset($_SERVER['HTTP_AUTHORIZATION']) )
 }
 
 
-function ValidateUser( $db, $username, $password, &$my_login_msg )
+function ValidateUser( $db, $username, $password, &$my_login_msg, $autologin_username )
 {
     $ok = false;
     
@@ -42,7 +42,11 @@ function ValidateUser( $db, $username, $password, &$my_login_msg )
         if ( strtolower($username) == strtolower($user['us_Username']) )
         {
             $hash = hash( "sha256", $password, FALSE );
-            if ( strcmp( $user['us_Password'], $hash ) == 0 )
+            if ( $autologin_username != "" )
+            {   // fake the login
+                $user['us_Password'] = $hash;
+            }
+            if ( strcmp( $user['us_Password'], $hash ) == 0)
             {
                 $ok = true;
                 $_SESSION['us_Username'] = $user['us_Username'];
@@ -181,7 +185,7 @@ else if ( isset($_POST['Username']) && isset($_POST['Password']) )
     $my_password = $_POST['Password'];
     if ( $my_email != "" && $my_password != "" )
     {
-        if ( ValidateUser( $db, $my_email, $my_password, $my_login_msg ) )
+        if ( ValidateUser( $db, $my_email, $my_password, $my_login_msg, "" ) )
         {
             $new_login = true;
             $_SESSION['page_mode'] = "Home";
@@ -202,6 +206,22 @@ if ( $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL_NONE )
 
 $fs_redirect_timeout = AUTO_REFRESH_LOGOUT;
 $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
+$fs_autologin_username = "";
+if ( defined("AUTOLOGIN_USERNAME") && $_SERVER['REMOTE_ADDR'] == "127.0.0.1" )
+{
+    $fs_autologin_username = AUTOLOGIN_USERNAME;
+}
+
+if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL_NONE )
+{   // not already logged in
+    if ( ValidateUser( $db, $fs_autologin_username, "", $my_login_msg, $fs_autologin_username ) )
+    {
+        $new_login = true;
+        $_SESSION['page_mode'] = "Home";
+        
+        $db->SaveUserLoginAttempt( $my_email, 1 );
+    }
+}
                     
 
 ?>

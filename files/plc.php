@@ -183,7 +183,7 @@ if ( isset( $_POST['pl_IOChannel']) )
     $pl_array['pl_IOChannel'] = $_POST['pl_IOChannel'];
 if ( isset( $_POST['pl_Value']) )
 {
-    $pl_array['pl_Value'] = (intval($_POST['pl_Value']) != 0 ? $_POST['pl_Value'] * 10 : 0);
+    $pl_array['pl_Value'] = $_POST['pl_Value'];
 }
 if ( isset( $_POST['pl_Test']) )
     $pl_array['pl_Test'] = $_POST['pl_Test'];
@@ -251,7 +251,7 @@ else if ( isset($_GET['StateNo']) )
             $pl_array['pl_RuleType'] = $info[0]['pl_RuleType'];
             $pl_array['pl_DeviceNo'] = $info[0]['pl_DeviceNo'];
             $pl_array['pl_IOChannel'] = $info[0]['pl_IOChannel'];
-            $pl_array['pl_Value'] = (intval($info[0]['pl_Value']) != 0 ? intval($info[0]['pl_Value']) / 10 : 0);
+            $pl_array['pl_Value'] = $info[0]['pl_Value'];
             $pl_array['pl_Test'] = $info[0]['pl_Test'];
             $pl_array['pl_NextStateName'] = $info[0]['pl_NextStateName'];
             $pl_array['pl_Order'] = $info[0]['pl_Order'];
@@ -294,8 +294,6 @@ else if ( isset($_POST['UpdateState']) || isset($_POST['NewState']) )
             $pl_array['pl_Test'], $pl_array['pl_NextStateName'], $pl_array['pl_Order'], $pl_array['pl_DelayTime'], $pl_array['pl_TimerValues'] ) )
         {	// success
             //func_clear_pl_array( $pl_array );
-            
-            $pl_array['pl_Value'] = (intval($pl_array['pl_Value']) != 0 ? $pl_array['pl_Value'] / 10 : 0);
             
             $pl_array['info_msg'] = "State details saved successfully.";
             $new_state = false;
@@ -416,13 +414,16 @@ function onChangeRuleType()
 			<select class='form-control custom-select' size='1' name='StateFilter' id='StateFilter'>
 			<option></option>
 			<?php
-			$state_name = "";
-			foreach ($state_list as $state) 
+			if ( $pl_array['op_filter'] != "" )
 			{
-			    if ( $state['pl_StateName'] != $state_name )
-			    {
-    			    printf("<option %s>%s</option>", ($pl_array['state_filter'] == $state['pl_StateName'] ? "selected" : ""), $state['pl_StateName'] );
-    			    $state_name = $state['pl_StateName'];
+    			$state_name = "";
+	   		    foreach ($state_list as $state) 
+		  	    {
+			        if ( $state['pl_StateName'] != $state_name && $pl_array['op_filter'] == $state['pl_Operation'] )
+			        {
+    			        printf("<option %s>%s</option>", ($pl_array['state_filter'] == $state['pl_StateName'] ? "selected" : ""), $state['pl_StateName'] );
+    			        $state_name = $state['pl_StateName'];
+			        }
 			    }
 			}
 			?>
@@ -518,7 +519,7 @@ function onChangeRuleType()
                 else
                     printf( "<td>%s</td>", $state['pl_NextStateName'] );
                 
-                printf( "<td>%s</td>", (intval($state['pl_Value']) != 0 ? sprintf( "%.1f", $state['pl_Value'] / 10) : "0") );
+                printf( "<td>%s</td>", sprintf( "%.1f", $state['pl_Value']) );
                 
                 printf( "<td>%s</td>", ($state['pl_StateIsActive'] == "Y" ? "Yes" : "") );
                 
@@ -724,7 +725,7 @@ function onChangeRuleType()
     		$state_name = "";
     		foreach ( $state_list as $state )
     		{
-    		    if ( $state_name != $state['pl_StateName'] )
+    		    if ( $state_name != $state['pl_StateName'] && $pl_array['op_filter'] == $state['pl_Operation'] )
     		    {
     		        $state_name = $state['pl_StateName'];
         		    $sel = "";

@@ -210,7 +210,7 @@ $devices_list = $db->ReadDevicesTable();
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-4">
+		<div class="col-sm-6">
 			<h3>Device List</h3>
         </div>
 		<div class="col-sm-1">
@@ -223,7 +223,7 @@ $devices_list = $db->ReadDevicesTable();
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-6">
+		<div class="col-sm-7">
 			<?php
 			if ( $de_array['error_msg'] != "" )
 			    printf( "<p class='text-danger'>%s</p>", $de_array['error_msg'] );
@@ -272,7 +272,7 @@ $devices_list = $db->ReadDevicesTable();
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-6">
+		<div class="col-sm-7">
 			<h3>Device Detail</h3>
 
 			<?php

@@ -94,8 +94,13 @@ create TABLE IF NOT EXISTS `users` (
 	`us_Password` text(256) NOT NULL default '',				# SHA-256 hash
 	`us_AuthLevel` INT(10) NOT NULL default 0,					# security auth level
 	`us_Features` char(10) NOT NULL default 'NNNNNNNNNN',		# optional features for each user
+	`us_CardNumber` char(10) NOT NULL default '',				# card number
+	`us_CardPin` char(6) NOT NULL default '',					# card PIN
+	`us_CardEnabled` char(1) NOT NULL default 'N',				# card is enabled
+	`us_PinFailCount` int(10) NOT NULL default 0,				# consecutive pin failure count
 	PRIMARY KEY (`us_Username`),
-	KEY `us_name_index` (`us_Name`)
+	KEY `us_name_index` (`us_Name`),
+	KEY `us_cardnumber_index` (`us_CardNumber`)
 );
 
 # table of link conditions
@@ -136,7 +141,7 @@ create table IF NOT EXISTS `plcstates` (
 	`pl_RuleType` char(1) NOT NULL default '',						# I=Init, E=Event
 	`pl_DeviceNo` int(10) NOT NULL default 0,						# link to the deviceinfo table
 	`pl_IOChannel` int(10) NOT NULL default 0,						# link to the deviceinfo table
-	`pl_Value` int(10) NOT NULL default 0,							# data value
+	`pl_Value` decimal(8,2) NOT NULL default 0,						# data value
 	`pl_Test` varchar(5) NOT NULL default '',						# LT, GT, LE, GE, EQ, NE
 	`pl_NextStateName` varchar(50) NOT NULL default "",				# link to the next state
 	`pl_Order` int(10) NOT NULL default 0,							# optional execution order

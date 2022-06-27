@@ -480,8 +480,9 @@ int SetComInterfaceAttribs( int iHandle, int iSpeed, int iNumBits, int iParity )
 	tty.c_lflag = 0;                // no signaling chars, no echo,
 									// no canonical processing
 	tty.c_oflag = 0;                // no remapping, no delays
+
 	tty.c_cc[VMIN]  = 0;            // read doesn't block
-	tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+	tty.c_cc[VTIME] = 0;            // 0.5 seconds read timeout
 
 	tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
 
@@ -516,7 +517,7 @@ void SetComBlocking( int iHandle, bool bShouldBlock )
 	}
 
 	tty.c_cc[VMIN]  = bShouldBlock ? 1 : 0;
-	tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+	tty.c_cc[VTIME] = 1;            // 0.5 seconds read timeout
 
 	if ( tcsetattr(iHandle, TCSANOW, &tty) != 0 )
 	{

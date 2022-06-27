@@ -8,6 +8,7 @@
 #include <math.h>
 #include <fcntl.h>
 #include <termios.h>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <modbus/modbus.h>
 #include "mb_mysql.h"
@@ -826,15 +827,57 @@ const int CDeviceList::GetBaudRateForPort( const char* szComPort )
 	return iBaudRate;
 }
 
+void CDeviceList::ReadSimpleComPort( const char* szPort, char* szSimplePort, size_t uLen )
+{
+	if ( strncmp( szPort, "/dev/ttyUSB", 11 ) == 0 )
+	{	// already a simple port
+		snprintf( szSimplePort, uLen, "%s", szPort );
+	}
+	else if ( strncmp( szPort, "/dev/serial/by-path", 19 ) == 0 )
+	{	// find the simple port name
+		DIR *d;
+		struct dirent *dir;
+		d = opendir("/dev/serial/by-path");
+		if ( d )
+		{
+		    while ((dir = readdir(d)) != NULL)
+		    {
+		    	if ( dir->d_type == DT_LNK )
+		    	{
+		    		char szBuf[512];
+		    		char szFile[512];
+		    		ssize_t len;
+
+		    		memset( szBuf, 0, sizeof(szBuf));
+
+		    		snprintf( szFile, sizeof(szFile), "/dev/serial/by-path/%s", dir->d_name );
+		    		len = readlink( szFile, szBuf, sizeof(szBuf) );
+		    		if ( len != -1 && strcmp( szPort, szFile ) == 0 )
+		    		{
+		    			LogMessage( E_MSG_INFO, "Port '/dev/serial/by-path/%s'->'%s'", dir->d_name, szBuf );
+
+		    			// strip the "../../"
+		    			snprintf( szSimplePort, uLen, "/dev/%s", &szBuf[6] );
+		    		}
+		    	}
+		    }
+
+		    closedir(d);
+		}
+
+	}
+	else
+	{
+		LogMessage( E_MSG_WARN, "ReadSimpleComPort: unhandled port type '%s'", szPort );
+		snprintf( szSimplePort, uLen, "%s", szPort );
+	}
+}
+
 const bool CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEVICES][MAX_COMPORT_LEN+1], bool bSwapBaud )
 {
-	bool bFound;
-	bool bFirstTime;
-	bool bSomeoneIsAlive = false;
+	bool bSomeoneIsAlive = true;
 	int iCount = 0;
 	int i;
-	int j;
-	int idx;
 	int iPos = 0;
 	int iBaudRate;
 	struct stat statbuf;
@@ -852,6 +895,48 @@ const bool CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEV
 	}
 
 	LogMessage( E_MSG_INFO, "Host '%s' has %d com ports", gszHostname, iPos );
+
+	// get by-path name
+	for ( i = 0; i < MAX_DEVICES; i++ )
+	{
+		if ( m_szHostComPort[i][0] == '\0' )
+		{	// end of list
+			break;
+		}
+		else
+		{	// search /dev/serial/by-path directory
+			DIR *d;
+			struct dirent *dir;
+			d = opendir("/dev/serial/by-path");
+			if ( d )
+			{
+			    while ((dir = readdir(d)) != NULL)
+			    {
+			    	if ( dir->d_type == DT_LNK )
+			    	{
+			    		char szBuf[512];
+			    		char szFile[512];
+			    		ssize_t len;
+
+			    		memset( szBuf, 0, sizeof(szBuf));
+
+			    		snprintf( szFile, sizeof(szFile), "/dev/serial/by-path/%s", dir->d_name );
+			    		len = readlink( szFile, szBuf, sizeof(szBuf) );
+			    		if ( len != -1 && strcmp( &m_szHostComPort[i][5], &szBuf[6] ) == 0 )
+			    		{	// strip leading "/dev/" and "../../" from device names
+			    			LogMessage( E_MSG_INFO, "Port '%s': '/dev/serial/by-path/%s'->'%s'", m_szHostComPort[i], dir->d_name, szBuf );
+
+			    			// update the devices table
+			    			snprintf( szBuf, sizeof(szBuf), "/dev/serial/by-path/%s", dir->d_name );
+			    			UpdateDeviceComPort( myDB, szBuf, m_szHostComPort[i], szPortList );
+			    		}
+			    	}
+			    }
+
+			    closedir(d);
+			}
+		}
+	}
 
 	// connect a context to each real port
 	for ( i = 0; i < MAX_DEVICES; i++ )
@@ -886,143 +971,9 @@ const bool CDeviceList::GetComPortsOnHost( CMysql& myDB, char szPortList[MAX_DEV
 		}
 	}
 
-	// check which device is on each real com port
-	for ( idx = 0; idx < MAX_DEVICES; idx++ )
-	{
-		if ( !IsMyHostname( GetDeviceHostname(idx) ) )
-		{	// device is not on this host
-			continue;
-		}
-		else if ( strncmp( GetComPort(idx), "ESP", 3 ) == 0 )
-		{	// esp32 device
-			continue;
-		}
-		else if ( GetDeviceType(idx) == E_DT_LEVEL_K02 )
-		{	// level K02 device
-			continue;
-		}
-		else if ( GetAddress(idx) > 0 )
-		{
-			bFirstTime = true;
-			bFound = false;
-			i = 0;
-			while ( i < MAX_DEVICES )
-			{
-				// try the specified port first
-				if ( bFirstTime )
-				{
-					for ( j = 0; j < MAX_DEVICES; j++ )
-					{
-						if ( strcmp( m_szHostComPort[j], GetComPort(idx) ) == 0 )
-						{
-							i = j;
-							break;
-						}
-					}
-				}
 
-				if ( m_pHostCtx[i] != NULL )
-				{	// this com port is connected
-					if ( modbus_set_slave( m_pHostCtx[i], GetAddress(idx) ) == -1 )
-					{	// failed
-						LogMessage( E_MSG_ERROR, "modbus_set_slave() for '%s' on addr %d failed: %s", m_szHostComPort[i], GetAddress(idx), modbus_strerror(errno) );
-					}
-					else
-					{
-						usleep( 10000 );
+	// nothing more to do
 
-						//LogMessage( E_MSG_INFO, "modbus slave connected for '%s' on address %d", m_szHostComPort[i], GetAddress(idx) );
-
-						if ( (bFound = IsDeviceAlive( m_pHostCtx[i], m_szHostComPort[i], GetAddress(idx) )) )
-						{	// modbus devices exist on this com port
-							bSomeoneIsAlive = true;
-							m_bHostComPortModbus[i] = true;
-							if ( strcmp( m_szHostComPort[i], GetComPort(idx) ) != 0 )
-							{	// com port has changed
-								UpdateDeviceComPort( myDB, m_szHostComPort[i], GetComPort(idx), szPortList );
-							}
-							break;
-						}
-						else
-						{	// failed - expected
-							//LogMessage( E_MSG_WARN, "modbus_read_*() failed for address %d: %s", GetAddress(idx), modbus_strerror(errno) );
-						}
-					}
-				}
-				else
-				{	// end of list
-					break;
-				}
-
-				if ( bFirstTime )
-				{
-					bFirstTime = false;
-					i = 0;
-				}
-				else
-				{
-					i += 1;
-				}
-			}
-
-			if ( !bFound )
-			{
-				LogMessage( E_MSG_ERROR, "Device address %d did not respond (%d)", GetAddress(idx), GetBaudRate(idx) );
-			}
-		}
-		else if ( GetDeviceNo(idx) == 0 )
-		{	// end of list
-			break;
-		}
-	}
-
-	// ensure K02 level devices are not on the modbus com ports
-	// check which device is on each real com port
-	for ( idx = 0; idx < MAX_DEVICES; idx++ )
-	{
-		if ( !IsMyHostname( GetDeviceHostname(idx) ) )
-		{	// device is not on this host
-			continue;
-		}
-		else if ( strncmp( GetComPort(idx), "ESP", 3 ) == 0 )
-		{	// esp32 device
-			continue;
-		}
-		else if ( GetDeviceType(idx) == E_DT_LEVEL_K02 )
-		{	// level K02 device using /dev/tty* port
-			if ( strncmp( GetComPort(idx), "/dev/tty", 8 ) == 0 )
-			{
-				LogMessage( E_MSG_INFO, "Checking K02 device on %s", GetComPort(idx) );
-
-				for ( i = 0; i < MAX_DEVICES; i++ )
-				{
-					if ( idx != i && m_bHostComPortModbus[i] && strcmp( GetComPort(i), GetComPort(idx) ) == 0 )
-					{	// com port clash !
-						LogMessage( E_MSG_WARN, "K02 device on %s is using a modbus com port", GetComPort(idx) );
-
-						// TODO: how to handle multiple K02 devices on separate com ports
-						// pick the first non modbus com port instead
-						for ( j = 0; j < MAX_DEVICES; j++ )
-						{
-							if ( m_bHostComPortModbus[j] )
-							{	// found a non modbus com port
-								LogMessage( E_MSG_INFO, "K02 device address %d com port now '%s', was '%s'", GetAddress(idx), m_szHostComPort[j], GetComPort(idx) );
-								SetComPort( idx, m_szHostComPort[j] );
-
-								UpdateDBDeviceComPort( myDB, idx );
-								break;
-							}
-						}
-						break;
-					}
-				}
-			}
-			else
-			{
-				LogMessage( E_MSG_INFO, "Skipping K02 device on %s", GetComPort(idx) );
-			}
-		}
-	}
 
 	// cleanup
 	for ( i = 0; i < MAX_DEVICES; i++ )
@@ -1111,11 +1062,36 @@ bool CDeviceList::InitContext()
 				LogMessage( E_MSG_ERROR, "Failed to open COM port %s, errno %d", m_Device[idx].GetComPort(), errno );
 			}
 		}
+		else if ( m_Device[idx].GetDeviceType() == E_DT_CARD_READER )
+		{	// card reader device
+			iSuccess += 1;
+			LogMessage( E_MSG_INFO, "Open COM port %s for CardReader DeviceNo %d on '%s'", m_Device[idx].GetComPort(), m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
+
+			int iHandle;
+
+			iHandle = open( m_Device[idx].GetComPort(), O_RDWR | O_NOCTTY | O_SYNC );
+			if ( iHandle > 0 )
+			{
+				m_Device[idx].SetComHandle( iHandle );
+
+				SetComInterfaceAttribs( iHandle, B9600, 8, 0 );  // set speed to 9600 bps, 8n1 (no parity)
+				SetComBlocking( iHandle, 0 );                // set no blocking
+
+			}
+			else
+			{
+				LogMessage( E_MSG_ERROR, "Failed to open COM port %s, errno %d", m_Device[idx].GetComPort(), errno );
+			}
+		}
 		else if ( !bFound )
 		{
 			LogMessage( E_MSG_INFO, "Create ctx for serial connection on %s %d baud for DeviceNo %d", m_Device[idx].GetComPort(), m_Device[idx].GetBaudRate(), m_Device[idx].GetDeviceNo() );
 
-			m_Device[idx].SetContext( modbus_new_rtu( m_Device[idx].GetComPort(), m_Device[idx].GetBaudRate(), gRS485.cParity, gRS485.iDataBits, gRS485.iStopBits ) );
+			char szSimplePort[512] = "";
+			ReadSimpleComPort( m_Device[idx].GetComPort(), szSimplePort, sizeof(szSimplePort) );
+			LogMessage( E_MSG_INFO, "SimpleComPort '%s'", szSimplePort );
+
+			m_Device[idx].SetContext( modbus_new_rtu( szSimplePort, m_Device[idx].GetBaudRate(), gRS485.cParity, gRS485.iDataBits, gRS485.iStopBits ) );
 			if ( m_Device[idx].GetContext() == NULL )
 			{
 				LogMessage( E_MSG_FATAL, "modbus ctx in is null for DeviceNo %d, aborting: %s", m_Device[idx].GetDeviceNo(), modbus_strerror(errno) );
@@ -2215,6 +2191,56 @@ const bool CDeviceList::WriteOutputBit( const int idx, const int iOutChannel, co
 	}
 
 	return bRc;
+}
+
+
+bool CDeviceList::UpdatePinFailCount( CMysql& myDB, const char* szCardNumber, const int iPinFailCount )
+{
+	bool bRet = false;
+	char szCardEnabled[2] = "Y";
+
+	if ( iPinFailCount >= MAX_PIN_FAILURES )
+	{
+		szCardEnabled[0] = 'N';
+	}
+
+	if ( myDB.RunQuery( "update users set us_PinFailCount=%d,us_CardEnabled='%s' where us_CardNumber='%s'", iPinFailCount, szCardEnabled, szCardNumber ) != 0 )
+	{
+		bRet = false;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	myDB.FreeResult();
+
+	return bRet;
+}
+
+bool CDeviceList::SelectCardNumber( CMysql& myDB, const char* szCardNumber, char* szCardPin, const int iLen, bool& bEnabled, int& iPinFailCount )
+{
+	bool bRet = false;
+	int iNumFields;
+	MYSQL_ROW row;
+
+	szCardPin[0] = '\0';
+	bEnabled = false;
+	iPinFailCount = 0;
+
+	if ( myDB.RunQuery( "select us_CardPin,us_CardEnabled,us_PinFailCount from users where us_CardNumber='%s'", szCardNumber ) != 0 )
+	{
+		bRet = false;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	else if ( (row = myDB.FetchRow( iNumFields )) )
+	{
+		bRet = true;
+		snprintf( szCardPin, iLen, "%s", (const char*)row[0] );
+		bEnabled = ( strcmp((const char*)row[1], "Y" ) == 0 ? true : false);
+		iPinFailCount = atoi((const char*)row[2]);
+
+		LogMessage( E_MSG_INFO, "Found Pin for card '%s'", szCardNumber );
+	}
+	myDB.FreeResult();
+
+	return bRet;
 }
 
 bool CDeviceList::UpdateDBDeviceComPort( CMysql& myDB, const int idx )

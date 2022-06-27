@@ -90,21 +90,7 @@ else if ( isset($_GET['PlcEventButton']) )
     {
         $db->NotifyPlcStatesScreenButton( $state_no );
 
-        $last_state_name = $state[0]['pl_StateName'];
-        
-        $count = 0;
-        while ( $count < 20 )
-        {  // wait here until the active state has changed
-            $count += 1;
-            time_nanosleep( 0, 300000000 );
-            $state_name = $db->PlcGetActiveStateName( $state[0]['pl_Operation'] );
-            
-            if ( $state_name != $last_state_name )
-            {
-                break;
-            }
-        }
-        
+        $last_state_name = $state[0]['pl_StateName'];        
     }
 }
 
@@ -200,7 +186,7 @@ if ( $_SESSION['plc_Operation'] != "" )
                     $header = true;
                 }
                 $name = func_find_deviceinfo_name( $di_list, $state['pl_DeviceNo'], $state['pl_IOChannel'], $state['pl_RuleType'] );
-                printf( "%d: %s = %s<br>", $count, $name, (intval($state['pl_Value']) != 0 ? sprintf( "%d", $state['pl_Value'] / 10) : "0") );
+                printf( "%d: %s = %.1f<br>", $count, $name, $state['pl_Value'] );
                 $count += 1;
             }
         }
@@ -228,7 +214,7 @@ if ( $_SESSION['plc_Operation'] != "" )
                 $btnName = "ps_EventButton";
                 if ( $state['pl_Test'] != '' )
                 {
-                    $test = sprintf( "<small>%s %.1f</small><br>", $state['pl_Test'], $state['pl_Value']/10 );
+                    $test = sprintf( "<small>%s %.1f</small><br>", $state['pl_Test'], $state['pl_Value'] );
                 }
                 else if ( $state['pl_DelayTime'] != 0 )
                 {
@@ -247,7 +233,7 @@ if ( $_SESSION['plc_Operation'] != "" )
                     $test = sprintf( "<small><select size='1' name='pl_TimePeriod' id='pl_TimePeriod' onChange='onChangeTimeSelection();'>%s</select> Time Selection</small><br>", $opt );
                     $btnName = "ps_EventButtonTime";
                     
-                    if ( delay > 100 )
+                    if ( $delay > 100 )
                         $name = sprintf( "%s %.1f min", $name, $delay/60 );
                     else
                         $name = sprintf( "%s %d sec", $name, $delay );
@@ -285,7 +271,7 @@ printf( "</font>" );
 
 <p>
 <div id='ws_message'></div>
-<select name='ws_list' id='ws_list' size='4' style='width: 100%;'>
+<select name='ws_list' id='ws_list' size='6' style='width: 100%;'>
 </select>
 </p>
 

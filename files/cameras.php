@@ -408,6 +408,18 @@ else if ( isset($_POST['CancelCamera']) )
 {
     func_clear_ca_array( $ca_array );
 }
+else if ( isset($_POST['RebootCamera']) )
+{
+    $ip = $_SESSION['show_camera_list'][0];
+    $camera = func_find_camera( $camera_list, $ip );
+    
+    $parms = sprintf( "cmd=rebootSystem&format=1&usr=%s&pwd=%s", $camera['ca_UserId'], $camera['ca_Password'] );
+    $uparms = urlencode( $parms );
+    $cmd = sprintf( "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\"", $camera['ca_IPAddress'], $uparms );
+    $res = exec( $cmd, $out, $ret );
+    
+    //echo $cmd;
+}
 else if ( isset($_POST['EditCamera']) )
 {
     $ip = $_SESSION['show_camera_list'][0];
@@ -621,7 +633,11 @@ foreach ( $camera_list as $camera )
             if ( func_total_cameras_showing() == 0 )    
                 printf( "<button type='submit' class='btn btn-outline-dark %s' name='AddCamera' id='AddCamera' value='Add New Camera' %s>Add New Camera</button>", $class, func_disabled_non_admin() );
             else if ( func_total_cameras_showing() == 1 )
+            {
                 printf( "<button type='submit' class='btn btn-outline-dark %s' name='EditCamera' id='EditCamera' value='Edit Camera' %s>Edit Camera</button>", $class, func_disabled_non_admin() );
+                printf( "&nbsp;&nbsp;" );
+                printf( "<button type='submit' class='btn btn-outline-dark %s' name='RebootCamera' id='RebootCamera' value='Reboot Camera' %s>Reboot Camera</button>", $class, func_disabled_non_admin() );
+            }
         }
             	
 		printf( "</div>" );

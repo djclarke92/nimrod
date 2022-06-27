@@ -330,8 +330,8 @@ else if ( $delete_all_event_no != 0 )
 else if ( isset($_GET['ClearGraph']) )
 {
     $_SESSION['GraphDevices'] = array();
-    $_SESSION['GStartDate'] == "";
-    $_SESSION['GStartTime'] == "";
+    $_SESSION['GStartDate'] = "";
+    $_SESSION['GStartTime'] = "";
 }
 else if ( isset($_GET['CurrentGraph']) )
 {
@@ -736,7 +736,7 @@ foreach ( $camera_list as $camera )
             printf( "Time <input class='form-control' type='text' name='GStartTime' value='%s' size='5'> ", $_SESSION['GStartTime'] );
             printf( "<a href='?GraphGo'><input class='btn btn-outline-dark' type='submit' name='GraphGo' value='Go'></a> " );
             printf( "<a href='?CurrentGraph'><input class='btn btn-outline-dark' type='button' name='CurrentGraph' value='Graph Now'></a> " );
-            printf( "<a href='?ClearGraph'><input class='btn btn-outline-dark' type='button' name='ClearGraph' value='Clear'></a> " );
+            printf( "<a href='?ClearGraph&RefreshEnabled'><input class='btn btn-outline-dark' type='button' name='ClearGraph' value='Clear'></a> " );
             printf( "</p>" );
             ?>
 
@@ -821,7 +821,7 @@ foreach ( $camera_list as $camera )
                     
                     printf( "<td><a class='btn btn-outline-dark %s' href='?WebClick%02d%02d=%d#Control'>%s</a></td>", 
                         ($on ? "btn-success" : ""), $dinfo['di_DeviceNo'], $dinfo['di_IOChannel'], time(), $dinfo['di_IOName'] );
-                    printf( "<td>%s<br><div class='small %s'>%s</div></td>", $outname, ($on ? "text-success" : ""), ($on ? "(on)" : "(off)") );
+                    printf( "<td>%s<br><div class='small %s'>%s</div></td>", $outname, ($on ? "text-success" : "text-warning"), ($on ? "(on)" : "(off)") );
                     
                     printf( "</tr>" );
                 }

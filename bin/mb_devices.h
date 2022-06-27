@@ -17,6 +17,7 @@
 #define MAX_ESP_QUEUE				4
 #define MAX_DATA_BUFFER				10
 #define MAX_TEMPERATURE_DIFF		5.0		// max temperature value change between readings
+#define MAX_PIN_FAILURES			3
 
 
 enum E_DEVICE_TYPE {
@@ -30,6 +31,7 @@ enum E_DEVICE_TYPE {
 	E_DT_LEVEL_HDL,			// 7: water level sensor type HDL300
 	E_DT_ROTARY_ENC_12BIT,	// 8: rotary encoder 12 bit
 	E_DT_VIPF_MON,			// 9: PZEM-016 VIPF Monitor
+	E_DT_CARD_READER,		// 10: HID card reader with pin pad
 };
 
 enum E_IO_TYPE {
@@ -69,6 +71,7 @@ enum E_IO_TYPE {
 	E_IO_POWER_HIGH,		// 33:	power too high
 	E_IO_POWER_LOW,			// 34:	power too low
 	E_IO_POWER_HIGHLOW,		// 35:	power too high or too low
+	E_IO_ON_OFF_INV,		// 36:	manual on off switch, inverted levels
 };
 
 enum E_EVENT_TYPE {
@@ -87,6 +90,7 @@ enum E_EVENT_TYPE {
 	E_ET_FREQUENCY,			// 12:	frequency
 	E_ET_POWERFACTOR,		// 13:	power factor
 	E_ET_POWER,				// 14:	power
+	E_ET_CARDREADER,		// 15: card reader
 };
 
 enum E_DEVICE_STATUS {
@@ -449,12 +453,15 @@ public:
 	void SetDayNightState( const double dVoltage );
 	const long GetEventTimeDiff( const int idx, const int i, const struct timespec tNow );
 
+	bool UpdatePinFailCount( CMysql& myDB, const char* szCardNumber, const int iPinFailCount );
+	bool SelectCardNumber( CMysql& myDB, const char* szCardNumber, char* szCardPin, const int iLen, bool& bEnabled, int& iPinFailCount );
 	bool UpdateDeviceStatus( CMysql& myDB, const int idx );
 	bool UpdateDeviceOutOnStartTime( CMysql& myDB, const int iOutIdx, const int iOutChannel );
 	bool UpdateDBDeviceComPort( CMysql& myDB, const int idx );
 	bool ReadDeviceConfig( CMysql& myDB );
 	bool IsDeviceAlive( modbus_t* ctx, const char* szHostComPort, const int iAddr );
 	void UpdateDeviceComPort( CMysql& myDB, const char* szNewComPort, const char* szOldComPort, char szPortList[MAX_DEVICES][MAX_COMPORT_LEN+1] );
+	void ReadSimpleComPort( const char* szPort, char* szSimplePort, size_t uLen );
 };
 
 

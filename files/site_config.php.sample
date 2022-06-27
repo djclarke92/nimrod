@@ -24,6 +24,8 @@ define( 'AUTO_REFRESH_LOGOUT', 1800 );	// 1800
 // plc state machine
 define( 'SHOW_PLC', 1 );
 
+// autologin username
+define( 'AUTOLOGIN_USERNAME', '' );
 
 ?>
 

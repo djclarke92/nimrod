@@ -20,7 +20,7 @@
 #define MAX_TCPIP_SOCKETS					16
 #define ESP_PING_TIMEOUT					60
 #define CAMERA_SNAPSHOT_PERIOD				60	// seconds
-
+#define CARD_READER_PIN_TIMEOUT				10		// seconds
 
 
 enum E_LOCK_TYPES {
@@ -53,7 +53,7 @@ private:
 	char m_szRuleType[2];
 	int m_iDeviceNo;
 	int m_iIOChannel;
-	int m_iValue;
+	int m_dValue;
 	char m_szTest[6];
 	char m_szNextStateName[51];
 	int m_iOrder;
@@ -73,7 +73,7 @@ public:
 	const char* GetRuleType(){ return m_szRuleType; }
 	const int GetDeviceNo(){ return m_iDeviceNo; }
 	const int GetIOChannel(){ return m_iIOChannel; }
-	const int GetValue(){ return m_iValue; }
+	const double GetValue(){ return m_dValue; }
 	const char* GetTest(){ return m_szTest; }
 	const char* GetNextStateName(){ return m_szNextStateName; }
 	const int GetOrder(){ return m_iOrder; }
@@ -88,7 +88,7 @@ public:
 	void SetRuleType( const char* szRuleType );
 	void SetDeviceNo( const int iDeviceNo );
 	void SetIOChannel( const int iIOChannel );
-	void SetValue( const int iValue );
+	void SetValue( const double dValue );
 	void SetTest( const char* szTest );
 	void SetNextStateName( const char* szNextStateName );
 	void SetOrder( const int iOrder );
@@ -104,7 +104,7 @@ private:
 	int m_iActiveStateIdx;
 	int m_iInputDeviceNo[MAX_PLC_INPUT_EVENTS];
 	int m_iInputIOChannel[MAX_PLC_INPUT_EVENTS];
-	int m_iInputValue[MAX_PLC_INPUT_EVENTS];
+	double m_dInputValue[MAX_PLC_INPUT_EVENTS];
 	CPlcState m_State[MAX_PLC_STATES];
 
 public:
@@ -122,9 +122,11 @@ public:
 	const int GetEvent( const int iStartIdx );
 	const int GetActiveStateIdx();
 	const bool FindInputDevice( const int iDeviceNo, const int iIOChannel );
-	void AddInputEvent( const int iDeviceNo, const int iIOChannel, const int iValue );
-	const int ReadInputEvent( int& iDeviceNo, int& iIOChannel, int& iValue );
+	void AddInputEvent( const int iDeviceNo, const int iIOChannel, const double dValue );
+	const int ReadInputEvent( int& iDeviceNo, int& iIOChannel, double& dValue );
 	void SetNextStateActive( const int idx, const time_t tTimenow );
+	const int GetNextStateIdx( const char* szOperation, const char* szNextStateName );
+
 };
 
 
@@ -211,6 +213,7 @@ private:
 	time_t m_tLastPlcStatesCheck;
 	time_t m_tLastCameraSnapshot;
 	time_t m_tThreadStartTime;
+	time_t m_tCardReaderStart;
 	struct in_addr m_xClientInAddr[MAX_TCPIP_SOCKETS];
 	SSL* m_xClientSSL[MAX_TCPIP_SOCKETS];
 	CDeviceList* m_pmyDevices;
@@ -258,6 +261,7 @@ public:
 	void ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int iButton );
 	void CheckForTimerOffTime( CMysql& myDB, const int idx );
 	void HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPrompt, bool& bAllDead );
+	void HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDead );
 	void GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList );
 	void ReadCameraRecords( CMysql& myDB, CCameraList& CameraList );
 	void ReadPlcStatesTable( CMysql& myDB, CPlcStates* pmyPlcStates );
