@@ -185,9 +185,7 @@ int main( int argc, char *argv[] )
 	InitSSL();
 
 
-	tConfigTime = time(NULL);
-	myDevices.ReadDeviceConfig( myDB );
-	myIOLinks.ReadIOLinks( myDB );
+	ReadDeviceConfig( myDB, &myDevices, &myIOLinks, true );
 
 	iTotalComPorts = myDevices.GetTotalComPorts( szComPortList );
 	LogMessage( E_MSG_INFO, "Total com ports: %d", iTotalComPorts );
@@ -213,13 +211,7 @@ int main( int argc, char *argv[] )
 		tUpdated = myDB.ReadConfigUpdateTime();
 		if ( tUpdated > tConfigTime )
 		{	// config has changed
-			pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
-
-			myDevices.ReadDeviceConfig( myDB );
-			myIOLinks.ReadIOLinks( myDB );
-			tConfigTime = time(NULL);
-
-			pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
+			tConfigTime = ReadDeviceConfig( myDB, &myDevices, &myIOLinks, false );
 		}
 
 	    if ( tLastUpgradeCheck + 5 < time(NULL) )

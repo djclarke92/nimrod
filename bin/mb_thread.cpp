@@ -270,7 +270,6 @@ void CThread::Worker()
 
 	while ( !gbTerminateNow )
 	{
-
 		bool bAllDead = true;
 		int iMax = MAX_DEVICES;
 
@@ -284,25 +283,9 @@ void CThread::Worker()
 			if ( tUpdated > m_tConfigTime )
 			{	// config has changed
 				LogMessage( E_MSG_INFO, "config time %lu vs %lu vs %lu", tUpdated, m_tConfigTime, time(NULL) );
-				m_tConfigTime = time(NULL);
+
+				m_tConfigTime = ReadDeviceConfig( myDB, m_pmyDevices, m_pmyIOLinks, false );
 				m_tLastConfigCheck = time(NULL);
-
-				m_pmyDevices->ReadDeviceConfig( myDB );
-				m_pmyIOLinks->ReadIOLinks( myDB );
-
-				// reset the last recorded time so we take a new reading
-				for ( idx = 0; idx < iMax; idx++ )
-				{
-					for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
-					{
-						m_pmyDevices->GetLastRecorded(idx,i) = 0;
-
-						if ( m_pmyDevices->GetInChannelType(idx,i) == E_IO_ON_OFF_INV )
-						{	// invert the state
-							m_pmyDevices->GetLastData(idx,i) = 1;
-						}
-					}
-				}
 			}
 		}
 
@@ -2185,6 +2168,7 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 					struct timespec tNow;
 					long lDiff;
 
+					LogMessage( E_MSG_INFO, "Last state %d, %d", m_pmyDevices->GetNewInput( idx, i ), m_pmyDevices->GetLastInput( idx, i ) );
 					m_pmyDevices->GetLastInput(idx,i) = m_pmyDevices->GetNewInput(idx,i);
 
 					m_pmyDevices->GetEventTimeNow( tNow );
@@ -2996,7 +2980,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 				dValNew, szUnits );
 	}
 
-	//LogMessage( E_MSG_INFO, "SetLastData %d %d %.1f", idx, i, m_pmyDevices->GetNewData(idx,i) );
+	//LogMessage( E_MSG_INFO, "SetLastData %d %d %.1f", idx, iChannel, m_pmyDevices->GetNewData(idx,iChannel) );
 	m_pmyDevices->GetLastData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
 }
 

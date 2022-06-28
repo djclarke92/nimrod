@@ -9,7 +9,7 @@ motorbike glove heater 30 minutes before my morning alarm went off if the outsid
 The Nimrod software is compiled on your standard linux desktop PC, then cross compiled for the Pi version your are using.  In theory you could compile everything on the Pi and 
 do away with the cross compiler step.
 
-Uses dygraph.js from http://dygraphs.com for displaying graphs. Websocket suport comes from https://libwebsockets.org/.
+Uses dygraph.js from http://dygraphs.com for displaying graphs. Websocket support comes from https://libwebsockets.org/.
 
 What can you do with it ?
 * Input events can be switches, temperature values, voltage levels or time of day

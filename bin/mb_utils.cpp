@@ -176,6 +176,32 @@ bool ReadSiteConfig( const char* szName, char* szValue, size_t uLen )
 	return bRc;
 }
 
+time_t ReadDeviceConfig( CMysql& myDB, CDeviceList* pDeviceList, CInOutLinks* pIOLinks, bool bInit )
+{
+	LogMessage( E_MSG_INFO, "ReadDeviceConfig(%d)", bInit );
+
+	pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
+
+	pDeviceList->ReadDeviceConfig( myDB );
+	pIOLinks->ReadIOLinks( myDB );
+
+	int iMax = MAX_DEVICES;
+
+	// reset the last recorded time so we take a new reading
+	for ( int idx = 0; idx < iMax; idx++ )
+	{
+		for ( int i = 0; i < pDeviceList->GetNumInputs(idx); i++ )
+		{
+			pDeviceList->GetLastRecorded(idx,i) = 0;
+		}
+	}
+
+
+	pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
+
+	return time(NULL);
+}
+
 pid_t CreateSSHTunnel()
 {
 	int iSleep = 2;
@@ -676,4 +702,4 @@ std::string urlEncode(std::string str)
         }
     }
     return new_str;
- }
+}

@@ -2407,6 +2407,11 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 						GetMonitorValueHi( i, j ) = atof( (const char*)row[13] );
 						GetMonitorValueLo( i, j ) = atof( (const char*)row[14] );
 
+						if ( GetInChannelType(i,j) == E_IO_ON_OFF_INV )
+						{	// invert the state
+							GetLastInput(i,j) = true;
+						}
+
 						LogMessage( E_MSG_INFO, "DeviceInfo  IN(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, Hyst:%d, Temp:%.1f, Days:%s AType:'%c', CFactor:%.3f, Offset:%.2f, MonPos:'%s', MonHi:%.1f, MonLo:%.1f",
 								i, j, GetInIOName(i,j), GetInChannelType(i,j), GetInOnPeriod(i,j),
 								GetStartTime(i,j), GetHysteresis(i,j), GetMonitorValueLo(i,j), GetInWeekdays(i,j), GetAnalogType(i,j), GetCalcFactor(i,j),
