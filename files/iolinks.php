@@ -418,8 +418,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
 		    else if ( $il_array['info_msg'] != "" )
 		        printf( "<p class='text-info'>%s</p>", $il_array['info_msg'] );
 			
-		    printf( "<div class='form-row'>" );
-		    printf( "<div class='col'>" );
+		    printf( "<div class='row'>" );
+		    printf( "<div class='col-sm-2'>" );
 		    printf( "<label for='il_InDeviceNo'>In: </label>" );
 		    printf( "</div>" );
 		    printf( "<div class='col'>" );
@@ -436,8 +436,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
 	        printf( "</div>" );
 		    printf( "</div>" );
 
-		    printf( "<div class='form-row'>" );
-		    printf( "<div class='col'>" );
+		    printf( "<div class='row'>" );
+		    printf( "<div class='col-sm-2'>" );
 		    printf( "<label for='il_EventType'>Event: </label>" );
 		    printf( "</div>" );
 		    printf( "<div class='col'>" );
@@ -450,8 +450,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
 		    printf( "</div>" );
 		    printf( "</div>" );
 		    
-		    printf( "<div class='form-row'>" );
-		    printf( "<div class='col'>" );
+		    printf( "<div class='row'>" );
+		    printf( "<div class='col-sm-2'>" );
 		    printf( "<label for='il_OutDeviceNo'>Out: </label>" );
 		    printf( "</div>" );
 		    printf( "<div class='col'>" );
@@ -468,8 +468,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
 		    printf( "</div>" );
 		    printf( "</div>" );
 		    
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='il_OnPeriod'>On Period: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -480,8 +480,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "<div class='card bg-light'>" );
     		printf( "<div class='card-body'>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
 
     		printf( "<table class='table table-striped table-bordered'>" );
     		printf( "<thead>" );
@@ -507,8 +507,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "</div>" );
     		
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='co_LinkDeviceNo'>Condition Link: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -525,8 +525,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='co_LinkTest'>Operator: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -547,8 +547,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='co_LinkValue'>Value: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -556,7 +556,7 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row mt-2'>" );
+    		printf( "<div class='row mt-2'>" );
     		printf( "<div class='col'>" );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='NewCondition' id='NewCondition' %s>New Condition</button>", func_disabled_non_admin() );
     		printf( "&nbsp;&nbsp;" );
@@ -568,7 +568,8 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "</div>" );   // card body end
     		printf( "</div>" );   // card end
     		
-    		printf( "<div class='form-row mb-2 mt-2'>" );
+    		printf( "<div class='row mb-2 mt-2'>" );
+    		printf( "<div class='col'>" );
     		printf( "<input type='hidden' name='il_LinkNo' value='%d'>", $il_array['il_LinkNo'] );
     		printf( "<input type='hidden' name='co_ConditionNo' value='%d'>", $il_array['co_ConditionNo'] );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateIOLink' id='UpdateIOLink' %s>Update</button>", ($il_array['il_LinkNo'] == 0 || func_disabled_non_admin() != "" ? "disabled" : "") );
@@ -579,6 +580,7 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='DeleteIOLink' id='DeleteIOLink' onclick='%s' %s>Delete Link</button>", $onclick, ($il_array['il_LinkNo'] == 0 || func_disabled_non_admin() != "" ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;" );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='ClearIOLink' id='ClearIOLink'>Clear</button>" );
+    		printf( "</div>" );
     		printf( "</div>" );
     		
             ?>

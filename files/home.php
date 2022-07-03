@@ -413,6 +413,7 @@ foreach ( $camera_list as $camera )
 }
 
 
+//<input type='checkbox' class='form-control' style='margin: -10px 0px 0px 0px;' id='RefreshEnabled'>
 
 ?>
 
@@ -420,14 +421,14 @@ foreach ( $camera_list as $camera )
 <div class="container" style="margin-top:30px">
 	<!-- *************************************************************************** -->
 	<div class="row">
-		<div class="col">
+		<div class="col-sm-4">
 			<div class="progress">
   				<div class="progress-bar bg-info" id='refresh-progress-bar' style="width:0%;height:10px">Refresh</div>
   			</div>
 		</div>
-		<div class="col">
+		<div class="col-sm-1">
 			<div>
-				<input type='checkbox' class='form-control' style='margin: -10px 0px 0px 0px;' id='RefreshEnabled'>
+				<input class=form-check-input type='checkbox' id='RefreshEnabled' name='RefreshEnabled' value='Refresh'>
 			</div>
 		</div>
 	</div>

@@ -8,7 +8,12 @@ Nimrod Release Notes and History
 
 
 Version 0.2.3		July 2022
-1.	
+1.	Improvements and bug fixes to the PLC state handling
+2.	Upgrade to JQuery 3.6.0 with map file
+3.	Upgrade to Bootstrap 5.1.3 with map file
+4.	Upgrade to popper 2.11.5 with map file
+5.	Get websocketsa working over https/wss
+6.	
 
 
 Version 0.2.2		June 2022

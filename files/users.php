@@ -367,8 +367,8 @@ $user_list = $db->ReadUsers();
                 printf( "<p class='text-info'>%s</p>", $us_array['info_msg'] );
             
 
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_Username'>Username: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -376,8 +376,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
 
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_Name'>Name: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -385,8 +385,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
 
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_Password'>Password: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -394,8 +394,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
 
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_Password2'>Confirmation: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -403,8 +403,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
 
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_AuthLevel'>Security Level: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -417,8 +417,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
 
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_Name'>Card Number: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -429,8 +429,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_Password'>PIN: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -438,8 +438,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_CardPin2'>Confirmation: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -447,8 +447,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='us_PinFailCount'>Pin Fail Count: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -456,7 +456,9 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
+    		printf( "</div'>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_UF_HomeCameras' id='us_UF_HomeCameras' %s> ", ($us_array['us_UF_HomeCameras'] == "Y" ? "checked" : "") );
@@ -464,7 +466,9 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
+    		printf( "</div>>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_UF_Cameras' id='us_UF_Cameras' %s> ", ($us_array['us_UF_Cameras'] == "Y" ? "checked" : "") );
@@ -472,7 +476,9 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
+    		printf( "</div>>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_UF_Upgrade' id='us_UF_Upgrade' %s> ", ($us_array['us_UF_Upgrade'] == "Y" ? "checked" : "") );
@@ -482,16 +488,18 @@ $user_list = $db->ReadUsers();
     		
     		if ( $us_array['us_UF_Upgrade'] == 'Y' )
     		{
-        		printf( "<div class='form-row'>" );
+        		printf( "<div class='row'>" );
+        		printf( "<div class='col-sm-2'>" );
+        		printf( "</div>" );
         		printf( "<div class='col'>" );
-        		printf( "'<input type='hidden' name='MAX_FILE_SIZE' value='4096000'>" );
+        		printf( "<input type='hidden' name='MAX_FILE_SIZE' value='4096000'>" );
         		printf( "<input type='file' class='form-control-file border' name='us_FileName' id='us_FileName'>" );
         		printf( "</div>" );
         		printf( "</div>" );
     		}
         		
-    		printf( "<div class='form-row mb-2 mt-2'>" ); 
-			printf( "<p>" );
+    		printf( "<div class='row mb-2 mt-2'>" ); 
+			printf( "<div class='col'>" );
             printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateUser' id='UpdateUser' value='Update' %s>Update</button>", ($us_array['us_Username'] == "" ? "disabled" : "") );
             printf( "&nbsp;&nbsp;&nbsp;" );
             printf( "<button type='submit' class='btn btn-outline-dark' name='NewUser' id='NewUser' value='New' %s>New</button>", ($us_array['us_Username'] != "" || func_disabled_non_admin() ? "disabled" : "") );
@@ -506,7 +514,7 @@ $user_list = $db->ReadUsers();
                 printf( "&nbsp;&nbsp;&nbsp;" );
                 printf( "<button type='submit' class='btn btn-outline-dark' name='UploadFile' id='UploadFile' value='Upload File'>Upload File</button>" );
             }
-            printf( "</p>" );
+            printf( "</div>" );
     		printf( "</div>" );
             ?>
 

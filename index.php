@@ -229,13 +229,13 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Nimrod Admin Console</title>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="./files/bootstrap.v4.5.2.min.css">
-  <script src="./files/jquery.v3.5.1.min.js"></script>
-  <script src="./files/popper.v1.16.0.min.js"></script>
-  <script src="./files/bootstrap.v4.5.2.min.js"></script>
+  	<title>Nimrod Admin Console</title>
+  	<meta charset="utf-8">
+  	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  	<script src="./files/jquery-3.6.0.min.js"></script>
+  	<script src="./files/popper-2.11.5.min.js"></script>
+  	<link rel="stylesheet" href="./files/bootstrap-5.1.3.min.css">
+  	<script src="./files/bootstrap-5.1.3.bundle.min.js"></script>
   
 	<meta http-equiv="Content-Language" content="en-nz">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -243,8 +243,8 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	<meta name="keywords" content="home automation">
 	<link rel="icon" href="favicon.ico" type="image/x-icon">
 	<link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
-	<link rel="stylesheet" src="./files/dygraph.css" />
-	<script type="text/javascript" src="./files/dygraph.js"></script>
+	<link rel="stylesheet" src="./files/dygraph-2.1.0.css" />
+	<script type="text/javascript" src="./files/dygraph-2.1.0.min.js"></script>
   
   <style>
   <?php
@@ -388,8 +388,20 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	{
     ?>
 		<script type = "text/javascript">
-  	  	var socket = new WebSocket( "ws://localhost:8000", "nimrod-protocol" );
+		var wshost = "<?php printf( "wss://%s:8000", $_SERVER['SERVER_ADDR'] ); ?>";
+  	  	var socket = new WebSocket( wshost, "nimrod-protocol" );
+  	  	var plcCounter = 0;
 
+  	  	function plcTimer() {
+  	  	  	plcCounter += 1;
+
+  	  	  	if ( plcCounter >= 3 ) {
+	  	    	window.location.replace('index.php?PageMode=PlcState'); 
+  	  		}
+
+  	  	  	setTimeout( 'plcTimer()', 1000 );   
+  	  	}
+  	  	
 	  	function update(msg) { 
 		  	if ( msg.length > 0 ) 
 		  	{
@@ -422,16 +434,23 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
     
     	  	    //select.scrollTo( 0, select.length - 4 ); 
     
-    	  	    if ( msg == "Refresh" || msg == "closed" )
-    	  	    {
+    	  	    if ( msg == "Refresh" ) {
     	  	    	window.location.replace('index.php?PageMode=PlcState'); 
+    	  	    }
+    	  	    else if ( msg == "wss closed" ) {
+    	  	    	setTimeout( 'plcTimer()', 1000 );   
+    	  	    }
+    	  	    else {
+        	  	    plcCounter  = 0;
     	  	    }
 		  	}
 		}
 		
-	  	socket.onopen = function() { console.log("socket open"); update("open"); }
-	  	socket.onclose = function() { console.log("socket close"); update("closed"); }
-	  	socket.onmessage = function(msg) { console.log("socket message: " + msg.data); update(msg.data); }    </script>
+	  	socket.onopen = function() { console.log("socket open"); update("wss open"); }
+	  	socket.onclose = function() { console.log("socket close"); update("wss closed"); }
+	  	socket.onmessage = function(msg) { console.log("socket message: " + msg.data); update(msg.data); }
+	  	socket.error = function(error){ console.log( "socket error: :" + error.message); update(error.message); }    
+	  	</script>
 	<?php 
 	}
 	?>      
@@ -452,9 +471,10 @@ $devices = $db->ReadDevicesTable();
 if ( $display_mode == "" )
 {
 ?>
-<nav class="navbar navbar-expand-sm bg-dark navbar-dark fixed-top">
+<nav class="navbar navbar-expand-lg bg-dark navbar-dark fixed-top">
+ <div class="container-fluid">
   <a class="navbar-brand" href="?PageMode=Home">Nimrod</a>
-  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#collapsibleNavbar">
+  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#collapsibleNavbar">
     <span class="navbar-toggler-icon"></span>
   </button>
   <div class="collapse navbar-collapse" id="collapsibleNavbar">
@@ -520,6 +540,7 @@ if ( $display_mode == "" )
       ?>
     </ul>
   </div>  
+ </div>
 </nav>
 <?php
 $mm = sprintf( "?MonitorPage=%d", $monitor_page );

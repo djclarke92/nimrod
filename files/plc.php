@@ -282,8 +282,11 @@ else if ( isset($_POST['UpdateState']) || isset($_POST['NewState']) )
     if ( $pl_array['pl_Operation'] != "" && $pl_array['pl_NextStateName'] != "" )
         $next_marker = $db->OperationStateNameExists( $pl_array['pl_Operation'], $pl_array['pl_NextStateName'] );
             
-    
-    if ( $pl_array['pl_DeviceNo'] != 0 && func_check_device_hostname($di_list,$pl_array['pl_DeviceNo']) == false )
+    if ( $new_state && $pl_array['pl_DeviceNo'] == 0 && $pl_array['pl_IOChannel'] == -1 && $db->CheckTimerExists($pl_array['pl_Operation'],$pl_array['pl_StateName']) )
+    {
+        $pl_array['error_msg'] = sprintf( "A timer event already exists for operation '%s', state '%s'", $pl_array['pl_Operation'], $pl_array['pl_StateName'] );
+    }
+    else if ( $pl_array['pl_DeviceNo'] != 0 && func_check_device_hostname($di_list,$pl_array['pl_DeviceNo']) == false )
     {   // check the device is on this host
         $pl_array['error_msg'] = sprintf( "All devices in the PLC state machine must be on this host '%s'", gethostname() );
     }
@@ -369,13 +372,20 @@ if ( $pl_array['op_filter'] == "" )
 <script language='javascript'>
 function onChangeRuleType()
 {
-    var val = document.getElementById('pl_RuleType').value;
-    if ( val.substr(0,1) == 'I' ) {
-        document.getElementById('pl_DeviceChannelOut').removeAttribute('disabled');
-        document.getElementById('pl_DeviceChannelIn').setAttribute('disabled','disabled');        
-    } else if ( val.substr(0,1) == 'E' ) {
-        document.getElementById('pl_DeviceChannelIn').removeAttribute('disabled');
-        document.getElementById('pl_DeviceChannelOut').setAttribute('disabled','disabled');
+    var ruleType = document.getElementById('pl_RuleType');
+    if ( ruleType != null ) {
+        var val = ruleType.value;
+		if ( val.substr(0,1) == 'I' ) {
+            document.getElementById('pl_DeviceChannelOut').removeAttribute('disabled');
+            document.getElementById('pl_DeviceChannelIn').setAttribute('disabled','disabled');        
+            document.getElementById('pl_TimerValues').setAttribute('disabled','disabled');
+            document.getElementById('pl_Test').setAttribute('disabled','disabled');
+        } else if ( val.substr(0,1) == 'E' ) {
+            document.getElementById('pl_DeviceChannelIn').removeAttribute('disabled');
+            document.getElementById('pl_DeviceChannelOut').setAttribute('disabled','disabled');
+            document.getElementById('pl_TimerValues').removeAttribute('disabled');
+            document.getElementById('pl_Test').removeAttribute('disabled');
+        }
     }
 }
 </script>
@@ -391,7 +401,7 @@ function onChangeRuleType()
 		<div class="col-sm-1">
 			<a href='#ruleslist' data-toggle='collapse' class='small'><i>Hide/Show</i></a>
         </div>
-        <div class="col-sm-2">
+        <div class="col-sm-3">
 			<div class='input-group'>
 			<select class='form-control custom-select' size='1' name='OpFilter' id='OpFilter'>
 			<option></option>
@@ -409,7 +419,7 @@ function onChangeRuleType()
 			</select> 
 			</div>
 		</div>
-        <div class="col-sm-2">
+        <div class="col-sm-3">
 			<div class='input-group'>
 			<select class='form-control custom-select' size='1' name='StateFilter' id='StateFilter'>
 			<option></option>
@@ -443,7 +453,7 @@ function onChangeRuleType()
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-10">
+		<div class="col-sm-12">
 			<?php
 			if ( $pl_array['error_msg'] != "" )
 			    printf( "<p class='text-danger'>%s</p>", $pl_array['error_msg'] );
@@ -469,6 +479,8 @@ function onChangeRuleType()
               <th>Value</th>
               <th>Active</th>
               <th>Delay</th>
+              <th>Timer Values</th>
+              <th>Operator</th>
             </thead>
 
             <?php
@@ -525,6 +537,10 @@ function onChangeRuleType()
                 
                 printf( "<td>%s</td>", (intval($state['pl_DelayTime']) != 0 ? $state['pl_DelayTime'] : "") );
                 
+                printf( "<td>%s</td>", $state['pl_TimerValues'] );
+                
+                printf( "<td>%s</td>", $state['pl_Test'] );
+                
                 printf( "<tr>" );
             }
             ?>
@@ -550,7 +566,7 @@ function onChangeRuleType()
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-8">
+		<div class="col-sm-10">
 			<h3>State Detail</h3>
 
 			<?php
@@ -566,8 +582,8 @@ function onChangeRuleType()
 		    else if ( $pl_array['pl_StateNo'] != 0 )
 		        $disabled2 = "disabled";
 		        
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_Operation'>Operation: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -578,8 +594,8 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
 	
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_StateName'>State Name: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -590,7 +606,9 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
+    		printf( "</div>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='pl_StateIsActive' id='pl_StateIsActive' %s %s %s>", ($pl_array['pl_StateIsActive'] == "Y" ? "checked" : ""), $disabled,
@@ -600,8 +618,8 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
 
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_RuleType'>Rule Type: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -613,8 +631,8 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_DeviceChannelOut'>Init Devices: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -635,8 +653,8 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_DeviceChannelIn'>Event Devices: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -657,8 +675,8 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_Value'>Value: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -666,8 +684,8 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_Order'>Execution Order: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -675,30 +693,30 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_DelayTime'>DelayTime: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='pl_DelayTime' id='pl_DelayTime' size='2' value='%s' %s> <i>(seconds)</i>", $pl_array['pl_DelayTime'], $disabled2 );
+    		printf( "<input type='text' class='form-control' name='pl_DelayTime' id='pl_DelayTime' size='2' value='%s' %s> <i>(seconds - default timer value)</i>", $pl_array['pl_DelayTime'], $disabled2 );
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_TimerValues'>Timer Values: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='pl_TimerValues' id='pl_TimerValues' size='16' value='%s' %s>", $pl_array['pl_TimerValues'], $disabled2 );
+    		printf( "<input type='text' class='form-control' name='pl_TimerValues' id='pl_TimerValues' size='16' value='%s' %s> <i>(only for Events)</i>", $pl_array['pl_TimerValues'], $disabled2 );
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_Test'>Operator: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<select class='form-control custom-select' name='pl_Test' id='pl_Test' size='1' %s>", $disabled2 );
+    		printf( "<select class='form-control custom-select' name='pl_Test' id='pl_Test' size='1' %s> (only for Events)", $disabled2 );
     		printf( "<option></option>" );
     		foreach ( $_SESSION['link_tests'] as $dd )
     		{
@@ -707,7 +725,7 @@ function onChangeRuleType()
     		        $sel = "selected";
    		        printf( "<option %s>%s</option>", $sel, $dd );
     		}
-    		printf( "</select>" );
+    		printf( "</select> <i>(only for pre-condition Events - failure definition)</i>" );
     		if ( strstr( $pl_array['pl_Test'], "/" ) !== false )
     		{
     		    printf( " (Invert State)" );
@@ -715,8 +733,8 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_NextStateName'>Next State Name: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -738,8 +756,8 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row mb-2 mt-2'>" );
-    		printf( "<p>" );
+    		printf( "<div class='row mb-2 mt-2'>" );
+    		printf( "<div class='col'>" );
     		printf( "<input type='hidden' name='pl_StateNo' value='%d'>", $pl_array['pl_StateNo'] );
     		printf( "<input type='hidden' name='pl_StateTimestamp' value='%s'>", $pl_array['pl_StateTimestamp'] );
     		printf( "<input type='hidden' name='StateFilter' value='%s'>", $pl_array['state_filter'] );
@@ -753,7 +771,7 @@ function onChangeRuleType()
     		    ($pl_array['pl_StateNo'] == "" || func_disabled_non_admin() != "" ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;&nbsp;" );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='ClearState' id='ClearState' value='Clear'>Clear</button>" );
-    		printf( "</p>" );
+    		printf( "</div>" );
     		printf( "</div>" );
     		
     		

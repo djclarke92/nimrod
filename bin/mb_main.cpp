@@ -126,288 +126,291 @@ int main( int argc, char *argv[] )
 	snprintf( gszProgName, sizeof(gszProgName), "%s", basename(argv[0]) );
 
 
-
-	pidChild = CreateSSHTunnel();
-
-	int iCount = 0;
-	long lSleep;
-	long lSleepBase = 2000000;
-	while ( (bRun = myDB.Connect()) == false && !gbTerminateNow )
+	CheckForUpgrade();
+	if ( !gbTerminateNow )
 	{
-		LogMessage( E_MSG_WARN, "Waiting to connect to Mysql..." );
+		pidChild = CreateSSHTunnel();
 
-		if ( pidChild != 0 )
+		int iCount = 0;
+		long lSleep;
+		long lSleepBase = 2000000;
+		while ( (bRun = myDB.Connect()) == false && !gbTerminateNow )
 		{
-			pid = waitpid( pidChild, &status, WNOHANG );
-			if ( pid > 0 )
-			{	// child has exited !
-				pidChild = 0;
-			}
-		}
+			LogMessage( E_MSG_WARN, "Waiting to connect to Mysql..." );
 
-		if ( pidChild <= 0 )
-		{	// ssh tunnel failed
-			LogMessage( E_MSG_ERROR, "SSH tunnel has exited, starting a new one" );
-			pidChild = CreateSSHTunnel();
-		}
-
-	    if ( tLastUpgradeCheck + 5 < time(NULL) )
-	    {
-	    	tLastUpgradeCheck = time(NULL);
-
-	    	CheckForUpgrade();
-	    	if ( gbTerminateNow )
-	    	{
-	    		break;
-	    	}
-	    }
-
-		if ( iCount >  10 )
-			lSleep = lSleepBase * 5;	// 10 sec
-		else if ( iCount >  50 )
-			lSleep = lSleepBase * 30;	// 60 sec
-		else
-			lSleep  = lSleepBase;	// 2 sec
-
-		LogMessage( E_MSG_INFO, "Sleeping %ld seconds", lSleep / 1000000 );
-		usleep( lSleep );
-
-		iCount += 1;
-	}
-
-	myDB.LogEvent( 0, 0, E_ET_STARTUP, 0, "Nimrod %d.%d starting", NIMROD_RELEASE, NIMROD_BUILD_NUMBER );
-
-	LogMessage( E_MSG_INFO, "Nimrod build: %d.%d", NIMROD_RELEASE, NIMROD_BUILD_NUMBER );
-	LogMessage( E_MSG_INFO, "Compiled against libmodbus v%s", LIBMODBUS_VERSION_STRING );
-	LogMessage( E_MSG_INFO, "Linked against libmodbus v%d.%d.%d", libmodbus_version_major, libmodbus_version_minor, libmodbus_version_micro );
-
-
-	InitSSL();
-
-
-	ReadDeviceConfig( myDB, &myDevices, &myIOLinks, true );
-
-	iTotalComPorts = myDevices.GetTotalComPorts( szComPortList );
-	LogMessage( E_MSG_INFO, "Total com ports: %d", iTotalComPorts );
-
-	// check if com ports have been swapped
-	if ( !myDevices.GetComPortsOnHost( myDB, szComPortList, false ) )
-	{	// com ports have swapped so try swapping the baud rates
-		myDevices.GetComPortsOnHost( myDB, szComPortList, true );
-	}
-
-
-	// init libmodbus and connect the com ports
-	iCount = 0;
-	bRun = false;
-	while ( (bRun = myDevices.InitContext()) == false && !gbTerminateNow )
-	{	// loop here until we can connect to the com ports
-		LogMessage( E_MSG_WARN, "Waiting for COM ports to become available" );
-
-		myDevices.FreeAllContexts();
-
-		// TODO: we may need to reboot the pi if the com ports do not appear
-
-		tUpdated = myDB.ReadConfigUpdateTime();
-		if ( tUpdated > tConfigTime )
-		{	// config has changed
-			tConfigTime = ReadDeviceConfig( myDB, &myDevices, &myIOLinks, false );
-		}
-
-	    if ( tLastUpgradeCheck + 5 < time(NULL) )
-	    {
-	    	tLastUpgradeCheck = time(NULL);
-
-	    	CheckForUpgrade();
-	    	if ( gbTerminateNow )
-	    	{
-	    		break;
-	    	}
-	    }
-
-	    if ( iTotalComPorts == 0 )
-	    {
-	    	bRun = true;
-	    	break;
-	    }
-
-		if ( iCount < 10 )
-			usleep( 2000000 );
-		else
-			usleep( 30000000 );
-
-		iCount += 1;
-	}
-
-	if ( bRun )
-	{
-
-		iThreads = iTotalComPorts + 3;
-
-		int iPort = 0;
-		for ( i = 0; i < iThreads; i++ )
-		{
-			if ( i == 0 )
-			{
-				myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_TCPIP, &bThreadRunning[i], &bAllDevicesDead[i] );
-			}
-			else if ( i == 1 )
-			{
-				myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_TIMER, &bThreadRunning[i], &bAllDevicesDead[i] );
-			}
-			else if ( i == 2 )
-			{
-				myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_WEBSOCKET, &bThreadRunning[i], &bAllDevicesDead[i] );
-			}
-			else
-			{
-				myThread[i] = new CThread( szComPortList[iPort], &myDevices, &myIOLinks, &myPlcStates, E_TT_COMPORT, &bThreadRunning[i], &bAllDevicesDead[i] );
-				iPort += 1;
-			}
-
-
-			err = pthread_create( &threadId[i], NULL, ThreadStart, myThread[i] );
-			if ( err != 0 )
-			{
-				LogMessage( E_MSG_ERROR, "pthread_create(%d) failed with errno %d", i, errno );
-				gbTerminateNow = true;
-				break;
-			}
-		}
-
-
-
-
-		while ( !gbTerminateNow )
-		{
-			// check if our ssh tunnel has exited
 			if ( pidChild != 0 )
 			{
 				pid = waitpid( pidChild, &status, WNOHANG );
 				if ( pid > 0 )
 				{	// child has exited !
-					LogMessage( E_MSG_ERROR, "SSH tunnel has exited, starting a new one" );
-
-					pidChild = CreateSSHTunnel();
-				}
-				else if ( pid == 0 )
-				{	// child is still running
-					// continue
-				}
-				else
-				{	// error
-					LogMessage( E_MSG_WARN, "waitpid() failed for pid %d, errno %d", pidChild, errno );
-				}
-		    }
-
-			// check if all com ports are dead
-			int iDead = 0;
-			for ( i = 2; i < iThreads; i++ )
-			{
-				if ( bAllDevicesDead[i] )
-				{
-					iDead += 1;
+					pidChild = 0;
 				}
 			}
-			if ( iDead + 3 == iThreads && iTotalComPorts != 0 )
-			{	// all com port devices are dead, restart
-				LogMessage( E_MSG_INFO, "All com port devices are dead, restarting" );
-				if ( CreateRestartScript( NULL ) )
+
+			if ( pidChild <= 0 )
+			{	// ssh tunnel failed
+				LogMessage( E_MSG_ERROR, "SSH tunnel has exited, starting a new one" );
+				pidChild = CreateSSHTunnel();
+			}
+
+			if ( tLastUpgradeCheck + 5 < time(NULL) )
+			{
+				tLastUpgradeCheck = time(NULL);
+
+				CheckForUpgrade();
+				if ( gbTerminateNow )
 				{
-					gbTerminateNow = true;
-					gbRestartNow = true;
 					break;
 				}
 			}
 
-		    if ( tLastUpgradeCheck + 5 < time(NULL) )
-		    {
-		    	tLastUpgradeCheck = time(NULL);
+			if ( iCount >  10 )
+				lSleep = lSleepBase * 5;	// 10 sec
+			else if ( iCount >  50 )
+				lSleep = lSleepBase * 30;	// 60 sec
+			else
+				lSleep  = lSleepBase;	// 2 sec
 
-		    	CheckForUpgrade();
-		    	if ( gbTerminateNow )
-		    	{
-		    		break;
-		    	}
-		    }
+			LogMessage( E_MSG_INFO, "Sleeping %ld seconds", lSleep / 1000000 );
+			usleep( lSleep );
 
-			if ( stat( STOP_NIMROD_FILE, &statbuf ) == 0 )
-			{
-				bShutdownNimrod = true;
-				gbTerminateNow = true;
+			iCount += 1;
+		}
+
+		myDB.LogEvent( 0, 0, E_ET_STARTUP, 0, "Nimrod %d.%d starting", NIMROD_RELEASE, NIMROD_BUILD_NUMBER );
+
+		LogMessage( E_MSG_INFO, "Nimrod build: %d.%d", NIMROD_RELEASE, NIMROD_BUILD_NUMBER );
+		LogMessage( E_MSG_INFO, "Compiled against libmodbus v%s", LIBMODBUS_VERSION_STRING );
+		LogMessage( E_MSG_INFO, "Linked against libmodbus v%d.%d.%d", libmodbus_version_major, libmodbus_version_minor, libmodbus_version_micro );
+
+
+		InitSSL();
+
+
+		ReadDeviceConfig( myDB, &myDevices, &myIOLinks, true );
+
+		iTotalComPorts = myDevices.GetTotalComPorts( szComPortList );
+		LogMessage( E_MSG_INFO, "Total com ports: %d", iTotalComPorts );
+
+		// check if com ports have been swapped
+		if ( !myDevices.GetComPortsOnHost( myDB, szComPortList, false ) )
+		{	// com ports have swapped so try swapping the baud rates
+			myDevices.GetComPortsOnHost( myDB, szComPortList, true );
+		}
+
+
+		// init libmodbus and connect the com ports
+		iCount = 0;
+		bRun = false;
+		while ( (bRun = myDevices.InitContext()) == false && !gbTerminateNow )
+		{	// loop here until we can connect to the com ports
+			LogMessage( E_MSG_WARN, "Waiting for COM ports to become available" );
+
+			myDevices.FreeAllContexts();
+
+			// TODO: we may need to reboot the pi if the com ports do not appear
+
+			tUpdated = myDB.ReadConfigUpdateTime();
+			if ( tUpdated > tConfigTime )
+			{	// config has changed
+				tConfigTime = ReadDeviceConfig( myDB, &myDevices, &myIOLinks, false );
 			}
 
-			// slee 500msec
-			usleep( 500000 );
-		}
-	}
-
-	// wait for threads to exit
-	LogMessage( E_MSG_INFO, "Wait for threads to exit" );
-	bool bWait = true;
-	time_t tStart = time(NULL);
-	while ( bWait )
-	{
-		bWait = false;
-		for ( i = 0; i < iThreads; i++ )
-		{
-			if ( bThreadRunning[i] )
+			if ( tLastUpgradeCheck + 5 < time(NULL) )
 			{
-				bWait = true;
+				tLastUpgradeCheck = time(NULL);
 
-				if ( tStart + 3 < time(NULL) )
+				CheckForUpgrade();
+				if ( gbTerminateNow )
 				{
-					LogMessage( E_MSG_FATAL, "Killing thread #%d with SIGTERM", i );
-
-					// SIGTERM will kill the process immediately, systemd will restart us
-					pthread_kill( threadId[i], SIGTERM );
+					break;
 				}
 			}
+
+			if ( iTotalComPorts == 0 )
+			{
+				bRun = true;
+				break;
+			}
+
+			if ( iCount < 10 )
+				usleep( 2000000 );
+			else
+				usleep( 30000000 );
+
+			iCount += 1;
 		}
 
-		if ( bWait )
+		if ( bRun )
 		{
-			//tStart = time(NULL);
-			usleep( 100000 );	// 100msec
+
+			iThreads = iTotalComPorts + 3;
+
+			int iPort = 0;
+			for ( i = 0; i < iThreads; i++ )
+			{
+				if ( i == 0 )
+				{
+					myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_TCPIP, &bThreadRunning[i], &bAllDevicesDead[i] );
+				}
+				else if ( i == 1 )
+				{
+					myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_TIMER, &bThreadRunning[i], &bAllDevicesDead[i] );
+				}
+				else if ( i == 2 )
+				{
+					myThread[i] = new CThread( "", &myDevices, &myIOLinks, &myPlcStates, E_TT_WEBSOCKET, &bThreadRunning[i], &bAllDevicesDead[i] );
+				}
+				else
+				{
+					myThread[i] = new CThread( szComPortList[iPort], &myDevices, &myIOLinks, &myPlcStates, E_TT_COMPORT, &bThreadRunning[i], &bAllDevicesDead[i] );
+					iPort += 1;
+				}
+
+
+				err = pthread_create( &threadId[i], NULL, ThreadStart, myThread[i] );
+				if ( err != 0 )
+				{
+					LogMessage( E_MSG_ERROR, "pthread_create(%d) failed with errno %d", i, errno );
+					gbTerminateNow = true;
+					break;
+				}
+			}
+
+
+
+
+			while ( !gbTerminateNow )
+			{
+				// check if our ssh tunnel has exited
+				if ( pidChild != 0 )
+				{
+					pid = waitpid( pidChild, &status, WNOHANG );
+					if ( pid > 0 )
+					{	// child has exited !
+						LogMessage( E_MSG_ERROR, "SSH tunnel has exited, starting a new one" );
+
+						pidChild = CreateSSHTunnel();
+					}
+					else if ( pid == 0 )
+					{	// child is still running
+						// continue
+					}
+					else
+					{	// error
+						LogMessage( E_MSG_WARN, "waitpid() failed for pid %d, errno %d", pidChild, errno );
+					}
+				}
+
+				// check if all com ports are dead
+				int iDead = 0;
+				for ( i = 2; i < iThreads; i++ )
+				{
+					if ( bAllDevicesDead[i] )
+					{
+						iDead += 1;
+					}
+				}
+				if ( iDead + 3 == iThreads && iTotalComPorts != 0 )
+				{	// all com port devices are dead, restart
+					LogMessage( E_MSG_INFO, "All com port devices are dead, restarting" );
+					if ( CreateRestartScript( NULL ) )
+					{
+						gbTerminateNow = true;
+						gbRestartNow = true;
+						break;
+					}
+				}
+
+				if ( tLastUpgradeCheck + 5 < time(NULL) )
+				{
+					tLastUpgradeCheck = time(NULL);
+
+					CheckForUpgrade();
+					if ( gbTerminateNow )
+					{
+						break;
+					}
+				}
+
+				if ( stat( STOP_NIMROD_FILE, &statbuf ) == 0 )
+				{
+					bShutdownNimrod = true;
+					gbTerminateNow = true;
+				}
+
+				// slee 500msec
+				usleep( 500000 );
+			}
 		}
-		else
+
+		// wait for threads to exit
+		LogMessage( E_MSG_INFO, "Wait for threads to exit" );
+		bool bWait = true;
+		time_t tStart = time(NULL);
+		while ( bWait )
 		{
-			LogMessage( E_MSG_INFO, "All threads have exited" );
-			break;
-		}
-	}
+			bWait = false;
+			for ( i = 0; i < iThreads; i++ )
+			{
+				if ( bThreadRunning[i] )
+				{
+					bWait = true;
 
-	LogMessage( E_MSG_INFO, "Calling pthread_join" );
-	for ( i = 0; i < iThreads; i++ )
-	{
-		if ( threadId[i] != 0 )
+					if ( tStart + 3 < time(NULL) )
+					{
+						LogMessage( E_MSG_FATAL, "Killing thread #%d with SIGTERM", i );
+
+						// SIGTERM will kill the process immediately, systemd will restart us
+						pthread_kill( threadId[i], SIGTERM );
+					}
+				}
+			}
+
+			if ( bWait )
+			{
+				//tStart = time(NULL);
+				usleep( 100000 );	// 100msec
+			}
+			else
+			{
+				LogMessage( E_MSG_INFO, "All threads have exited" );
+				break;
+			}
+		}
+
+		LogMessage( E_MSG_INFO, "Calling pthread_join" );
+		for ( i = 0; i < iThreads; i++ )
 		{
-			pthread_join( threadId[i], NULL );
-			threadId[i] = 0;
-		}
+			if ( threadId[i] != 0 )
+			{
+				pthread_join( threadId[i], NULL );
+				threadId[i] = 0;
+			}
 
-		if ( myThread[i] != NULL )
+			if ( myThread[i] != NULL )
+			{
+				delete myThread[i];
+				myThread[i] = NULL;
+			}
+		}
+		LogMessage( E_MSG_INFO, "All threads terminated" );
+
+		myDevices.FreeAllContexts();
+
+		myDB.Disconnect();
+
+		if ( pidChild != 0 )
 		{
-			delete myThread[i];
-			myThread[i] = NULL;
+			kill( pidChild, SIGINT );
+			kill( pidChild, SIGHUP );
+			kill( pidChild, SIGTERM );
+			kill( pidChild, SIGKILL );
+
+			pid = waitpid( pidChild, &status, 0 );
+
+			LogMessage( E_MSG_INFO, "waitpid returned %d", pid );
 		}
-	}
-	LogMessage( E_MSG_INFO, "All threads terminated" );
-
-	myDevices.FreeAllContexts();
-
-	myDB.Disconnect();
-
-	if ( pidChild != 0 )
-	{
-	    kill( pidChild, SIGINT );
-	    kill( pidChild, SIGHUP );
-	    kill( pidChild, SIGTERM );
-	    kill( pidChild, SIGKILL );
-
-	    pid = waitpid( pidChild, &status, 0 );
-
-	    LogMessage( E_MSG_INFO, "waitpid returned %d", pid );
 	}
 
 	LogMessage( E_MSG_INFO, "Main terminating" );

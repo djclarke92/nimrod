@@ -820,8 +820,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
 		    else if ( $di_array['info_msg'] != "" )
 		        printf( "<p class='text-info'>%s</p>", $di_array['info_msg'] );
 			
-	        printf( "<div class='form-row'>" );
-	        printf( "<div class='col'>" );
+	        printf( "<div class='row'>" );
+	        printf( "<div class='col-sm-2'>" );
 	        printf( "<label for='de_Address'>Address: </label>" );
 	        printf( "</div>" );
 	        printf( "<div class='col'>" );
@@ -837,8 +837,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
 	        printf( "</div>" );
 	        printf( "</div>" );
 		        
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_IOChannel'>IO Channel: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -846,8 +846,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
 
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_IOName'>Name: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -855,8 +855,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_IOType'>IO Type: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -872,8 +872,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_StartTime'>Start Time: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -881,8 +881,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_OnPeriod'>On Period: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -890,8 +890,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_Weekdays'>Days: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col form-check-inline'>" );
@@ -905,8 +905,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_Hysteresis'>Hysteresis: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -914,8 +914,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_AnalogType'>Analog Type: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -929,7 +929,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
+    		printf( "<div class='row'>" );
     		switch ($di_array['di_IOType']) 
     		{
    		    default:
@@ -946,8 +946,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		}
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_CalcFactor'>Calc Factor: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -958,8 +958,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_Offset'>Offset Voltage: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -968,8 +968,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_MonitorPos'>Monitor Position: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -984,8 +984,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_MonitorLoHi'>Monitor Alert Range: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -995,8 +995,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='di_ValueRangeLoHi'>Graph Y Axis Range: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -1006,7 +1006,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		printf( "<div class='form-row mb-2 mt-2'>" );
+    		printf( "<div class='row mb-2 mt-2'>" );
     		printf( "<p>" );
     		printf("<input type='hidden' class='form-control' name='di_DeviceInfoNo' value='%d'>", $di_array['di_DeviceInfoNo']);
     		printf("<input type='hidden' class='form-control' name='di_DeviceNo' value='%d'>", $di_array['di_DeviceNo']);

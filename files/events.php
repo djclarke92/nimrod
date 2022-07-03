@@ -96,7 +96,7 @@ $di_list[] = array( 'di_DeviceInfoNo'=>-3, 'di_IOName'=>"User Login Attempts" );
 	<!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-9">
+		<div class="col-sm-10">
 		
 			<?php 
 			if ( $ev_array['error_msg'] != "" )
@@ -106,8 +106,8 @@ $di_list[] = array( 'di_DeviceInfoNo'=>-3, 'di_IOName'=>"User Login Attempts" );
             ?>
 		
 		
-			<div class='form-row mb-2'>
-				<div class='col'>
+			<div class='row mb-2'>
+				<div class='col-sm-1'>
 					<label for='ev_DIFilter'>Device: </label>
 				</div>
 				<div class='col'>
@@ -120,9 +120,9 @@ $di_list[] = array( 'di_DeviceInfoNo'=>-3, 'di_IOName'=>"User Login Attempts" );
 			        }
 			        ?>
 					</select>
-				</div> 
+				</div>
 
-				<div class='col'>
+				<div class='col-sm-1'>
 					<label for='ev_StartDate'>Date: </label>
 				</div>
 				<div class='col'>
@@ -130,7 +130,7 @@ $di_list[] = array( 'di_DeviceInfoNo'=>-3, 'di_IOName'=>"User Login Attempts" );
 	    			    ($ev_array['ev_StartDate'] === "" ? "" : $ev_array['ev_StartDate']) );?>
     			</div>
 
-				<div class='col'>
+				<div class='col-sm-1'>
 					<label for='ev_StartTime'>Time: </label>
 				</div>
 				<div class='col'>
@@ -138,7 +138,7 @@ $di_list[] = array( 'di_DeviceInfoNo'=>-3, 'di_IOName'=>"User Login Attempts" );
     				    ($ev_array['ev_StartTime'] === "" ? "" : $ev_array['ev_StartTime']) );?>
     			</div>
 
-				<div class='col'>
+				<div class='col-sm-1'>
 					<label for='ev_Duration'>Duration: </label>
 				</div>
 				<div class='col'>

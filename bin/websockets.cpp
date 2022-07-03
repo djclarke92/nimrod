@@ -94,7 +94,14 @@ void CLWSClient::AddMessage( const char* szMsg )
 		{
 			snprintf( (char*)&m_Data[i][LWS_SEND_BUFFER_PRE_PADDING], sizeof(m_Data[i]), "%s", szMsg );
 
-			lws_callback_on_writable_all_protocol( lws_get_context( m_Wsi[i] ), lws_get_protocol( m_Wsi[i] ) );
+			if ( lws_get_context( m_Wsi[i] ) != NULL )
+			{
+				lws_callback_on_writable_all_protocol( lws_get_context( m_Wsi[i] ), lws_get_protocol( m_Wsi[i] ) );
+			}
+			else
+			{
+				ClearClient( i );
+			}
 		}
 	}
 }
@@ -166,43 +173,64 @@ static int callback_nimrod( struct lws *wsi, enum lws_callback_reasons reason, v
 
 	switch( reason )
 	{
-		case LWS_CALLBACK_ESTABLISHED: // just log message that someone is connecting
-			LogMessage( E_MSG_INFO, "ws established: len %d %p", len, wsi );
-			myWsi.AddClient( wsi );
-	        break;
+	case LWS_CALLBACK_ESTABLISHED: // just log message that someone is connecting
+		LogMessage( E_MSG_INFO, "ws established: len %d %p", len, wsi );
+		myWsi.AddClient( wsi );
+		break;
 
-		case LWS_CALLBACK_RECEIVE:
-			LogMessage( E_MSG_INFO, "ws receive: len %d", len );
-			memcpy( &received_payload.data[LWS_SEND_BUFFER_PRE_PADDING], in, len );
-			received_payload.len = len;
-			//lws_callback_on_writable_all_protocol( lws_get_context( wsi ), lws_get_protocol( wsi ) );
-			break;
+	case LWS_CALLBACK_RECEIVE:
+		LogMessage( E_MSG_INFO, "ws receive: len %d", len );
+		memcpy( &received_payload.data[LWS_SEND_BUFFER_PRE_PADDING], in, len );
+		received_payload.len = len;
+		//lws_callback_on_writable_all_protocol( lws_get_context( wsi ), lws_get_protocol( wsi ) );
+		break;
 
-		case LWS_CALLBACK_SERVER_WRITEABLE:
+	case LWS_CALLBACK_SERVER_WRITEABLE:
 
-			idx = myWsi.FindClient( wsi );
-			if ( idx >= 0 )
+		idx = myWsi.FindClient( wsi );
+		if ( idx >= 0 )
+		{
+			uzData = myWsi.GetMessage( idx, send_len );
+			if ( uzData != NULL )
 			{
-				uzData = myWsi.GetMessage( idx, send_len );
-				if ( uzData != NULL )
-				{
-					LogMessage( E_MSG_DEBUG, "ws lws_write: len %d", send_len );
+				LogMessage( E_MSG_DEBUG, "ws lws_write: len %d", send_len );
 
-					bytes = lws_write( wsi, uzData, send_len, LWS_WRITE_TEXT );
-					if ( bytes < 0 )
-					{
-						myWsi.ClearClient(idx);
-					}
-					else
-					{
-						myWsi.ClearMessage( idx );
-					}
+				bytes = lws_write( wsi, uzData, send_len, LWS_WRITE_TEXT );
+				if ( bytes < 0 )
+				{
+					myWsi.ClearClient(idx);
+				}
+				else
+				{
+					myWsi.ClearMessage( idx );
 				}
 			}
-			break;
+		}
+		break;
 
-		default:
-			break;
+	case LWS_CALLBACK_OPENSSL_PERFORM_CLIENT_CERT_VERIFICATION:
+		LogMessage( E_MSG_INFO, "ws ClientCertValidation" );
+		break;
+
+	case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE:
+		// do nothing
+		break;
+
+	case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION:
+		// do nothing
+		break;
+
+	case LWS_CALLBACK_CLOSED:
+		idx = myWsi.FindClient( wsi );
+		if ( idx >= 0 )
+		{
+			myWsi.ClearClient( idx );
+		}
+		break;
+
+	default:
+		LogMessage( E_MSG_INFO, "ws callback %d", reason );
+		break;
 	}
 
 	return 0;
@@ -233,8 +261,21 @@ static struct lws_protocols protocols[] =
 	{ NULL, NULL, 0, 0 } /* terminator */
 };
 
+void ws_log_message( int iLvl, const char* szMsg )
+{
+	char szBuf[4096];
+
+	snprintf( szBuf, sizeof(szBuf), "%s", szMsg );
+	szBuf[strlen(szBuf)-1] = '\0';
+
+	LogMessage( E_MSG_INFO, "ws %d: %s", iLvl, szBuf );
+}
+
 void CThread::websocket_init()
 {
+	const char* pszCertFile = "/home/nimrod/nimrod-cert.pem";
+	const char* pszKeyFile = "/home/nimrod/nimrod-cert.key";
+
 	struct lws_context_creation_info info;
 	memset( &info, 0, sizeof(info) );
 
@@ -245,6 +286,11 @@ void CThread::websocket_init()
 	info.ka_time = 2;
 	info.ka_interval = 10;
 	info.ka_probes = 2;
+	info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+	info.ssl_cert_filepath = pszCertFile;
+    info.ssl_private_key_filepath = pszKeyFile;
+
+    lws_set_log_level( 0x0007, ws_log_message );
 
 	m_WSContext = lws_create_context( &info );
 

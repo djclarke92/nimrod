@@ -281,8 +281,8 @@ $devices_list = $db->ReadDevicesTable();
 		    else if ( $de_array['info_msg'] != "" )
 		        printf( "<p class='text-info'>%s</p>", $de_array['info_msg'] );
 			
-			printf( "<div class='form-row'>" ); 
-			printf( "<div class='col'>" );
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='de_ComPort'>COM Port: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -290,8 +290,8 @@ $devices_list = $db->ReadDevicesTable();
     		printf( "</div>" );
     		printf( "</div>" );
 
-    		printf( "<div class='form-row'>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<label for='de_BaudRate'>BaudRate: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -302,8 +302,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			printf( "</div>" );
   			
-  			printf( "<div class='form-row'>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='row'>" );
+  			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_Name'>Name: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
@@ -311,8 +311,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			printf( "</div>" );
   			
-  			printf( "<div class='form-row'>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='row'>" );
+  			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_Hostname'>Hostname: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
@@ -320,8 +320,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			printf( "</div>" );
   			
-  			printf( "<div class='form-row'>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='row'>" );
+  			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_Address'>Modbus Address: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
@@ -330,8 +330,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			printf( "</div>" );
   			
-  			printf( "<div class='form-row'>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='row'>" );
+  			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_NumInputs'>Num Inputs: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
@@ -339,8 +339,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			printf( "</div>" );
   			
-  			printf( "<div class='form-row'>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='row'>" );
+  			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_NumOutputs'>Num Outputs: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
@@ -348,8 +348,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			printf( "</div>" );
   			
-  			printf( "<div class='form-row'>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='row'>" );
+  			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_Type'>Device Type: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
@@ -366,11 +366,11 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			
   			
-  			printf( "<div class='form-row'>" );
+  			printf( "<div class='row'>" );
   			printf( "<p class='small'><i>COM port is 'ESP' plus chip mac address for ESP32 devices</i></p>" );
   			printf( "</div>" );
   			
-  			printf( "<div class='form-row mb-2 mt-2'>" );
+  			printf( "<div class='row mb-2 mt-2'>" );
   			printf( "<p>" );
   			printf( "<input type='hidden' class='form-control' name='de_DeviceNo' value='%d'> ", $de_array['de_DeviceNo'] );
   			printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateDevice' id='UpdateDevice' %s>Update</button> ", ($de_array['de_DeviceNo'] == 0 || func_disabled_non_user() != "" ? "disabled" : "") );

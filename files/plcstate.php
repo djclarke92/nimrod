@@ -51,13 +51,16 @@ if ( !isset($_SESSION['plc_StateName']) )
 if ( isset($_POST['ps_Operation']) )
     $_SESSION['plc_Operation'] = $_POST['ps_Operation'];
 
-if ( isset($_GET['PlcEventButtonTime']) )
+if ( isset($_GET['PlcEventButtonTime']) && isset($_GET['DeviceNo']) && isset($_GET['IOChannel']) )
 {
     $period = intval($_GET['PlcEventButtonTime']);
     if ( substr($_GET['PlcEventButtonTime'],strlen($_GET['PlcEventButtonTime'])-1,1) == 'm' )
     {   // minutes
         $period *= 60;
     }
+    
+    $device_no = $_GET['DeviceNo'];
+    $io_channel = $_GET['IOChannel'];
     
     $state_list = $db->ReadPlcStatesTable( 0, $_SESSION['plc_Operation'] );
     
@@ -73,7 +76,7 @@ if ( isset($_GET['PlcEventButtonTime']) )
     
     foreach ( $state_list as $state )
     {   // find the timer event for this state
-        if ( $state['pl_StateName'] == $state_name && $state['pl_RuleType'] == "E" && $state['pl_TimerValues'] != "" )
+        if ( $state['pl_StateName'] == $state_name && $state['pl_RuleType'] == "E" && $state['pl_TimerValues'] != "" && $state['pl_DeviceNo'] == $device_no && $state['pl_IOChannel'] == $io_channel )
         {   // found it
             $db->PlcStateChangeTimer( $_SESSION['plc_Operation'], $state['pl_NextStateName'], $period );
             
@@ -111,17 +114,19 @@ function ClickRefreshButton()
 	var refreshButton = document.getElementById("PlcStateRefresh");
 	refreshButton.click();
 }
-function onChangeTimeSelection()
+function onChangeTimeSelection( tt, de_no, ch_no )
 {
-	var sel = document.getElementById("pl_TimePeriod");
-	var btn = document.getElementById("ps_EventButtonTime");
+	var pl = "pl_TimePeriod" + tt;
+	var ps = "ps_EventButtonTime" + tt;
+	var sel = document.getElementById(pl);
+	var btn = document.getElementById(ps);
 	var pos = btn.textContent.search(":");
 	if ( pos >= 0 )
 		btn.textContent = btn.textContent.substr(0,pos+1) + " " + sel.value;
 	else
 		btn.textContent += ": " + sel.value;
 
-	var url = "?PageMode=PlcState&PlcEventButtonTime=" + sel.value;
+	var url = "?PageMode=PlcState&PlcEventButtonTime=" + sel.value + "&DeviceNo=" + de_no + "&IOChannel=" + ch_no;
 	window.location.href = url;
 }
 </script>
@@ -197,6 +202,7 @@ if ( $_SESSION['plc_Operation'] != "" )
         printf( "<p>" );
         $header = false;
         $count = 1;
+        $tt = 0;
         foreach ( $state_list as $state )
         {
             if ( $state['pl_StateName'] == $state_name && $state['pl_RuleType'] == "E" )
@@ -230,13 +236,16 @@ if ( $_SESSION['plc_Operation'] != "" )
                     {
                         $opt .= sprintf( "<option>%s</option>", $ex );
                     }
-                    $test = sprintf( "<small><select size='1' name='pl_TimePeriod' id='pl_TimePeriod' onChange='onChangeTimeSelection();'>%s</select> Time Selection</small><br>", $opt );
-                    $btnName = "ps_EventButtonTime";
+                    $test = sprintf( "<small><select size='1' name='pl_TimePeriod%d' id='pl_TimePeriod%d' onChange='onChangeTimeSelection(%d,%d,%d);'>%s</select> Time Selection</small><br>", 
+                        $tt, $tt, $tt, $state['pl_DeviceNo'], $state['pl_IOChannel'], $opt );
+                    $btnName = sprintf( "ps_EventButtonTime%d", $tt );
                     
                     if ( $delay > 100 )
-                        $name = sprintf( "%s %.1f min", $name, $delay/60 );
+                        $name = sprintf( "%s: %.1f min", $name, $delay/60 );
                     else
-                        $name = sprintf( "%s %d sec", $name, $delay );
+                        $name = sprintf( "%s: %d sec", $name, $delay );
+                    
+                    $tt += 1;
                 }
                 printf( "<td>" );
                 printf( "<p><a href='?PageMode=PlcState&PlcEventButton=%d'><button type='button' style='display: block; width: 100%%;' name='%s' id='%s'>%s</button></a></p>", 
@@ -274,4 +283,10 @@ printf( "</font>" );
 <select name='ws_list' id='ws_list' size='6' style='width: 100%;'>
 </select>
 </p>
+<?php
+if ( _SERVER['HTTPS'] != "" )
+{
+    printf( "<small>If wss is not working, browse to 'https://%s:8000' and accept the self signed certificate.</small>", $_SERVER['SERVER_ADDR'] );
+}
+?>
 

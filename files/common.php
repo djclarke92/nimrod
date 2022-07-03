@@ -2023,6 +2023,7 @@ class MySQLDB
 	    $result = $this->RunQuery( $query );
 	    if ( mysqli_affected_rows($this->db_link) == 1 )
 	    {
+	        $this->NotifyPlcStatesTableChange();
 	        return true;
 	    }
 	    
@@ -2039,7 +2040,7 @@ class MySQLDB
 	        $query = sprintf( "insert into plcstates (pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,pl_RuleType,
 	               pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues) values ('%s','%s','%s','%s','%s',%d,%d,%d,'%s','%s',%d,%d,'%s')",
 	               addslashes($op), addslashes($state_name), $state_active, $state_timestamp, $rule_type,
-	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay_time, $tvalues );
+	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay, $tvalues );
 	    }
 	    else
 	    {  // update
@@ -2148,7 +2149,7 @@ class MySQLDB
 	function PlcStateChangeTimer( $op_name, $state_name, $period )
 	{
 	    $query = sprintf( "update plcstates set pl_DelayTime=%d where pl_Operation='%s' and pl_StateName='%s' and pl_RuleType='E' and pl_DeviceNo=0 and pl_IOChannel=-1 limit 1", 
-	        $period, $op_name, $state_name );
+	        $period, addslashes($op_name), addslashes($state_name) );
 	    $result = $this->RunQuery( $query );
 	    if ( mysqli_affected_rows($this->db_link) >= 0 )
 	    {	// success
@@ -2163,7 +2164,7 @@ class MySQLDB
 	{
 	    $period = 0;
 	    $query = sprintf( "select pl_DelayTime from plcstates where pl_Operation='%s' and pl_StateName='%s' and pl_RuleType='E' and pl_DeviceNo=0 and pl_IOChannel=-1",
-	        $op_name, $state_name );
+	        addslashes($op_name), addslashes($state_name) );
 	    $result = $this->RunQuery( $query );
 	    if ( $line = mysqli_fetch_row($result) )
 	    {
@@ -2175,6 +2176,22 @@ class MySQLDB
 	    return $period;
 	}
 	
+	function CheckTimerExists( $op_name, $state_name )
+	{
+	    $exists = false;
+	    $query = sprintf( "select pl_TimerValues from plcstates where pl_Operation='%s' and pl_StateName='%s' and pl_RuleType='E' and pl_DeviceNo=0 and pl_IOChannel=-1",
+	           addslashes($op_name), addslashes($state_name) );
+	    
+        $result = $this->RunQuery( $query );
+        if ( $line = mysqli_fetch_row($result) )
+        {
+            $exists = true;
+        }
+	       
+        $this->FreeQuery($result);
+       
+        return $exists;
+	}
 	
 	
 	

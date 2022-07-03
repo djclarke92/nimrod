@@ -651,8 +651,8 @@ foreach ( $camera_list as $camera )
         printf( "<div class='row mb-2'>" );
         printf( "<div class='col-sm-8'>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_Name'>Name: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -660,8 +660,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_IPAddress'>IP Address: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -669,8 +669,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_PTZ'>PTZ Capable: </label>" );
         printf( "</div>" );
         printf( "<div class='col form-check-inline'>" );
@@ -678,8 +678,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_Encoding'>Encoding: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -691,8 +691,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_Directory'>Directory: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -700,8 +700,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_UserId'>User Id: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -709,8 +709,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_Password'>Password: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -718,8 +718,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_Password2'>Confirmation: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -727,8 +727,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_Model'>Model: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -736,8 +736,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row'>" );
-        printf( "<div class='col'>" );
+        printf( "<div class='row'>" );
+        printf( "<div class='col-sm-3'>" );
         printf( "<label for='ca_MJpeg'>MJpeg Streaming: </label>" );
         printf( "</div>" );
         printf( "<div class='col'>" );
@@ -749,8 +749,8 @@ foreach ( $camera_list as $camera )
         printf( "</div>" );
         printf( "</div>" );
         
-        printf( "<div class='form-row mb-2 mt-2'>" );
-        printf( "<p>" );
+        printf( "<div class='row mb-2 mt-2'>" );
+        printf( "<div class='col'>" );
         printf("<input type='hidden' class='form-control' name='ca_CameraNo' value='%d'>", $ca_array['ca_CameraNo']);
         
         printf("<button type='submit' class='btn btn-outline-dark' name='UpdateCamera' id='UpdateCamera' %s>Update</button>", ($ca_array['ca_CameraNo'] == 0 ? "disabled" : ""));
@@ -762,7 +762,8 @@ foreach ( $camera_list as $camera )
         printf("&nbsp;&nbsp;");
         printf("<button type='submit' class='btn btn-outline-dark' name='CancelCamera' id='CancelCamera'>Cancel</button>");
         printf( "</div>" );
-            
+        printf( "</div>" );
+        
         
         printf( "</div>" );
         printf( "</div>" ); // end of row
