@@ -30,6 +30,7 @@ function func_clear_pl_array( &$pl_array )
 	$pl_array['pl_Order'] = 0;
 	$pl_array['pl_DelayTime'] = 0;
 	$pl_array['pl_TimerValues'] = "";
+	$pl_array['pl_PrintOrder'] = 0;
 	$pl_array['error_msg'] = "";
 	$pl_array['info_msg'] = "";
 	$pl_array['state_filter'] = "";
@@ -195,6 +196,8 @@ if ( isset( $_POST['pl_DelayTime']) )
     $pl_array['pl_DelayTime'] = $_POST['pl_DelayTime'];
 if ( isset( $_POST['pl_TimerValues']) )
     $pl_array['pl_TimerValues'] = $_POST['pl_TimerValues'];
+if ( isset( $_POST['pl_PrintOrder']) )
+    $pl_array['pl_PrintOrder'] = $_POST['pl_PrintOrder'];
 if (isset($_GET['StateFilter']))
     $pl_array['state_filter'] = $_GET['StateFilter'];
 if (isset($_POST['StateFilter']))
@@ -257,6 +260,7 @@ else if ( isset($_GET['StateNo']) )
             $pl_array['pl_Order'] = $info[0]['pl_Order'];
             $pl_array['pl_DelayTime'] = $info[0]['pl_DelayTime'];
             $pl_array['pl_TimerValues'] = $info[0]['pl_TimerValues'];
+            $pl_array['pl_PrintOrder'] = $info[0]['pl_PrintOrder'];
             
             if ( strstr( $pl_array['pl_StateTimestamp'], "0000-00-00" ) != false )
                 $pl_array['pl_StateTimestamp'] = "";
@@ -294,7 +298,7 @@ else if ( isset($_POST['UpdateState']) || isset($_POST['NewState']) )
     {
         if ( $db->SavePlcState( $pl_array['pl_StateNo'], $pl_array['pl_Operation'], $pl_array['pl_StateName'], 
             $pl_array['pl_StateIsActive'], $pl_array['pl_StateTimestamp'], $pl_array['pl_RuleType'], $pl_array['pl_DeviceNo'], $pl_array['pl_IOChannel'], $pl_array['pl_Value'],
-            $pl_array['pl_Test'], $pl_array['pl_NextStateName'], $pl_array['pl_Order'], $pl_array['pl_DelayTime'], $pl_array['pl_TimerValues'] ) )
+            $pl_array['pl_Test'], $pl_array['pl_NextStateName'], $pl_array['pl_Order'], $pl_array['pl_DelayTime'], $pl_array['pl_TimerValues'], $pl_array['pl_PrintOrder'] ) )
         {	// success
             //func_clear_pl_array( $pl_array );
             
@@ -622,7 +626,7 @@ function onChangeRuleType()
     		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_RuleType'>Rule Type: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<select size='1' class='form-control custom-select' name='pl_RuleType' id='pl_RuleType' onLoad='onChangeRuleType();' onChange='onChangeRuleType();' %s>", $disabled2 );
     		printf( "<option></option>" );
     		printf( "<option %s>I. Init</option>", ($pl_array['pl_RuleType'] == "I" ? "selected" : "") );
@@ -679,7 +683,7 @@ function onChangeRuleType()
     		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_Value'>Value: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='text' class='form-control' name='pl_Value' id='pl_Value' size='6' value='%s' %s> ", $pl_array['pl_Value'], $disabled2 );
     		printf( "</div>" );
     		printf( "</div>" );
@@ -688,7 +692,7 @@ function onChangeRuleType()
     		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_Order'>Execution Order: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='text' class='form-control' name='pl_Order' id='pl_Order' size='2' value='%s' %s> ", $pl_array['pl_Order'], $disabled2 );
     		printf( "</div>" );
     		printf( "</div>" );
@@ -697,7 +701,7 @@ function onChangeRuleType()
     		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_DelayTime'>DelayTime: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='text' class='form-control' name='pl_DelayTime' id='pl_DelayTime' size='2' value='%s' %s> <i>(seconds - default timer value)</i>", $pl_array['pl_DelayTime'], $disabled2 );
     		printf( "</div>" );
     		printf( "</div>" );
@@ -715,7 +719,7 @@ function onChangeRuleType()
     		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_Test'>Operator: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<select class='form-control custom-select' name='pl_Test' id='pl_Test' size='1' %s> (only for Events)", $disabled2 );
     		printf( "<option></option>" );
     		foreach ( $_SESSION['link_tests'] as $dd )
@@ -753,6 +757,15 @@ function onChangeRuleType()
     		    }
     		}
     		printf( "</select>" );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
+    		printf( "<label for='pl_PrintOrder'>Print Order: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-2'>" );
+    		printf( "<input type='text' class='form-control' name='pl_PrintOrder' id='pl_PrintOrder' size='2' value='%s' %s> ", $pl_array['pl_PrintOrder'], $disabled );
     		printf( "</div>" );
     		printf( "</div>" );
     		

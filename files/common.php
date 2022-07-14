@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 115 );
+define( "THIS_DATABASE_VERSION", 116 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -552,7 +552,7 @@ function func_check_database( $db )
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
-            ReportDBError("Failed to alter table devices", $db->db_link );
+            ReportDBError("Failed to alter table users", $db->db_link );
         }
         
         $query = "alter table users add us_CardPin char(6) not null default ''";
@@ -560,7 +560,7 @@ function func_check_database( $db )
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
-            ReportDBError("Failed to alter table devices", $db->db_link );
+            ReportDBError("Failed to alter table users", $db->db_link );
         }
         
         $query = "alter table users add us_CardEnabled char(1) not null default 'N'";
@@ -568,7 +568,7 @@ function func_check_database( $db )
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
-            ReportDBError("Failed to alter table devices", $db->db_link );
+            ReportDBError("Failed to alter table users", $db->db_link );
         }
         
         $query = "alter table users add us_PinFailCount int(10) not null default 0";
@@ -576,7 +576,7 @@ function func_check_database( $db )
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
-            ReportDBError("Failed to alter table devices", $db->db_link );
+            ReportDBError("Failed to alter table users", $db->db_link );
         }
         
         $query = "alter table users add key us_cardnumber_index (us_CardNumber)";
@@ -584,10 +584,23 @@ function func_check_database( $db )
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
-            ReportDBError("Failed to alter table devices", $db->db_link );
+            ReportDBError("Failed to alter table users", $db->db_link );
         }
         
         $version = func_update_database_version( $db, 115 );
+    }
+
+    if ( $version === false || $version < 116 )
+    {   // we have some work to do
+        $query = "alter table plcstates add pl_PrintOrder int(10) not null default 0";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table plcstates", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 116 );
     }
     
 }
@@ -1984,21 +1997,21 @@ class MySQLDB
 	        if ( $op == "" )
 	        {  // all operations
         	    $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
-        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues  
-        	        from plcstates order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_NextStateName" );
+        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder  
+        	        from plcstates order by pl_Operation,pl_StateName,pl_RuleType desc,pl_Order,pl_NextStateName" );
 	        }
 	        else
 	        {
 	            $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
-        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues 
-        	        from plcstates where pl_Operation='%s' order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_NextStateName",
+        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder 
+        	        from plcstates where pl_Operation='%s' order by pl_Operation,pl_StateName,pl_RuleType desc,pl_Order,pl_NextStateName",
 	                addslashes($op) );
 	        }
 	    }
 	    else
 	    {
 	        $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
-    	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues
+    	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder
     	        from plcstates where pl_StateNo=%d", $state_no );
 	    }
     	    
@@ -2008,7 +2021,7 @@ class MySQLDB
 	        $info[] = array( 'pl_StateNo'=>$line[0], 'pl_Operation'=>stripslashes($line[1]), 'pl_StateName'=>stripslashes($line[2]), 
 	               'pl_StateIsActive'=>$line[3], 'pl_StateTimestamp'=>$line[4], 'pl_RuleType'=>$line[5], 'pl_DeviceNo'=>$line[6],
 	               'pl_IOChannel'=>$line[7], 'pl_Value'=>$line[8], 'pl_Test'=>$line[9], 'pl_NextStateName'=>$line[10], 'pl_Order'=>$line[11],
-	               'pl_DelayTime'=>$line[12], 'pl_TimerValues'=>$line[13] );
+	               'pl_DelayTime'=>$line[12], 'pl_TimerValues'=>$line[13], 'pl_PrintOrder'=>$line[14] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -2030,7 +2043,7 @@ class MySQLDB
 	    return false;
 	}
 	
-	function SavePlcState( $state_no, $op, $state_name, $state_active, $state_timestamp, $rule_type, $device_no, $iochannel, $value, $test, $next_state_name, $order, $delay, $tvalues )
+	function SavePlcState( $state_no, $op, $state_name, $state_active, $state_timestamp, $rule_type, $device_no, $iochannel, $value, $test, $next_state_name, $order, $delay, $tvalues, $porder )
 	{
         if ( $state_timestamp == "" )
             $state_timestamp = "0000-00-00";
@@ -2038,18 +2051,19 @@ class MySQLDB
 	    if ( $state_no == 0 )
 	    {  // insert
 	        $query = sprintf( "insert into plcstates (pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,pl_RuleType,
-	               pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues) values ('%s','%s','%s','%s','%s',%d,%d,%d,'%s','%s',%d,%d,'%s')",
+	               pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder) 
+                    values ('%s','%s','%s','%s','%s',%d,%d,%d,'%s','%s',%d,%d,'%s',%d)",
 	               addslashes($op), addslashes($state_name), $state_active, $state_timestamp, $rule_type,
-	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay, $tvalues );
+	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay, $tvalues, $porder );
 	    }
 	    else
 	    {  // update
 	        $query = sprintf( "update plcstates set pl_Operation='%s',pl_StateName='%s',pl_StateIsActive='%s',
 	               pl_StateTimestamp='%s',pl_RuleType='%s',pl_DeviceNo=%d,pl_IOChannel=%d,pl_Value=%d,pl_Test='%s',pl_NextStateName='%s',pl_Order=%d,
-                   pl_DelayTime=%d,pl_TimerValues='%s'   
+                   pl_DelayTime=%d,pl_TimerValues='%s',pl_PrintOrder=%d   
 	               where pl_StateNo=%d",
 	               addslashes($op), addslashes($state_name), $state_active, $state_timestamp, $rule_type, $device_no, $iochannel,
-	               $value, $test, addslashes($next_state_name), $order, $delay, $tvalues,   
+	               $value, $test, addslashes($next_state_name), $order, $delay, $tvalues, $porder,   
 	               $state_no );	        
 	    }
 	    

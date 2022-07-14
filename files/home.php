@@ -413,8 +413,6 @@ foreach ( $camera_list as $camera )
 }
 
 
-//<input type='checkbox' class='form-control' style='margin: -10px 0px 0px 0px;' id='RefreshEnabled'>
-
 ?>
 
 

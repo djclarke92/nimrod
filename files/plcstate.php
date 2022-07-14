@@ -19,7 +19,7 @@ function func_find_deviceinfo_name( $di_list, $device_no, $iochannel, $rule_type
     $name = sprintf( "(%d,%d)", $device_no, $iochannel+1 );
     if ( $device_no == 0 && $iochannel == -1 )
     {   // immediate timer
-        $name = sprintf( "Immediate" );
+        $name = sprintf( "Timer" );
     }
     else
     {
@@ -41,6 +41,7 @@ function func_find_deviceinfo_name( $di_list, $device_no, $iochannel, $rule_type
     return $name;
 }
 
+$print_op = false;
 
 if ( !isset($_SESSION['plc_Operation']) )
     $_SESSION['plc_Operation'] = "";
@@ -51,7 +52,11 @@ if ( !isset($_SESSION['plc_StateName']) )
 if ( isset($_POST['ps_Operation']) )
     $_SESSION['plc_Operation'] = $_POST['ps_Operation'];
 
-if ( isset($_GET['PlcEventButtonTime']) && isset($_GET['DeviceNo']) && isset($_GET['IOChannel']) )
+if ( isset($_GET['PrintOperation']) )
+{
+    $print_op = true;
+}
+else if ( isset($_GET['PlcEventButtonTime']) && isset($_GET['DeviceNo']) && isset($_GET['IOChannel']) )
 {
     $period = intval($_GET['PlcEventButtonTime']);
     if ( substr($_GET['PlcEventButtonTime'],strlen($_GET['PlcEventButtonTime'])-1,1) == 'm' )
@@ -134,7 +139,7 @@ function onChangeTimeSelection( tt, de_no, ch_no )
 
 printf( "<font size='4'>" );
 
-printf( "<table border='1'>" );
+printf( "<table border='1' width='50%%'>" );
 
 printf( "<tr><td>&nbsp;</td></tr>" );
 
@@ -284,9 +289,114 @@ printf( "</font>" );
 </select>
 </p>
 <?php
-if ( _SERVER['HTTPS'] != "" )
+if ( $_SERVER['HTTPS'] != "" )
 {
     printf( "<small>If wss is not working, browse to 'https://%s:8000' and accept the self signed certificate.</small>", $_SERVER['SERVER_ADDR'] );
+}
+if ( $_SESSION['plc_Operation'] != "" )
+{
+    printf( "<br><a href='?PageMode=PlcState&PrintOperation=1'><button type='button' class='btn btn-info'>Print</button></a><br>" );
+}
+
+if ( $print_op )
+{
+    $state_order = array();
+    foreach ( $state_list as $state )
+    {
+        if ( $state['pl_RuleType'] == "" )
+        {
+            $state_order[] = array( 'pl_PrintOrder'=>$state['pl_PrintOrder'], 'pl_StateName'=>$state['pl_StateName'] );
+        }
+    }
+    sort( $state_order );
+    
+    $tt = getdate();
+    printf( "<h3>Operation: %s&nbsp;&nbsp;&nbsp;<small>%02d/%02d/%d %02d:%02d</small></h3>", $_SESSION['plc_Operation'], $tt['mday'], $tt['mon'], $tt['year'], $tt['hours'], $tt['minutes'] );
+    
+    printf( "<table border='1' width='100%%'>" );
+    
+    printf( "<thead>" );
+    printf( "<tr>" );
+    printf( "<th>State Name</th>" );
+    printf( "<th>Rule Type</th>" );
+    printf( "<th>Device/Name</th>" );
+    printf( "<th>Next State</th>" );
+    printf( "<th>Value</th>" );
+    printf( "<th>Delay</th>" );
+    printf( "<th>Timer Values</th>" );
+    printf( "<th>Test</th>" );
+    printf( "</tr>" );
+    printf( "</thead>" );
+    
+    $printed = false;
+    $last_state = "";
+    foreach ( $state_order as $order )
+    {
+        foreach ( $state_list as $state )
+        {
+            if ( $order['pl_StateName'] != $state['pl_StateName'] )
+                continue;
+            
+            if ( $last_state != "" && $last_state != $state['pl_StateName'] )
+            {
+                printf( "<tr><td>&nbsp;</td></tr>" );  
+                $printed = false;
+            }
+            $last_state = $state['pl_StateName'];
+      
+            $name = func_find_deviceinfo_name( $di_list, $state['pl_DeviceNo'], $state['pl_IOChannel'], $state['pl_RuleType'] );
+            printf( "<tr>" );
+            if ( $state['pl_RuleType'] == "" )
+            {
+                //printf( "<td><b>%s</b></td>", $state['pl_StateName'] );
+            }
+            else 
+            {
+                if ( $state['pl_RuleType'] == "E" )
+                {   // event
+                    if ( !$printed )
+                    {
+                        $printed = true;
+                        printf( "<td><b>%s</b></td>", $state['pl_StateName'] );
+                    }
+                    else
+                    {
+                        printf( "<td></td>" );
+                    }
+                    printf( "<td>E</td>" );
+                    printf( "<td>%s</td>", $name );
+                    printf( "<td><b>%s</b></td>", $state['pl_NextStateName'] );
+                }    
+                else
+                {   // initial
+                    if ( !$printed )
+                    {
+                        $printed = true;
+                        printf( "<td><b>%s</b></td>", $state['pl_StateName'] );
+                    }
+                    else
+                    {
+                        printf( "<td></td>" );
+                    }
+                    printf( "<td>I</td>" );
+                    printf( "<td>%s</td>", $name );
+                    printf( "<td></td>" );
+                    
+                }
+                if ( $state['pl_RuleType'] == "E" && $state['pl_Test'] == "" )
+                    printf( "<th></th>" );
+                else
+                    printf( "<th>%.1f</th>", $state['pl_Value'] );
+                printf( "<th>%s</th>", ($state['pl_DelayTime'] == 0 ? "" : $state['pl_DelayTime']) );
+                printf( "<th>%s</th>", $state['pl_TimerValues'] );
+                printf( "<th>%s</th>", $state['pl_Test'] );
+            }
+            
+            printf( "</tr>" );
+        }
+    }
+    
+    printf( "</table>" );
 }
 ?>
 
