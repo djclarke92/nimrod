@@ -23,6 +23,9 @@
 #define CARD_READER_PIN_TIMEOUT				10		// seconds
 
 
+const double TimeNowMS();
+
+
 enum E_LOCK_TYPES {
 	E_LT_LOGGING = 0,
 	E_LT_MODBUS,
@@ -49,7 +52,7 @@ private:
 	char m_szOperation[51];
 	char m_szStateName[51];
 	char m_szStateIsActive[2];
-	time_t m_tStateTimestamp;
+	double m_dStateTimestampMS;
 	char m_szRuleType[2];
 	int m_iDeviceNo;
 	int m_iIOChannel;
@@ -57,7 +60,7 @@ private:
 	char m_szTest[6];
 	char m_szNextStateName[51];
 	int m_iOrder;
-	int m_iDelayTime;
+	double m_dDelayTime;
 	char m_szTimerValues[51];
 
 public:
@@ -69,7 +72,7 @@ public:
 	const char* GetOperation(){ return m_szOperation; }
 	const char* GetStateName(){ return m_szStateName; }
 	const bool GetStateIsActive(){ return (m_szStateIsActive[0] == 'Y' ? true : false); }
-	const time_t GetStateTimestamp(){ return m_tStateTimestamp; }
+	const double GetStateTimestampMS(){ return m_dStateTimestampMS; }
 	const char* GetRuleType(){ return m_szRuleType; }
 	const int GetDeviceNo(){ return m_iDeviceNo; }
 	const int GetIOChannel(){ return m_iIOChannel; }
@@ -77,14 +80,14 @@ public:
 	const char* GetTest(){ return m_szTest; }
 	const char* GetNextStateName(){ return m_szNextStateName; }
 	const int GetOrder(){ return m_iOrder; }
-	const int GetDelayTime(){ return m_iDelayTime; }
+	const double GetDelayTime(){ return m_dDelayTime; }
 	const char* GetTimerValues(){ return m_szTimerValues; }
 
 	void SetStateNo( const int iStateNo );
 	void SetOperation( const char* szOperation );
 	void SetStateName( const char* szStateName );
 	void SetStateIsActive( const char* szActive );
-	void SetStateTimestamp( const time_t ts );
+	void SetStateTimestampMS( const double dTimenowMS );
 	void SetRuleType( const char* szRuleType );
 	void SetDeviceNo( const int iDeviceNo );
 	void SetIOChannel( const int iIOChannel );
@@ -92,7 +95,7 @@ public:
 	void SetTest( const char* szTest );
 	void SetNextStateName( const char* szNextStateName );
 	void SetOrder( const int iOrder );
-	void SetDelayTime( const int iDelayTime );
+	void SetDelayTime( const double dDelayTime );
 	void SetTimerValues( const char* szTimerValues );
 };
 
@@ -124,7 +127,7 @@ public:
 	const bool FindInputDevice( const int iDeviceNo, const int iIOChannel );
 	void AddInputEvent( const int iDeviceNo, const int iIOChannel, const double dValue );
 	const int ReadInputEvent( int& iDeviceNo, int& iIOChannel, double& dValue );
-	void SetNextStateActive( const int idx, const time_t tTimenow );
+	void SetNextStateActive( const int idx, const double dTimenowMS );
 	const int GetNextStateIdx( const char* szOperation, const char* szNextStateName );
 
 };
@@ -208,7 +211,8 @@ private:
 	char m_szClientEspName[MAX_TCPIP_SOCKETS][MAX_DEVICE_NAME_LEN+1];
 	time_t m_tClientLastMsg[MAX_TCPIP_SOCKETS];
 	time_t m_tConfigTime;
-	time_t m_tPlcStatesTime;
+	time_t m_tPlcStatesTimeAll;
+	time_t m_tPlcStatesTimeDelayTime;
 	time_t m_tLastConfigCheck;
 	time_t m_tLastPlcStatesCheck;
 	time_t m_tLastCameraSnapshot;
@@ -264,7 +268,8 @@ public:
 	void HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDead );
 	void GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList );
 	void ReadCameraRecords( CMysql& myDB, CCameraList& CameraList );
-	void ReadPlcStatesTable( CMysql& myDB, CPlcStates* pmyPlcStates );
+	void ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pmyPlcStates );
+	void ReadPlcStatesTableDelayTime( CMysql& myDB, CPlcStates* pmyPlcStates );
 	void ProcessPlcStates( CMysql& myDB, CPlcStates* pmyPlcStates );
 	void ProcessTemperatureData( CMysql& myDB, const int idx, const int i );
 	void ProcessEspTemperatureEvent( CMysql& myDB, const char* szEspName, const int iChannel, const double dValue );

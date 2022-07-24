@@ -74,6 +74,7 @@ create TABLE IF NOT EXISTS `iolinks` (
 # ev_DeviceNo=-3: user login attempt
 # ev_DeviceNo=-4: plcstate table changed
 # ev_DeviceNo=-5: plcstate screen button event
+# ev_DeviceNo=-6: plcstate DelayTime change event
 # ev_DeviceNo=-10xx: device channel click event
 create TABLE IF NOT EXISTS `events` (
 	`ev_EventNo` int(10) unsigned NOT NULL auto_increment,		# unique record number
@@ -145,9 +146,11 @@ create table IF NOT EXISTS `plcstates` (
 	`pl_Test` varchar(5) NOT NULL default '',						# LT, GT, LE, GE, EQ, NE
 	`pl_NextStateName` varchar(50) NOT NULL default "",				# link to the next state
 	`pl_Order` int(10) NOT NULL default 0,							# optional execution order
-	`pl_DelayTime` int(10) NOT NULL default 0,						# time delay in seconds to ignore the event
+	`pl_DelayTime` decimal(8,2) NOT NULL default 0,					# time delay in seconds to ignore the event
 	`pl_TimerValues` varchar(50) NOT NULL default '',				# comma separated list of timer values, e.g. 10s,30s,2m
 	`pl_PrintOrder` int(10) NOT NULL default 0,						# print ordering
+	`pl_DelayKey` varchar(20) NOT NULL default '',					# key for updating DelayTime for multiple records
+	`pl_InitialState` char(1) NOT NULL default 'N',					# this is the starting state
 	PRIMARY KEY (`pl_StateNo`),
 	KEY `pl_statename_index` (`pl_StateName`)
 ) ;

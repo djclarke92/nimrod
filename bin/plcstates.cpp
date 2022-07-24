@@ -51,7 +51,7 @@ void CPlcState::Init()
 	m_szOperation[0] = '\0';
 	m_szStateName[0] = '\0';
 	m_szStateIsActive[0] = '\0';
-	m_tStateTimestamp = 0;
+	m_dStateTimestampMS = 0;
 	m_szRuleType[0] = '\0';
 	m_iDeviceNo = 0;
 	m_iIOChannel = 0;
@@ -59,7 +59,7 @@ void CPlcState::Init()
 	m_szTest[0] = '\0';
 	m_szNextStateName[0] = '\0';
 	m_iOrder = 0;
-	m_iDelayTime = 0;
+	m_dDelayTime = 0;
 	m_szTimerValues[0] = '\0';
 }
 
@@ -83,9 +83,9 @@ void CPlcState::SetStateIsActive( const char* szActive )
 	snprintf( m_szStateIsActive, sizeof(m_szStateIsActive), "%s", szActive );
 }
 
-void CPlcState::SetStateTimestamp( const time_t ts )
+void CPlcState::SetStateTimestampMS( const double dTimenowMS )
 {
-	m_tStateTimestamp = ts;
+	m_dStateTimestampMS = dTimenowMS;
 }
 
 void CPlcState::SetRuleType( const char* szRuleType )
@@ -123,9 +123,9 @@ void CPlcState::SetOrder( const int iOrder )
 	m_iOrder = iOrder;
 }
 
-void CPlcState::SetDelayTime( const int iDelayTime )
+void CPlcState::SetDelayTime( const double dDelayTime )
 {
-	m_iDelayTime = iDelayTime;
+	m_dDelayTime = dDelayTime;
 }
 
 void CPlcState::SetTimerValues( const char* szTimerValues )
@@ -362,7 +362,7 @@ const int CPlcStates::ReadInputEvent( int& iDeviceNo, int& iIOChannel, double& d
 	return iStateNo;
 }
 
-void CPlcStates::SetNextStateActive( const int idx, const time_t tTimenow )
+void CPlcStates::SetNextStateActive( const int idx, const double dTimenowMS )
 {
 	int i;
 
@@ -376,7 +376,7 @@ void CPlcStates::SetNextStateActive( const int idx, const time_t tTimenow )
 					m_State[i].GetRuleType()[0] == '\0' )
 			{
 				m_State[i].SetStateIsActive("Y");
-				m_State[i].SetStateTimestamp( tTimenow );
+				m_State[i].SetStateTimestampMS( dTimenowMS );
 				m_iActiveStateIdx = i;
 				break;
 			}

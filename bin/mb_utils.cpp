@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <time.h>
+#include <math.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <termios.h>
@@ -29,6 +30,24 @@ char gszLogDir[256] = {""};
 char gszProgName[256] = {""};
 char gszTarFileName[256] = {""};
 
+
+const double TimeNowMS()
+{
+	long            ms; // Milliseconds
+	time_t          s;  // Seconds
+	struct timespec spec;
+
+	clock_gettime(CLOCK_REALTIME, &spec);
+
+	s  = spec.tv_sec;
+	ms = round((double)spec.tv_nsec / 1.0e6); // Convert nanoseconds to milliseconds
+	if (ms > 999) {
+	    s++;
+	    ms = 0;
+	}
+
+	return (double)(s + ((double)ms/1000));
+}
 
 void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... )
 {
@@ -71,10 +90,14 @@ void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... )
 		break;
 	}
 
+	struct timespec spec;
+    clock_gettime(CLOCK_REALTIME, &spec);
+    int ms = spec.tv_nsec / 1.0e6;
+
 	timenow = time(NULL);
 	tmptr = localtime( &timenow );
-	snprintf( szBuf, sizeof(szBuf), "%d%02d%02d-%02d%02d%02d %-5s: ", tmptr->tm_year+1900, tmptr->tm_mon+1, tmptr->tm_mday,
-			tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec, szClass );
+	snprintf( szBuf, sizeof(szBuf), "%d%02d%02d-%02d%02d%02d.%03d %-5s: ", tmptr->tm_year+1900, tmptr->tm_mon+1, tmptr->tm_mday,
+			tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec, ms, szClass );
 
 	va_start( args, fmt );
 

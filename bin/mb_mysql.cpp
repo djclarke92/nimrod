@@ -234,13 +234,33 @@ time_t CMysql::ReadConfigUpdateTime()
 	return tUpdated;
 }
 
-time_t CMysql::ReadPlcStatesUpdateTime()
+time_t CMysql::ReadPlcStatesUpdateTimeAll()
 {
 	time_t tUpdated = 0;
 	int iNumFields;
 	MYSQL_ROW row;
 
 	if ( RunQuery( "select unix_timestamp(ev_Timestamp) from events where ev_DeviceNo=-4" ) != 0 )
+	{	// error
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+	else if ( (row = FetchRow( iNumFields )) )
+	{
+		tUpdated = atol( (const char*)row[0] );
+	}
+
+	FreeResult();
+
+	return tUpdated;
+}
+
+time_t CMysql::ReadPlcStatesUpdateTimeDelayTime()
+{
+	time_t tUpdated = 0;
+	int iNumFields;
+	MYSQL_ROW row;
+
+	if ( RunQuery( "select unix_timestamp(ev_Timestamp) from events where ev_DeviceNo=-6" ) != 0 )
 	{	// error
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
 	}

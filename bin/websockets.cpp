@@ -20,6 +20,7 @@ struct payload
 #define MAX_LWS_CLIENTS	10
 class CLWSClient {
 private:
+	bool bRefreshMissed;
 	struct lws *m_Wsi[MAX_LWS_CLIENTS];
 	unsigned char m_Data[MAX_LWS_CLIENTS][LWS_SEND_BUFFER_PRE_PADDING + NIMROD_RX_BUFFER_BYTES + LWS_SEND_BUFFER_POST_PADDING];
 
@@ -48,6 +49,7 @@ CLWSClient::~CLWSClient()
 
 void CLWSClient::Init()
 {
+	bRefreshMissed = false;
 	for ( int i = 0; i < MAX_LWS_CLIENTS; i++ )
 	{
 		m_Wsi[i] = NULL;
@@ -84,10 +86,18 @@ void CLWSClient::AddClient( struct lws* wsi )
 	{
 		LogMessage( E_MSG_WARN, "WS failed to add client, no more slots" );
 	}
+	else if ( bRefreshMissed )
+	{
+		LogMessage( E_MSG_INFO, "ws missed refresh");
+		bRefreshMissed = false;
+		AddMessage( "Refresh" );
+	}
 }
 
 void CLWSClient::AddMessage( const char* szMsg )
 {
+	bool bAdded = false;
+
 	for ( int i = 0; i < MAX_LWS_CLIENTS; i++ )
 	{
 		if ( m_Wsi[i] != NULL )
@@ -97,12 +107,24 @@ void CLWSClient::AddMessage( const char* szMsg )
 			if ( lws_get_context( m_Wsi[i] ) != NULL )
 			{
 				lws_callback_on_writable_all_protocol( lws_get_context( m_Wsi[i] ), lws_get_protocol( m_Wsi[i] ) );
+				bAdded = true;
 			}
 			else
 			{
 				ClearClient( i );
 			}
 		}
+	}
+
+	if ( strcmp( szMsg, "Refresh" ) == 0 )
+	{
+		if ( !bAdded )
+		{
+			bRefreshMissed = true;
+			//LogMessage( E_MSG_INFO, "ws send refresh again");
+		}
+		else
+			bRefreshMissed = false;
 	}
 }
 
@@ -268,7 +290,7 @@ void ws_log_message( int iLvl, const char* szMsg )
 	snprintf( szBuf, sizeof(szBuf), "%s", szMsg );
 	szBuf[strlen(szBuf)-1] = '\0';
 
-	LogMessage( E_MSG_INFO, "ws %d: %s", iLvl, szBuf );
+//	LogMessage( E_MSG_INFO, "ws %d: %s", iLvl, szBuf );
 }
 
 void CThread::websocket_init()

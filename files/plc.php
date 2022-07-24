@@ -28,9 +28,11 @@ function func_clear_pl_array( &$pl_array )
 	$pl_array['pl_Test'] = "";
 	$pl_array['pl_NextStateName'] = "";
 	$pl_array['pl_Order'] = 0;
-	$pl_array['pl_DelayTime'] = 0;
+	$pl_array['pl_DelayTime'] = 0.0;
 	$pl_array['pl_TimerValues'] = "";
 	$pl_array['pl_PrintOrder'] = 0;
+	$pl_array['pl_DelayKey'] = "";
+	$pl_array['pl_InitialState'] = "N";
 	$pl_array['error_msg'] = "";
 	$pl_array['info_msg'] = "";
 	$pl_array['state_filter'] = "";
@@ -88,9 +90,9 @@ function func_check_pl_array( &$pl_array, $marker, $next_marker )
 	    $pl_array['error_msg'] = "The input/output device must be selected for Init or Event rules.";
 	    return false;
 	}
-	else if ( $pl_array['pl_RuleType'] == "E" && $pl_array['pl_NextStateName'] == "" )
+	else if ( $pl_array['pl_RuleType'] == "E" && $pl_array['pl_NextStateName'] == "" && $pl_array['pl_Test'] == "" )
 	{
-	    $pl_array['error_msg'] = "The Next State Name must be entered for Event rules.";
+	    $pl_array['error_msg'] = "The Next State Name must be entered for Event rules without an Operator condition.";
 	    return false;
 	}
 	else if ( $next_marker == false && $pl_array['pl_NextStateName'] != "" )
@@ -198,6 +200,10 @@ if ( isset( $_POST['pl_TimerValues']) )
     $pl_array['pl_TimerValues'] = $_POST['pl_TimerValues'];
 if ( isset( $_POST['pl_PrintOrder']) )
     $pl_array['pl_PrintOrder'] = $_POST['pl_PrintOrder'];
+if ( isset( $_POST['pl_DelayKey']) )
+    $pl_array['pl_DelayKey'] = $_POST['pl_DelayKey'];
+if ( isset( $_POST['pl_InitialState']) )
+    $pl_array['pl_InitialState'] = "Y";
 if (isset($_GET['StateFilter']))
     $pl_array['state_filter'] = $_GET['StateFilter'];
 if (isset($_POST['StateFilter']))
@@ -261,6 +267,8 @@ else if ( isset($_GET['StateNo']) )
             $pl_array['pl_DelayTime'] = $info[0]['pl_DelayTime'];
             $pl_array['pl_TimerValues'] = $info[0]['pl_TimerValues'];
             $pl_array['pl_PrintOrder'] = $info[0]['pl_PrintOrder'];
+            $pl_array['pl_DelayKey'] = $info[0]['pl_DelayKey'];
+            $pl_array['pl_InitiaState'] = $info[0]['pl_InitialState'];
             
             if ( strstr( $pl_array['pl_StateTimestamp'], "0000-00-00" ) != false )
                 $pl_array['pl_StateTimestamp'] = "";
@@ -296,9 +304,10 @@ else if ( isset($_POST['UpdateState']) || isset($_POST['NewState']) )
     }
     else if ( func_check_pl_array( $pl_array, $marker, $next_marker ) )
     {
-        if ( $db->SavePlcState( $pl_array['pl_StateNo'], $pl_array['pl_Operation'], $pl_array['pl_StateName'], 
+        if ( $db->SavePlcState( true, $pl_array['pl_StateNo'], $pl_array['pl_Operation'], $pl_array['pl_StateName'], 
             $pl_array['pl_StateIsActive'], $pl_array['pl_StateTimestamp'], $pl_array['pl_RuleType'], $pl_array['pl_DeviceNo'], $pl_array['pl_IOChannel'], $pl_array['pl_Value'],
-            $pl_array['pl_Test'], $pl_array['pl_NextStateName'], $pl_array['pl_Order'], $pl_array['pl_DelayTime'], $pl_array['pl_TimerValues'], $pl_array['pl_PrintOrder'] ) )
+            $pl_array['pl_Test'], $pl_array['pl_NextStateName'], $pl_array['pl_Order'], $pl_array['pl_DelayTime'], $pl_array['pl_TimerValues'], $pl_array['pl_PrintOrder'],
+            $pl_array['pl_DelayKey'], $pl_array['pl_InitialState']) )
         {	// success
             //func_clear_pl_array( $pl_array );
             
@@ -320,7 +329,7 @@ else if ( isset($_POST['DeleteState']) )
     {
         if ( $info[0]['pl_RuleType'] != "" )
         {   // delete this rule detail record
-            if ( $db->DeletePlcStateRecord( $state_no ) )
+            if ( $db->DeletePlcStateRecord( true, $state_no ) )
             {
                 $pl_array['info_msg'] = sprintf( "Successfully delete the rule detail plcstate record" );
             }
@@ -336,7 +345,7 @@ else if ( isset($_POST['DeleteState']) )
             $count = $db->CountOperationStateName( $info[0]['pl_Operation'], $info[0]['pl_StateName'] );
             if ( $count == 1 )
             {
-                if ( $db->DeletePlcStateRecord( $state_no ) )
+                if ( $db->DeletePlcStateRecord( true, $state_no ) )
                 {
                     $pl_array['info_msg'] = sprintf( "Successfully deleted the marker plcstate record" );
                 }
@@ -485,6 +494,7 @@ function onChangeRuleType()
               <th>Delay</th>
               <th>Timer Values</th>
               <th>Operator</th>
+              <th>Delay Key</th>
             </thead>
 
             <?php
@@ -537,13 +547,15 @@ function onChangeRuleType()
                 
                 printf( "<td>%s</td>", sprintf( "%.1f", $state['pl_Value']) );
                 
-                printf( "<td>%s</td>", ($state['pl_StateIsActive'] == "Y" ? "Yes" : "") );
+                printf( "<td>%s %s</td>", ($state['pl_StateIsActive'] == "Y" ? "Yes" : ""), ($state['pl_InitialState'] == "Y" ? "Init" : "") );
                 
-                printf( "<td>%s</td>", (intval($state['pl_DelayTime']) != 0 ? $state['pl_DelayTime'] : "") );
+                printf( "<td>%s</td>", (floatval($state['pl_DelayTime']) != 0 ? sprintf("%.1f",floatval($state['pl_DelayTime'])) : "") );
                 
                 printf( "<td>%s</td>", $state['pl_TimerValues'] );
                 
                 printf( "<td>%s</td>", $state['pl_Test'] );
+                
+                printf( "<td>%s</td>", $state['pl_DelayKey'] );
                 
                 printf( "<tr>" );
             }
@@ -590,7 +602,7 @@ function onChangeRuleType()
 			printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_Operation'>Operation: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-4'>" );
     		$op = $pl_array['pl_Operation'];
     		if ( $op == "" && $pl_array['op_filter'] != "" )
     		    $op = $pl_array['op_filter'];
@@ -602,7 +614,7 @@ function onChangeRuleType()
     		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_StateName'>State Name: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-4'>" );
     		$state_name = $pl_array['pl_StateName'];
     		if ( $state_name == "" && $pl_array['state_filter'] != "" )
     		    $state_name = $pl_array['state_filter'];
@@ -613,12 +625,20 @@ function onChangeRuleType()
     		printf( "<div class='row'>" );
     		printf( "<div class='col-sm-2'>" );
     		printf( "</div>" );
-    		printf( "<div class='col form-check'>" );
+    		printf( "<div class='col-sm-2 form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='pl_StateIsActive' id='pl_StateIsActive' %s %s %s>", ($pl_array['pl_StateIsActive'] == "Y" ? "checked" : ""), $disabled,
     		    ($pl_array['pl_StateIsActive'] == "Y" ? "disabled" : "") );
     		printf( "State Is Active</label>" );
-    		printf ( "&nbsp;&nbsp;&nbsp;Timestamp: %s",  $pl_array['pl_StateTimestamp'] );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-2 form-check'>" );
+    		printf( "<label class='form-check-label'>" );
+    		printf( "<input type='checkbox' class='form-check-input' name='pl_InitialState' id='pl_InitialState' %s %s %s>", ($pl_array['pl_InitialState'] == "Y" ? "checked" : ""), $disabled,
+    		    ($pl_array['pl_InitialState'] == "Y" ? "disabled" : "") );
+    		printf( "Initial State</label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf ( "Timestamp: %s",  $pl_array['pl_StateTimestamp'] );
     		printf( "</div>" );
     		printf( "</div>" );
 
@@ -702,7 +722,10 @@ function onChangeRuleType()
     		printf( "<label for='pl_DelayTime'>DelayTime: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-2'>" );
-    		printf( "<input type='text' class='form-control' name='pl_DelayTime' id='pl_DelayTime' size='2' value='%s' %s> <i>(seconds - default timer value)</i>", $pl_array['pl_DelayTime'], $disabled2 );
+    		printf( "<input type='text' class='form-control' name='pl_DelayTime' id='pl_DelayTime' size='2' value='%s' %s>", ($pl_array['pl_DelayTime'] != "" ? sprintf("%.1f",$pl_array['pl_DelayTime']) : ""), $disabled2 );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "<i>(X.Y seconds - default timer value)</i>" );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -710,8 +733,11 @@ function onChangeRuleType()
     		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_TimerValues'>Timer Values: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='pl_TimerValues' id='pl_TimerValues' size='16' value='%s' %s> <i>(only for Events)</i>", $pl_array['pl_TimerValues'], $disabled2 );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "<input type='text' class='form-control' name='pl_TimerValues' id='pl_TimerValues' size='16' value='%s' %s>", $pl_array['pl_TimerValues'], $disabled2 );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-5'>" );
+    		printf( "<i>(only for Events, data range for Delay Keys)</i>" );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -729,11 +755,14 @@ function onChangeRuleType()
     		        $sel = "selected";
    		        printf( "<option %s>%s</option>", $sel, $dd );
     		}
-    		printf( "</select> <i>(only for pre-condition Events - failure definition)</i>" );
+    		printf( "</select>" );
     		if ( strstr( $pl_array['pl_Test'], "/" ) !== false )
     		{
     		    printf( " (Invert State)" );
     		}
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-6'>" );
+    		printf( "<i>(pre-condition Events - failure definition - leave the Next State Name blank)</i>" );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -741,7 +770,7 @@ function onChangeRuleType()
     		printf( "<div class='col-sm-2'>" );
     		printf( "<label for='pl_NextStateName'>Next State Name: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-4'>" );
     		printf( "<select class='form-control custom-select' name='pl_NextStateName' id='pl_NextStateName' size='1' %s>", $disabled2 );
     		printf( "<option></option>" );
     		$state_name = "";
@@ -758,6 +787,9 @@ function onChangeRuleType()
     		}
     		printf( "</select>" );
     		printf( "</div>" );
+    		printf( "<div class='col-sm-5'>" );
+    		printf( "<i>(only for Events, optional if an Operator is selected)</i>");
+    		printf( "</div>" );
     		printf( "</div>" );
     		
     		printf( "<div class='row'>" );
@@ -769,19 +801,30 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "</div>" );
     		
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-2'>" );
+    		printf( "<label for='pl_DelayKey'>Delay Key: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-4'>" );
+    		printf( "<input type='text' class='form-control' name='pl_DelayKey' id='pl_DelayKey' size='20' value='%s' %s> ", $pl_array['pl_DelayKey'], $disabled2 );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
     		printf( "<div class='row mb-2 mt-2'>" );
     		printf( "<div class='col'>" );
     		printf( "<input type='hidden' name='pl_StateNo' value='%d'>", $pl_array['pl_StateNo'] );
     		printf( "<input type='hidden' name='pl_StateTimestamp' value='%s'>", $pl_array['pl_StateTimestamp'] );
     		printf( "<input type='hidden' name='StateFilter' value='%s'>", $pl_array['state_filter'] );
     		printf( "<input type='hidden' name='OpFilter' value='%s'>", $pl_array['op_filter'] );
-    		printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateState' id='UpdateState' value='Update' %s>Update</button>", ($pl_array['pl_StateNo'] == 0 ? "disabled" : "") );
+    		printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateState' id='UpdateState' value='Update' %s>Update</button>", 
+    		    ($pl_array['pl_StateNo'] == 0 || $_SESSION['plc_Operation'] != '' ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;&nbsp;" );
-    		printf( "<button type='submit' class='btn btn-outline-dark' name='NewState' id='NewState' value='New' %s>New</button>", ($pl_array['pl_StateNo'] != 0 || func_disabled_non_admin() ? "disabled" : "") );
+    		printf( "<button type='submit' class='btn btn-outline-dark' name='NewState' id='NewState' value='New' %s>New</button>", 
+    		    ($pl_array['pl_StateNo'] != 0 || $_SESSION['plc_Operation'] != '' || func_disabled_non_admin() ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;&nbsp;" );
     		$onclick = sprintf( "return confirm(\"Are you sure you want to delete this state record ?\")" );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='DeleteState' id='DeleteState' value='Delete' onclick='%s' %s>Delete</button>", $onclick,
-    		    ($pl_array['pl_StateNo'] == "" || func_disabled_non_admin() != "" ? "disabled" : "") );
+    		    ($pl_array['pl_StateNo'] == "" || $_SESSION['plc_Operation'] != '' || func_disabled_non_admin() != "" ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;&nbsp;" );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='ClearState' id='ClearState' value='Clear'>Clear</button>" );
     		printf( "</div>" );

@@ -42,6 +42,12 @@ function func_find_deviceinfo_name( $di_list, $device_no, $iochannel, $rule_type
 }
 
 $print_op = false;
+$delay_key = "";
+$delay_value = "";
+$delay_msg = "";
+$new_operation = "";
+$newop_msg = "";
+$delete_password = "";
 
 if ( !isset($_SESSION['plc_Operation']) )
     $_SESSION['plc_Operation'] = "";
@@ -51,10 +57,144 @@ if ( !isset($_SESSION['plc_StateName']) )
     
 if ( isset($_POST['ps_Operation']) )
     $_SESSION['plc_Operation'] = $_POST['ps_Operation'];
-
+if ( isset($_POST['PlcDelayKeys']) )
+    $delay_key = $_POST['PlcDelayKeys'];
+if ( isset($_POST['PlcDelayValue']) )
+    $delay_value = $_POST['PlcDelayValue'];
+if ( isset($_POST['PlcNewOperation']) )
+    $new_operation = $_POST['PlcNewOperation'];
+if ( isset($_POST['PlcDeletePassword']) )
+    $delete_password = $_POST['PlcDeletePassword'];
+        
 if ( isset($_GET['PrintOperation']) )
 {
     $print_op = true;
+}
+else if ( isset($_POST['PlcDeleteOperation']) )
+{
+    if ( $_SESSION['plc_Operation'] != "" )
+    {
+        $newop_msg = sprintf( "You must unselect all Operations before deleting an Operation" );
+    }
+    else if ( $new_operation != "" && $delete_password == "deleteme" )
+    {
+        $state_list = $db->ReadPlcStatesTable( 0, $new_operation );
+        
+        foreach ( $state_list as $state )
+        {
+            if ( !$db->DeletePlcStateRecord( false, $state['pl_StateNo'] ) )
+            {
+                $newop_msg = sprintf( "Error: failed to delete record %d", $state['pl_StateNo'] );
+            }
+        }
+        if ( $newop_msg == "" )
+        {
+            $newop_msg = sprintf( "Operation '%s' has been deleted", $new_operation );
+        }
+    
+        $db->NotifyPlcStatesTableChangeAll();
+    }
+    else
+    {
+        $newop_msg = sprintf( "You must enter the Operation Name and Delete Password" );
+    }
+}
+else if ( isset($_POST['PlcCopyOperation']) )
+{
+    if ( $new_operation != "" )
+    {
+        $op_list = $db->SelectPlcOperations();
+        $state_list = $db->ReadPlcStatesTable( 0, $_SESSION['plc_Operation'] );
+        
+        foreach ( $op_list as $op )
+        {
+            if ( $op['pl_Operation'] == $new_operation )
+            {   // error
+                $newop_msg = sprintf( "Error: The new Operation name '%s' already exists", $new_operation );
+                break;
+            }
+        }
+        
+        if ( $_SESSION['plc_Operation'] != "" )
+        {
+            $newop_msg = sprintf( "You must unselect all Operations before copying an Operation" );
+        }
+        else if ( $newop_msg == "" )
+        {
+            foreach ( $state_list as $state )
+            {
+                $state_no = 0;
+                $state_timestamp = "";
+                $delay_key = "";
+                if ( $state['pl_DelayKey'] != "" )
+                    $delay_key = $state['pl_DelayKey'] . "2";
+                        
+                if ( !$db->SavePlcState( false, $state_no, $new_operation, $state['pl_StateName'], $state['pl_StateIsActive'], $state_timestamp, $state['pl_RuleType'], $state['pl_DeviceNo'], 
+                    $state['pl_IOChannel'], $state['pl_Value'], $state['pl_Test'], $state['pl_NextStateName'], $state['pl_Order'], $state['pl_DelayTime'], $state['pl_TimerValues'], 
+                    $state['pl_PrintOrder'], $delay_key ) )
+                {
+                    $newop_msg = sprintf( "Error: Failed to insert record '%s', '%s'", $new_operation, $state['pl_StateName'] );
+                    break;
+                }
+            }
+            if ( $newop_msg == "" )
+            {
+                $newop_msg = sprintf( "Created the new Operation '%s'", $new_operation );
+            }
+            
+            $db->NotifyPlcStatesTableChangeAll();
+        }
+    }
+    else
+    {
+        $newop_msg = sprintf( "You must enter the new Operation Name" );
+    }
+}
+else if ( isset($_POST['SetPlcDelay']) )
+{
+    if ( $delay_key != "" && $delay_value > 0 && $_SESSION['plc_Operation'] != "" )
+    {
+        $vmin = 0;
+        $vmax = 0;
+        
+        $delay_keys = $db->ReadPlcDelayKeys( $_SESSION['plc_Operation'] );
+        foreach ( $delay_keys as $key )
+        {
+            if ( $key['pl_DelayKey'] == $delay_key )
+            {
+                $expl = explode( ",", $key['pl_TimerValues'] );
+                foreach ( $expl as $ex )
+                {
+                    $val = floatval($ex);
+                    if ( strstr($ex,"m") )
+                        $val *= 60;
+                    
+                    if ( $vmin == 0 )
+                        $vmin = $val;
+                    else if ( $val > $vmax )
+                        $vmax = $val;
+                }
+                break;
+            }
+        }
+        
+        if ( $vmin <= 0 || $vmax <= 0 )
+        {
+            $delay_msg = sprintf( "Error: Delay Key '%s' value range has not been set", $delay_key );
+        }
+        else if ( $delay_value < $vmin || $delay_value > $vmax )
+        {
+            $delay_msg = sprintf( "Error: Invalid value - Delay Key '%s' range is %.1f to %.1f seconds", $delay_key, $vmin, $vmax );
+        }
+        else if ( $db->SetPlcDelayKeys( $_SESSION['plc_Operation'], $delay_key, $delay_value ) )
+        {
+            $delay_msg = sprintf( "Updated Delay Key '%s' to %.1f", $delay_key, $delay_value );
+        }
+        else 
+        {
+            $delay_msg = sprintf( "Failed to update Delay Key '%s'", $delay_key );
+        }
+    }
 }
 else if ( isset($_GET['PlcEventButtonTime']) && isset($_GET['DeviceNo']) && isset($_GET['IOChannel']) )
 {
@@ -101,15 +241,22 @@ else if ( isset($_GET['PlcEventButton']) )
         $last_state_name = $state[0]['pl_StateName'];        
     }
 }
+else if ( isset($_POST['ps_Operation']) )
+{
+    $db->PlcClearActiveState( $_SESSION['plc_Operation'] );
+}
+    
 
-    
-    
+$db->PlcSetActiveState( $_SESSION['plc_Operation'] );
 
 $op_list = $db->SelectPlcOperations();
 
 $state_list = $db->ReadPlcStatesTable( 0, $_SESSION['plc_Operation'] );
 
 $di_list = $db->ReadDeviceInfoTable();
+
+$delay_keys = $db->ReadPlcDelayKeys( $_SESSION['plc_Operation'] );
+
 
 
 ?>
@@ -139,7 +286,7 @@ function onChangeTimeSelection( tt, de_no, ch_no )
 
 printf( "<font size='4'>" );
 
-printf( "<table border='1' width='50%%'>" );
+printf( "<table border='1' width='66%%'>" );
 
 printf( "<tr><td>&nbsp;</td></tr>" );
 
@@ -169,6 +316,7 @@ if ( $_SESSION['plc_Operation'] != "" )
         if ( $state['pl_StateIsActive'] == 'Y' )
         {
             $state_name = $state['pl_StateName'];
+            $_SESSION['plc_StateName'] = $state_name;
             break;
         }
     }
@@ -229,7 +377,7 @@ if ( $_SESSION['plc_Operation'] != "" )
                 }
                 else if ( $state['pl_DelayTime'] != 0 )
                 {
-                    $test = sprintf( "<small>Delay %d sec</small><br>", $state['pl_DelayTime'] );
+                    $test = sprintf( "<small>Delay %.1f sec</small><br>", $state['pl_DelayTime'] );
                 }
                 else if ( $state['pl_TimerValues'] != '' )
                 {
@@ -248,7 +396,7 @@ if ( $_SESSION['plc_Operation'] != "" )
                     if ( $delay > 100 )
                         $name = sprintf( "%s: %.1f min", $name, $delay/60 );
                     else
-                        $name = sprintf( "%s: %d sec", $name, $delay );
+                        $name = sprintf( "%s: %.1f sec", $name, $delay );
                     
                     $tt += 1;
                 }
@@ -277,6 +425,38 @@ if ( $_SESSION['plc_Operation'] != "" )
 
 printf( "</table>" );
 
+printf( "<table border='1' width='66%%'>" );
+
+printf( "<tr>" );
+printf( "<td>" );
+printf( "Delay Keys: <select name='PlcDelayKeys' id='PlcDelayKeys' size='1'>" );
+printf( "<option> </option>" );
+foreach ( $delay_keys as $key )
+{
+    printf( "<option>%s</option>", $key['pl_DelayKey'] );
+}
+printf( "</select>" );
+printf( "&nbsp;" );
+printf( "<input type='text' name='PlcDelayValue' id='PlcDelayValue' size='3'> X.Y secs" );
+printf( "<br>" );
+printf( "<input type='submit' name='SetPlcDelay' id='SetPlcDelay' value='Update Timing'>" );
+printf( "<br><div class='text-primary'>%s</div>", ($delay_msg != "" ? $delay_msg : "&nbsp;") );
+printf( "</td>" );
+
+printf( "<td align='right'>" );
+printf( "Operation Name: <input type='text' name='PlcNewOperation' id='PlcNewOperation' size='15'>" );
+printf( "&nbsp;" );
+printf( "<input type='submit' name='PlcCopyOperation' id='PlcCopyOperation' value='Copy Operation'>" );
+printf( "&nbsp;" );
+printf( "<input type='submit' name='PlcDeleteOperation' id='PlcDeleteOperation' value='Delete Operation'>" );
+printf( "<br>" );
+printf( "Delete Password: <input type='text' name='PlcDeletePassword' id='PlcDeletePassword' size='8' autocomplete='off'>" );
+printf( "<br><div class='text-primary'>%s</div>", ($newop_msg != "" ? $newop_msg : "&nbsp;") );
+printf( "</td>" );
+
+printf( "</tr>" );
+printf( "</table>" );
+
 printf( "</font>" );
 
 
@@ -289,7 +469,7 @@ printf( "</font>" );
 </select>
 </p>
 <?php
-if ( $_SERVER['HTTPS'] != "" )
+//if ( $_SERVER['HTTPS'] != "" )
 {
     printf( "<small>If wss is not working, browse to 'https://%s:8000' and accept the self signed certificate.</small>", $_SERVER['SERVER_ADDR'] );
 }
@@ -387,7 +567,7 @@ if ( $print_op )
                     printf( "<th></th>" );
                 else
                     printf( "<th>%.1f</th>", $state['pl_Value'] );
-                printf( "<th>%s</th>", ($state['pl_DelayTime'] == 0 ? "" : $state['pl_DelayTime']) );
+                printf( "<th>%s</th>", ($state['pl_DelayTime'] == 0 ? "" : sprintf("%.1f",$state['pl_DelayTime'])) );
                 printf( "<th>%s</th>", $state['pl_TimerValues'] );
                 printf( "<th>%s</th>", $state['pl_Test'] );
             }

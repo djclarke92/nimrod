@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 116 );
+define( "THIS_DATABASE_VERSION", 119 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -480,7 +480,7 @@ function func_check_database( $db )
  
     if ( $version === false || $version < 112 )
     {   // we have some work to do
-        $query = "alter table events modify ev_value decimal(10,3) not null default 0";
+        $query = "alter table events modify ev_Value decimal(10,3) not null default 0";
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
@@ -603,6 +603,44 @@ function func_check_database( $db )
         $version = func_update_database_version( $db, 116 );
     }
     
+    if ( $version === false || $version < 117 )
+    {   // we have some work to do
+        $query = "alter table plcstates add pl_DelayKey varchar(20) not null default ''";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table plcstates", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 117 );
+    }
+    
+    if ( $version === false || $version < 118 )
+    {   // we have some work to do
+        $query = "alter table plcstates modify pl_DelayTime decimal(8,2) not null default 0";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table plcstates", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 118 );
+    }
+    
+    if ( $version === false || $version < 119 )
+    {   // we have some work to do
+        $query = "alter table plcstates add pl_InitialState char(1) not null default 'N'";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table plcstates", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 119 );
+    }
 }
 
 function func_db_warning_count( $db )
@@ -1418,11 +1456,11 @@ class MySQLDB
 	    {	// failed
 	    }
 	}
-	
-	function NotifyPlcStatesTableChange()
+
+	function NotifyPlcStatesTableChange( $de_no )
 	{
 	    $found = false;
-	    $query = sprintf( "select ev_EventNo from events where ev_DeviceNo=-4" );
+	    $query = sprintf( "select ev_EventNo from events where ev_DeviceNo=%d", $de_no );
 	    $result = $this->RunQuery( $query );
 	    if ( $line = mysqli_fetch_row($result) )
 	    {
@@ -1432,15 +1470,25 @@ class MySQLDB
 	    $this->FreeQuery($result);
 	    
 	    if ( $found )
-    	    $query = sprintf( "update events set ev_Timestamp=now(),ev_Description='%s' where ev_DeviceNo=-4", "plcstates table changed" );
+    	    $query = sprintf( "update events set ev_Timestamp=now(),ev_Description='%s' where ev_DeviceNo=%d", "plcstates table changed", $de_no );
 	    else
-	        $query = sprintf( "insert into events (ev_DeviceNo,ev_Timestamp,ev_Description) values(-4,now(),'%s')", "plcstates table changed" );
+	        $query = sprintf( "insert into events (ev_DeviceNo,ev_Timestamp,ev_Description) values(%d,now(),'%s')", $de_no, "plcstates table changed" );
 
         $result = $this->RunQuery( $query );
         //echo $query;
         if ( mysqli_affected_rows($this->db_link) < 1 )
         {  // failed
         }
+	}
+	
+	function NotifyPlcStatesTableChangeAll()
+	{
+	    $this->NotifyPlcStatesTableChange( -4 );
+	}
+	
+	function NotifyPlcStatesTableChangeDelayTime()
+	{
+	    $this->NotifyPlcStatesTableChange( -6 );
 	}
 	
 	function NotifyPlcStatesScreenButton( $state_no )
@@ -1997,13 +2045,15 @@ class MySQLDB
 	        if ( $op == "" )
 	        {  // all operations
         	    $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
-        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder  
+        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder,pl_DelayKey,
+                    pl_InitialState   
         	        from plcstates order by pl_Operation,pl_StateName,pl_RuleType desc,pl_Order,pl_NextStateName" );
 	        }
 	        else
 	        {
 	            $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
-        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder 
+        	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder,pl_DelayKey,
+                    pl_InitialState  
         	        from plcstates where pl_Operation='%s' order by pl_Operation,pl_StateName,pl_RuleType desc,pl_Order,pl_NextStateName",
 	                addslashes($op) );
 	        }
@@ -2011,7 +2061,8 @@ class MySQLDB
 	    else
 	    {
 	        $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
-    	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder
+    	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder,pl_DelayKey,
+                pl_InitialState 
     	        from plcstates where pl_StateNo=%d", $state_no );
 	    }
     	    
@@ -2021,7 +2072,8 @@ class MySQLDB
 	        $info[] = array( 'pl_StateNo'=>$line[0], 'pl_Operation'=>stripslashes($line[1]), 'pl_StateName'=>stripslashes($line[2]), 
 	               'pl_StateIsActive'=>$line[3], 'pl_StateTimestamp'=>$line[4], 'pl_RuleType'=>$line[5], 'pl_DeviceNo'=>$line[6],
 	               'pl_IOChannel'=>$line[7], 'pl_Value'=>$line[8], 'pl_Test'=>$line[9], 'pl_NextStateName'=>$line[10], 'pl_Order'=>$line[11],
-	               'pl_DelayTime'=>$line[12], 'pl_TimerValues'=>$line[13], 'pl_PrintOrder'=>$line[14] );
+	               'pl_DelayTime'=>$line[12], 'pl_TimerValues'=>$line[13], 'pl_PrintOrder'=>$line[14], 'pl_DelayKey'=>$line[15],
+	               'pl_InitialState'=>$line[16] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -2029,21 +2081,25 @@ class MySQLDB
 	    return $info;
 	}
 	
-	function DeletePlcStateRecord( $state_no )
+	function DeletePlcStateRecord( $notify, $state_no )
 	{
 	    $query = sprintf( "delete from plcstates where pl_StateNo=%d", $state_no );
 	    
 	    $result = $this->RunQuery( $query );
 	    if ( mysqli_affected_rows($this->db_link) == 1 )
 	    {
-	        $this->NotifyPlcStatesTableChange();
+	        if ( $notify )
+	        {
+    	        $this->NotifyPlcStatesTableChangeAll();
+	        }
 	        return true;
 	    }
 	    
 	    return false;
 	}
 	
-	function SavePlcState( $state_no, $op, $state_name, $state_active, $state_timestamp, $rule_type, $device_no, $iochannel, $value, $test, $next_state_name, $order, $delay, $tvalues, $porder )
+	function SavePlcState( $notify, $state_no, $op, $state_name, $state_active, $state_timestamp, $rule_type, $device_no, $iochannel, $value, $test, $next_state_name, 
+	    $order, $delay, $tvalues, $porder, $delay_key, $initial_state )
 	{
         if ( $state_timestamp == "" )
             $state_timestamp = "0000-00-00";
@@ -2051,19 +2107,19 @@ class MySQLDB
 	    if ( $state_no == 0 )
 	    {  // insert
 	        $query = sprintf( "insert into plcstates (pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,pl_RuleType,
-	               pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder) 
-                    values ('%s','%s','%s','%s','%s',%d,%d,%d,'%s','%s',%d,%d,'%s',%d)",
+	               pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder,pl_DelayKey,pl_InitialState) 
+                    values ('%s','%s','%s','%s','%s',%d,%d,%.2f,'%s','%s',%d,%.2f,'%s',%d,'%s','%s')",
 	               addslashes($op), addslashes($state_name), $state_active, $state_timestamp, $rule_type,
-	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay, $tvalues, $porder );
+	               $device_no, $iochannel, $value, $test, addslashes($next_state_name), $order, $delay, $tvalues, $porder, addslashes($delay_key), $initial_state );
 	    }
 	    else
 	    {  // update
 	        $query = sprintf( "update plcstates set pl_Operation='%s',pl_StateName='%s',pl_StateIsActive='%s',
-	               pl_StateTimestamp='%s',pl_RuleType='%s',pl_DeviceNo=%d,pl_IOChannel=%d,pl_Value=%d,pl_Test='%s',pl_NextStateName='%s',pl_Order=%d,
-                   pl_DelayTime=%d,pl_TimerValues='%s',pl_PrintOrder=%d   
+	               pl_StateTimestamp='%s',pl_RuleType='%s',pl_DeviceNo=%d,pl_IOChannel=%d,pl_Value=%.2f,pl_Test='%s',pl_NextStateName='%s',pl_Order=%d,
+                   pl_DelayTime=%.2f,pl_TimerValues='%s',pl_PrintOrder=%d,pl_DelayKey='%s',pl_InitialState='%s'   
 	               where pl_StateNo=%d",
 	               addslashes($op), addslashes($state_name), $state_active, $state_timestamp, $rule_type, $device_no, $iochannel,
-	               $value, $test, addslashes($next_state_name), $order, $delay, $tvalues, $porder,   
+	               $value, $test, addslashes($next_state_name), $order, $delay, $tvalues, $porder, addslashes($delay_key), $initial_state,   
 	               $state_no );	        
 	    }
 	    
@@ -2075,7 +2131,14 @@ class MySQLDB
 	        {  // make other states inactive
 	            $this->PlcStateClearActive( $op, $state_no );
 	        }
-	        $this->NotifyPlcStatesTableChange();
+	        if ( $initial_state == "Y" )
+	        {  // make other states not initial
+	            $this->PlcStateClearInitial( $op, $state_no );
+	        }
+	        if ( $notify )
+	        {
+    	        $this->NotifyPlcStatesTableChangeAll();
+	        }
 	        
 	        return true;
 	    }
@@ -2084,7 +2147,44 @@ class MySQLDB
 	    return false;
 	}
 	
-	function PlcGetActiveStateName( $op )
+	function PlcSetActiveState( $op )
+	{
+	    $name = $this->PlcGetActiveStateName( $op );
+	    if ( $name === false )
+	    {
+    	    $query = sprintf( "update plcstates set pl_StateIsActive='Y' where pl_Operation='%s' and pl_InitialState='Y'", addslashes($op) );
+    	
+    	    $result = $this->RunQuery( $query );
+    	    if ( mysqli_affected_rows($this->db_link) >= 0 )
+    	    {	// success
+    	        $this->NotifyPlcStatesTableChangeAll();
+    	        return true;
+    	    }
+    	    
+    	    return false;
+	    }
+	    
+	    return true;
+	}
+	
+	function PlcClearActiveState( $op )
+	{
+	    if ( $op == "" )
+    	    $query = sprintf( "update plcstates set pl_StateIsActive='N'");
+	    else 
+	        $query = sprintf( "update plcstates set pl_StateIsActive='N' where pl_Operation!='%s'", addslashes($op) );
+	    
+        $result = $this->RunQuery( $query );
+        if ( mysqli_affected_rows($this->db_link) >= 0 )
+        {	// success
+            $this->NotifyPlcStatesTableChangeAll();
+            return true;
+        }
+        
+        return false;
+    }
+	
+    function PlcGetActiveStateName( $op )
 	{
 	    $info = false;
 	    
@@ -2110,6 +2210,18 @@ class MySQLDB
 	   }
 	   
 	   return false;
+	}
+	
+	function PlcStateClearInitial( $op, $state_no )
+	{
+	    $query = sprintf( "update plcstates set pl_InitialState='N' where pl_Operation='%s' and pl_StateNo!=%d", addslashes($op), $state_no );
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) >= 0 )
+	    {	// success
+	        return true;
+	    }
+	    
+	    return false;
 	}
 	
 	function OperationStateNameExists( $op, $state_name )
@@ -2162,12 +2274,12 @@ class MySQLDB
 
 	function PlcStateChangeTimer( $op_name, $state_name, $period )
 	{
-	    $query = sprintf( "update plcstates set pl_DelayTime=%d where pl_Operation='%s' and pl_StateName='%s' and pl_RuleType='E' and pl_DeviceNo=0 and pl_IOChannel=-1 limit 1", 
+	    $query = sprintf( "update plcstates set pl_DelayTime=%.2f where pl_Operation='%s' and pl_StateName='%s' and pl_RuleType='E' and pl_DeviceNo=0 and pl_IOChannel=-1 limit 1", 
 	        $period, addslashes($op_name), addslashes($state_name) );
 	    $result = $this->RunQuery( $query );
 	    if ( mysqli_affected_rows($this->db_link) >= 0 )
 	    {	// success
-	        $this->NotifyPlcStatesTableChange();
+	        $this->NotifyPlcStatesTableChangeDelayTime();
 	        return true;
 	    }
 	    
@@ -2205,6 +2317,35 @@ class MySQLDB
         $this->FreeQuery($result);
        
         return $exists;
+	}
+	
+	function ReadPlcDelayKeys( $op_name )
+	{
+	    $info = array();
+	    
+	   $query = sprintf( "select distinct pl_DelayKey,pl_TimerValues from plcstates where pl_Operation='%s' and pl_DelayKey!=''", addslashes($op_name) );    
+	   $result = $this->RunQuery( $query );
+	   while ( $line = mysqli_fetch_row($result) )
+	   {
+	       $info[] = array( 'pl_DelayKey'=>stripslashes($line[0]), 'pl_TimerValues'=>$line[1] );
+	   }
+	   
+	   $this->FreeQuery($result);
+	   
+	   return $info;
+	}
+	
+	function SetPlcDelayKeys( $op_name, $delay_key, $delay_value )
+	{
+	    $query = sprintf( "update plcstates set pl_DelayTime=%.2f where pl_Operation='%s' and pl_DelayKey='%s'", $delay_value, addslashes($op_name), addslashes($delay_key) );
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) >= 0 )
+	    {	// success
+	        $this->NotifyPlcStatesTableChangeDelayTime();
+	        return true;
+	    }
+	    
+	    return false;
 	}
 	
 	

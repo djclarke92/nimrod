@@ -388,14 +388,14 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	{
     ?>
 		<script type = "text/javascript">
-		var wshost = "<?php printf( "wss://%s:8000", $_SERVER['SERVER_ADDR'] ); ?>";
+		var wshost = "<?php printf( "wss://%s:%d", ($_SERVER['SERVER_PORT'] == 8080 ? "127.0.0.1" : $_SERVER['SERVER_ADDR']), ($_SERVER['SERVER_PORT'] == 8080 ? 8081 : 8000) ); ?>";
   	  	var socket = new WebSocket( wshost, "nimrod-protocol" );
   	  	var plcCounter = 0;
 
   	  	function plcTimer() {
   	  	  	plcCounter += 1;
 
-  	  	  	if ( plcCounter >= 3 ) {
+  	  	  	if ( plcCounter >= 5 ) {
 	  	    	window.location.replace('index.php?PageMode=PlcState'); 
   	  		}
 
@@ -434,13 +434,17 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
     
     	  	    //select.scrollTo( 0, select.length - 4 ); 
     
-    	  	    if ( msg == "Refresh" ) {
+    			var stateName = '<?php echo $_SESSION['plc_StateName'];?>';
+    			
+    			if ( msg.substring(0,6) == 'State:' ) {
+    				if ( msg.substring(6) != stateName && stateName != '' ) {
+    				  window.location.replace('index.php?PageMode=PlcState');
+    				}
+    	  	    } else if ( msg == "Refresh" ) {
     	  	    	window.location.replace('index.php?PageMode=PlcState'); 
-    	  	    }
-    	  	    else if ( msg == "wss closed" ) {
+    	  	    } else if ( msg == "wss closed" ) {
     	  	    	setTimeout( 'plcTimer()', 1000 );   
-    	  	    }
-    	  	    else {
+    	  	    } else {
         	  	    plcCounter  = 0;
     	  	    }
 		  	}
@@ -525,7 +529,7 @@ if ( $display_mode == "" )
           if ( SHOW_PLC == 1 )
           {
              printf( "<li class='nav-item'>" );
-             printf( "  <a class='nav-link' href='?PageMode=PlcState'>PlcState</a>" );
+             printf( "  <a class='nav-link' href='?PageMode=PlcState' target='_blank'>PlcState</a>" );
              printf( "</li>" );
           }
       }
