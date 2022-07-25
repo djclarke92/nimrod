@@ -75,6 +75,7 @@ create TABLE IF NOT EXISTS `iolinks` (
 # ev_DeviceNo=-4: plcstate table changed
 # ev_DeviceNo=-5: plcstate screen button event
 # ev_DeviceNo=-6: plcstate DelayTime change event
+# ev_DeviceNO=-7: plcstate messages
 # ev_DeviceNo=-10xx: device channel click event
 create TABLE IF NOT EXISTS `events` (
 	`ev_EventNo` int(10) unsigned NOT NULL auto_increment,		# unique record number

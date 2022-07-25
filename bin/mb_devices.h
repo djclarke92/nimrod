@@ -90,7 +90,8 @@ enum E_EVENT_TYPE {
 	E_ET_FREQUENCY,			// 12:	frequency
 	E_ET_POWERFACTOR,		// 13:	power factor
 	E_ET_POWER,				// 14:	power
-	E_ET_CARDREADER,		// 15: card reader
+	E_ET_CARDREADER,		// 15: 	card reader
+	E_ET_PLCEVENT,			// 16:	plc events
 };
 
 enum E_DEVICE_STATUS {

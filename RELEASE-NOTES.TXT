@@ -17,7 +17,7 @@ Version 0.2.3		July 2022
 7.	Add Delay Keys to plcstates table to allow updating multiple records with the same delay value
 8.	Add facility to clone a PLC Operation and delete an entire PLC Operation
 9.	Handle PLC DelayTime as fractions of a second
-10.
+10.	Improved websocket messaging
 
 
 Version 0.2.2		June 2022

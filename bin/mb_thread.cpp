@@ -3631,6 +3631,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 			{
 				LogMessage( E_MSG_WARN, "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
 				gThreadMsg.PutMessage( "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
+				myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
 			}
 		}
 		else
@@ -3792,6 +3793,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 			LogMessage( E_MSG_INFO, "%s, StateNo %d, idx %d, goto state '%s', delay %.1f sec", szEventName, iStateNo, idx, pPlcStates->GetState(idx).GetNextStateName(), dDelay );
 			gThreadMsg.PutMessage( "%s, StateNo %d, idx %d, goto state '%s', delay %.1f sec", szEventName, iStateNo, idx, pPlcStates->GetState(idx).GetNextStateName(), dDelay );
+			myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "%s, StateNo %d, idx %d, goto state '%s', delay %.1f sec", szEventName, iStateNo, idx, pPlcStates->GetState(idx).GetNextStateName(), dDelay );
 
 			// check if this event should be delayed
 
@@ -3802,6 +3804,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 					bProcess = false;
 					LogMessage( E_MSG_INFO, "PLC: Event is disabled for another %.1f seconds", pPlcStates->GetActiveState().GetStateTimestampMS() + dDelay - dTimenowMS );
 					gThreadMsg.PutMessage( "PLC: Event is disabled for another %.1f seconds", pPlcStates->GetActiveState().GetStateTimestampMS() + dDelay - dTimenowMS );
+					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: Event is disabled for another %.1f seconds", pPlcStates->GetActiveState().GetStateTimestampMS() + dDelay - dTimenowMS );
 				}
 			}
 			else
@@ -3861,11 +3864,13 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 					LogMessage( E_MSG_INFO, "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
 					gThreadMsg.PutMessage( "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
+					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
 				}
 				else
 				{
 					LogMessage( E_MSG_INFO, "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
 					gThreadMsg.PutMessage( "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
+					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
 				}
 			}
 
@@ -3925,12 +3930,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition EQ exception (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition EQ exception (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition EQ exception (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition EQ passed (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition EQ passed (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition EQ passed (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
 						else if ( strcmp( pPlcStates->GetState(idx2).GetTest(), "NE" ) == 0 )
@@ -3941,12 +3948,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition NE exception (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition NE exception (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition NE exception (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition NE passed (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition NE passed (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition NE passed (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
 						else if ( strcmp( pPlcStates->GetState(idx2).GetTest(), "GE" ) == 0 )
@@ -3957,12 +3966,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition GE exception (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition GE exception (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition GE exception (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition GE passed (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition GE passed (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition GE passed (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
 						else if ( strcmp( pPlcStates->GetState(idx2).GetTest(), "GT" ) == 0 )
@@ -3973,12 +3984,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition GT exception (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition GT exception (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition GT exception (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition GT passed (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition GT passed (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition GT passed (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
 						else if ( strcmp( pPlcStates->GetState(idx2).GetTest(), "LT" ) == 0 )
@@ -3989,12 +4002,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition LT exception (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition LT exception (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition LT exception (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition LT passed (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition LT passed (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition LT passed (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
 						else if ( strcmp( pPlcStates->GetState(idx2).GetTest(), "LE" ) == 0 )
@@ -4005,12 +4020,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition LE exception (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition LE exception (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition LE exception (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition LE passed (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								gThreadMsg.PutMessage( "PLC: initial condition LE passed (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition LE passed (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
 						else
@@ -4019,6 +4036,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 							LogMessage( E_MSG_WARN, "PLC: initial condition unhandled '%s' exception, StateNo %d '%s'", pPlcStates->GetState(idx2).GetTest(), iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							gThreadMsg.PutMessage( "PLC: initial condition unhandled '%s' exception, StateNo %d '%s'", pPlcStates->GetState(idx2).GetTest(), iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+							myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition unhandled '%s' exception, StateNo %d '%s'", pPlcStates->GetState(idx2).GetTest(), iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							break;
 						}
 					}
@@ -4037,12 +4055,16 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 							pPlcStates->GetState(idx).GetNextStateName() );
 					gThreadMsg.PutMessage( "Operation %s: Changed active state from '%s' to '%s'", pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetStateName(),
 							pPlcStates->GetState(idx).GetNextStateName() );
+					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "Operation %s: Changed active state from '%s' to '%s'", pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetStateName(),
+							pPlcStates->GetState(idx).GetNextStateName() );
 				}
 				else
 				{	// error
 					LogMessage( E_MSG_ERROR, "Operation %s: Failed to change active state from '%s' to '%s', rc %d", pPlcStates->GetState(idx).GetOperation(),
 							pPlcStates->GetState(idx).GetStateName(), pPlcStates->GetState(idx).GetNextStateName(), rc );
 					gThreadMsg.PutMessage( "Operation %s: Failed to change active state from '%s' to '%s', rc %d", pPlcStates->GetState(idx).GetOperation(),
+							pPlcStates->GetState(idx).GetStateName(), pPlcStates->GetState(idx).GetNextStateName(), rc );
+					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "Operation %s: Failed to change active state from '%s' to '%s', rc %d", pPlcStates->GetState(idx).GetOperation(),
 							pPlcStates->GetState(idx).GetStateName(), pPlcStates->GetState(idx).GetNextStateName(), rc );
 				}
 

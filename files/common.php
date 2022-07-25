@@ -149,6 +149,7 @@ define( "E_ET_FREQUENCY", 12 );		// 12: frequency
 define( "E_ET_POWERFACTOR", 13 );	// 13: power factor
 define( "E_ET_POWER", 14 );		    // 14: power
 define( "E_ET_CARDREADER", 15 );    // 15: card reader
+define( "E_ET_PLCEVENT", 16 );      // 16: plc event
 $_SESSION['E_ETD'] = array();
 $_SESSION['E_ETD'][] = "Click";
 $_SESSION['E_ETD'][] = "Dbl CLick";
@@ -166,6 +167,7 @@ $_SESSION['E_ETD'][] = "Frequency";
 $_SESSION['E_ETD'][] = "Power Factor";
 $_SESSION['E_ETD'][] = "Power";
 $_SESSION['E_ETD'][] = "Card Reader";
+$_SESSION['E_ETD'][] = "PLC Event";
 
 define( "E_DS_ALIVE", 0 );			// 0:	alive
 define( "E_DSD_ALIVE", "Alive" );	
@@ -248,6 +250,9 @@ function func_session_init()
 	    $_SESSION['MonitorTime'] = "";
 	if ( !isset($_SESSION['monitor_audio']) )
 	    $_SESSION['monitor_audio'] = true;
+    if ( !isset($_SESSION['plc_StateName']) )
+        $_SESSION['plc_StateName'] = "";
+	        
 	
 	date_default_timezone_set( 'Pacific/Auckland' );
 }
@@ -1770,6 +1775,8 @@ class MySQLDB
 			$de_no = $line[0];
 			$di_no = $line[1];
 		}
+
+		$this->FreeQuery($result);
 		
 		if ( $de_no > 0 && $di_no >= 0 )
 		{
@@ -1822,6 +1829,24 @@ class MySQLDB
 			}
 		}
 	}
+	
+	function ReadPlcEvents( $period )
+	{
+	    $info = array();
+	    
+	    $query = sprintf( "select unix_timestamp(ev_Timestamp),ev_Timestamp,ev_Description from events where ev_DeviceNo=-7 and 
+            ev_Timestamp>=date_sub(now(), interval %d minute) order by ev_Timestamp desc", $period );
+	    $result = $this->RunQuery( $query );
+	    while ( $line = mysqli_fetch_row($result) )
+	    {
+	        $info[] = array( 'timestamp'=>$line[0], 'ev_Timestamp'=>$line[1], 'ev_Description'=>$line[2] );
+	    }
+	    
+	    $this->FreeQuery($result);
+	    
+	    return $info;
+	}
+	
 
 	//*******************************************
 	//

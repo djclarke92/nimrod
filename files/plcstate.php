@@ -48,6 +48,7 @@ $delay_msg = "";
 $new_operation = "";
 $newop_msg = "";
 $delete_password = "";
+$op_changed = false;
 
 if ( !isset($_SESSION['plc_Operation']) )
     $_SESSION['plc_Operation'] = "";
@@ -56,7 +57,11 @@ if ( !isset($_SESSION['plc_StateName']) )
         
     
 if ( isset($_POST['ps_Operation']) )
+{
+    if ( $_SESSION['plc_Operation'] != $_POST['ps_Operation'] )
+        $op_changed = true;
     $_SESSION['plc_Operation'] = $_POST['ps_Operation'];
+}
 if ( isset($_POST['PlcDelayKeys']) )
     $delay_key = $_POST['PlcDelayKeys'];
 if ( isset($_POST['PlcDelayValue']) )
@@ -243,7 +248,10 @@ else if ( isset($_GET['PlcEventButton']) )
 }
 else if ( isset($_POST['ps_Operation']) )
 {
-    $db->PlcClearActiveState( $_SESSION['plc_Operation'] );
+    if ( $op_changed )
+    {
+        $db->PlcClearActiveState( $_SESSION['plc_Operation'] );
+    }
 }
     
 
@@ -257,6 +265,7 @@ $di_list = $db->ReadDeviceInfoTable();
 
 $delay_keys = $db->ReadPlcDelayKeys( $_SESSION['plc_Operation'] );
 
+$plc_events = $db->ReadPlcEvents( 1 );  // last 1 minute
 
 
 ?>
@@ -455,9 +464,32 @@ printf( "<br><div class='text-primary'>%s</div>", ($newop_msg != "" ? $newop_msg
 printf( "</td>" );
 
 printf( "</tr>" );
+
+printf( "<tr>" );
+printf( "<td colspan='2'>" );
+
+printf( "Events<br>" );
+printf( "<select name='pl_PlcEvents' id='pl_PlcEvents' size='6' class='form-select'>" ); 
+foreach ( $plc_events as $event )
+{
+    $colour = "";
+    if ( strstr( $event['ev_Description'], "exception" ) != false )
+        $colour = sprintf( "class='text-danger'" );
+    else if ( strstr( $event['ev_Description'], "Changed active" ) != false )
+        $colour = sprintf( "class='text-info'" );
+            
+    printf( "<option %s>%s&nbsp;&nbsp;&nbsp;%s</option>", $colour, $event['ev_Timestamp'], $event['ev_Description'] );
+}
+printf( "</select>" );
+
+printf( "</td>" );
+printf( "</tr>" );
+
+
 printf( "</table>" );
 
 printf( "</font>" );
+
 
 
 ?>
