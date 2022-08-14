@@ -32,7 +32,7 @@ void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... );
 bool ReadSiteConfig( const char* szName, char* szValue, size_t uLen );
 time_t ReadDeviceConfig( CMysql& myDB, CDeviceList* pDeviceList, CInOutLinks* pIOLinks, bool bInit );
 pid_t CreateSSHTunnel();
-void CheckForUpgrade();
+bool CheckForUpgrade();
 bool CreateRestartScript( const char* szTar );
 bool CreatePackageVerFile( const char* szTar );
 

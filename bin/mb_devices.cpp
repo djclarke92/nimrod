@@ -57,6 +57,7 @@ void CMyDevice::Init()
 	SetDeviceStatus( E_DS_DEAD, true );
 	SetNumInputs( 8 );
 	SetNumOutputs( 8 );
+	SetAlwaysPoweredOn("Y");
 	for ( j = 0; j < MAX_IO_PORTS; j++ )
 	{
 		SetInIOName( j, "" );
@@ -521,6 +522,159 @@ const double CMyDevice::CalcVIPFValue( const int iChannel, const bool bNew )
 				break;
 			case 5:		// power factor
 				dVal = (double)dUnit / 100;
+				break;
+			}
+		}
+	}
+
+	return dVal;
+}
+
+const double CMyDevice::CalcVSDNFlixenValue( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		if ( bNew )
+		{
+			dUnit = (double)(m_uNewData[iChannel]);
+		}
+		else
+		{
+			dUnit = (double)(m_uLastData[iChannel]);
+		}
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 )
+		{	// sensor is not connected
+
+		}
+		else
+		{
+			switch ( iChannel )
+			{
+			default:
+				break;
+			case 0:		// voltage, volts
+				dVal = (double)dUnit;
+				break;
+			case 1:		// current, 0.1 amps
+				dVal = (double)dUnit / 10;
+				break;
+			case 2:		// power, 0.1kW
+				dVal = (double)dUnit / 10;
+				break;
+			case 3:		// frequency, 0.01Hz
+				dVal = (double)dUnit / 100;
+				break;
+			case 4:		// torque %
+				dVal = (double)dUnit;
+				break;
+			case 5:		// running speed, rpm
+				dVal = (double)dUnit;
+				break;
+			}
+		}
+	}
+
+	return dVal;
+}
+
+const double CMyDevice::CalcVSDPwrElectValue( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		if ( bNew )
+		{
+			dUnit = (double)(m_uNewData[iChannel]);
+		}
+		else
+		{
+			dUnit = (double)(m_uLastData[iChannel]);
+		}
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 )
+		{	// sensor is not connected
+
+		}
+		else
+		{
+			switch ( iChannel )
+			{
+			default:
+				break;
+			case 0:		// voltage, volts
+				dVal = (double)dUnit;
+				break;
+			case 1:		// current, 0.1 amps
+				dVal = (double)dUnit / 10;
+				break;
+			case 2:		// power, 0.1kW
+				dVal = (double)dUnit / 10;
+				break;
+			case 3:		// frequency, 0.01Hz
+				dVal = (double)dUnit / 10;
+				break;
+			case 4:		// torque %
+				dVal = 100 * (double)dUnit / 8192;
+				break;
+			case 5:		// running speed, rpm
+				dVal = (double)dUnit;
+				break;
+			}
+		}
+	}
+
+	return dVal;
+}
+
+const double CMyDevice::CalcVSDToshibaValue( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		if ( bNew )
+		{
+			dUnit = (double)(m_uNewData[iChannel]);
+		}
+		else
+		{
+			dUnit = (double)(m_uLastData[iChannel]);
+		}
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 )
+		{	// sensor is not connected
+
+		}
+		else
+		{
+			switch ( iChannel )
+			{
+			default:
+				break;
+			case 0:		// voltage, volts
+				dVal = (double)dUnit;
+				break;
+			case 1:		// current, 0.1 amps
+				dVal = (double)dUnit / 10;
+				break;
+			case 2:		// power, 0.1kW
+				dVal = (double)dUnit / 10;
+				break;
+			case 3:		// frequency, 0.01Hz
+				dVal = (double)dUnit / 10;
+				break;
+			case 4:		// torque %
+				dVal = 100 * (double)dUnit / 8192;
+				break;
+			case 5:		// running speed, rpm
+				dVal = (double)dUnit;
 				break;
 			}
 		}
@@ -1255,6 +1409,16 @@ const int CDeviceList::GetBaudRate( const int idx )
 	return 9600;
 }
 
+const bool CDeviceList::GetAlwaysPoweredOn( const int idx )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetAlwaysPoweredOn();
+	}
+
+	return true;
+}
+
 const char* CDeviceList::GetComPort( const int idx )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
@@ -1767,6 +1931,36 @@ const double CDeviceList::CalcVIPFValue( const int idx, const int iChannel, cons
 	return 0.0;
 }
 
+const double CDeviceList::CalcVSDNFlixenValue( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcVSDNFlixenValue( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
+const double CDeviceList::CalcVSDPwrElectValue( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcVSDPwrElectValue( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
+const double CDeviceList::CalcVSDToshibaValue( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcVSDToshibaValue( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
 const bool CDeviceList::IsSensorConnected( const int idx, const int iChannel )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
@@ -1820,6 +2014,14 @@ void CDeviceList::SetBaudRate( const int idx, const int iBaudRate )
 	if ( idx >= 0 && idx < MAX_DEVICES )
 	{
 		m_Device[idx].SetBaudRate( iBaudRate );
+	}
+}
+
+void CDeviceList::SetAlwaysPoweredOn( const int idx, const char* szAlwaysPoweredOn )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		m_Device[idx].SetAlwaysPoweredOn( szAlwaysPoweredOn );
 	}
 }
 
@@ -2311,8 +2513,8 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 	}
 
 	// read from mysql
-	//                          0           1          2          3            4             5       6       7           8
-	if ( myDB.RunQuery( "SELECT de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate FROM devices order by de_DeviceNo") != 0 )
+	//                          0           1          2          3            4             5       6       7           8           9
+	if ( myDB.RunQuery( "SELECT de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate,de_AlwaysPoweredOn FROM devices order by de_DeviceNo") != 0 )
 	{
 		bRet = false;
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
@@ -2331,9 +2533,10 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 			SetDeviceName( i, (const char*)row[6] );
 			SetDeviceHostname( i, (const char*)row[7] );
 			SetBaudRate( i, atoi( (const char*)row[8] ) );
+			SetAlwaysPoweredOn( i, (const char*)row[9] );
 
-			LogMessage( E_MSG_INFO, "Device(%d): DeNo:%d, Port:'%s', Addr:%d, DType:%d, Name:'%s', Host:'%s', Baud %d", i, GetDeviceNo(i), GetComPort(i), GetAddress(i), GetDeviceType(i),
-					GetDeviceName(i), GetDeviceHostname(i), GetBaudRate(i) );
+			LogMessage( E_MSG_INFO, "Device(%d): DeNo:%d, Port:'%s', Addr:%d, DType:%d, Name:'%s', Host:'%s', Baud %d, APO %d", i, GetDeviceNo(i), GetComPort(i), GetAddress(i), GetDeviceType(i),
+					GetDeviceName(i), GetDeviceHostname(i), GetBaudRate(i), GetAlwaysPoweredOn(i) );
 
 			i += 1;
 			if ( i >= MAX_DEVICES )

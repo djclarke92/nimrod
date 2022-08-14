@@ -27,5 +27,8 @@ define( 'SHOW_PLC', 1 );
 // autologin username
 define( 'AUTOLOGIN_USERNAME', '' );
 
+// use secure web sockets 0/1
+define( 'SECURE_WEBSOCKET', '1' );
+
 ?>
 

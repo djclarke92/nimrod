@@ -32,6 +32,9 @@ enum E_DEVICE_TYPE {
 	E_DT_ROTARY_ENC_12BIT,	// 8: rotary encoder 12 bit
 	E_DT_VIPF_MON,			// 9: PZEM-016 VIPF Monitor
 	E_DT_CARD_READER,		// 10: HID card reader with pin pad
+	E_DT_VSD_NFLIXEN,		// 11: NFlixen 9600 VSD
+	E_DT_VSD_PWRELECT,		// 12: Power Electronics SD700 VSD
+	E_DT_VSD_TOSHIBA,		// 13: Toshiba VS11 VSD
 };
 
 enum E_IO_TYPE {
@@ -72,6 +75,14 @@ enum E_IO_TYPE {
 	E_IO_POWER_LOW,			// 34:	power too low
 	E_IO_POWER_HIGHLOW,		// 35:	power too high or too low
 	E_IO_ON_OFF_INV,		// 36:	manual on off switch, inverted levels
+	E_IO_TORQUE_MONITOR,	// 37:	torque monitor
+	E_IO_TORQUE_HIGH,		// 38:	torque too high
+	E_IO_TORQUE_LOW,		// 39:	torque too low
+	E_IO_TORQUE_HIGHLOW,	// 40:	torque too high or too low
+	E_IO_RPMSPEED_MONITOR,	// 41:	torque monitor
+	E_IO_RPMSPEED_HIGH,		// 42:	torque too high
+	E_IO_RPMSPEED_LOW,		// 43:	torque too low
+	E_IO_RPMSPEED_HIGHLOW,	// 44:	torque too high or too low
 };
 
 enum E_EVENT_TYPE {
@@ -92,6 +103,8 @@ enum E_EVENT_TYPE {
 	E_ET_POWER,				// 14:	power
 	E_ET_CARDREADER,		// 15: 	card reader
 	E_ET_PLCEVENT,			// 16:	plc events
+	E_ET_TORQUE,			// 17:	torque
+	E_ET_RPMSPEED			// 18:	rpm speed
 };
 
 enum E_DEVICE_STATUS {
@@ -202,6 +215,7 @@ private:
 	char m_szComPort[MAX_COMPORT_LEN+1];
 	char m_szDeviceName[MAX_DEVICE_NAME_LEN+1];
 	char m_szDeviceHostname[MAX_HOSTNAME_LEN+1];
+	bool m_bAlwaysPoweredOn;
 	int m_iBaudRate;
 	int m_iComHandle;
 	modbus_t* m_pCtx;
@@ -252,6 +266,9 @@ public:
 	const double CalcLevel( const int iChannel, const bool bNew );
 	const double CalcRotaryEncoderDistance( const int iChannel, const bool bNew );
 	const double CalcVIPFValue( const int iChannel, const bool bNew );
+	const double CalcVSDNFlixenValue( const int iChannel, const bool bNew );
+	const double CalcVSDPwrElectValue( const int iChannel, const bool bNew );
+	const double CalcVSDToshibaValue( const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int iChannel );
 	const bool WasSensorConnected( const int iChannel );
 	const bool IsTimerEnabledToday( const int iChannel );
@@ -262,6 +279,7 @@ public:
 	modbus_t* GetContext(){ return m_pCtx; };
 	const int GetDeviceNo(){ return m_iDeviceNo; };
 	const int GetBaudRate(){ return m_iBaudRate; };
+	const bool GetAlwaysPoweredOn(){ return m_bAlwaysPoweredOn; };
 	const char* GetComPort(){ return m_szComPort; };
 	const char* GetDeviceName(){ return m_szDeviceName; };
 	const char* GetDeviceHostname(){ return m_szDeviceHostname; };
@@ -307,6 +325,7 @@ public:
 	void SetContext( modbus_t* pCtx ){ m_pCtx = pCtx; };
 	void SetDeviceNo( const int iDeviceNo ){ m_iDeviceNo = iDeviceNo; };
 	void SetBaudRate( const int iBaudRate ){ m_iBaudRate = iBaudRate; };
+	void SetAlwaysPoweredOn( const char* szAlwaysPoweredOn ){ (szAlwaysPoweredOn[0] == 'Y' ? m_bAlwaysPoweredOn = true : m_bAlwaysPoweredOn = false); };
 	void SetComPort( const char* szPort );
 	void SetDeviceName( const char* szName );
 	void SetDeviceHostname( const char* szDeviceHostname );
@@ -369,6 +388,9 @@ public:
 	const double CalcLevel( const int idx, const int iChannel, const bool bNew );
 	const double CalcRotaryEncoderDistance( const int idx, const int iChannel, const bool bNew );
 	const double CalcVIPFValue( const int idx, const int iChannel, const bool bNew );
+	const double CalcVSDNFlixenValue( const int idx, const int iChannel, const bool bNew );
+	const double CalcVSDPwrElectValue( const int idx, const int iChannel, const bool bNew );
+	const double CalcVSDToshibaValue( const int idx, const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int idx, const int iChannel );
 	const bool WasSensorConnected( const int idx, const int iChannel );
 	const bool IsTimerEnabledToday( const int idx, const int iChannel );
@@ -379,6 +401,7 @@ public:
 	modbus_t* GetContext( const int idx );
 	const int GetDeviceNo( const int idx );
 	const int GetBaudRate( const int idx );
+	const bool GetAlwaysPoweredOn( const int idx );
 	const char* GetComPort( const int idx );
 	const char* GetDeviceName( const int idx );
 	const char* GetDeviceHostname( const int idx );
@@ -429,6 +452,7 @@ public:
 	void SetContext( const int idx, modbus_t* pCtx );
 	void SetDeviceNo( const int idx, const int iDeviceNo );
 	void SetBaudRate( const int idx, const int iBaudRate );
+	void SetAlwaysPoweredOn( const int idx, const char* szAlwaysPoweredOn );
 	void SetComPort( const int idx, const char* szPort );
 	void SetDeviceName( const int idx, const char* szName );
 	void SetDeviceHostname( const int idx, const char* szHostname );

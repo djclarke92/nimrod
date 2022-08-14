@@ -108,7 +108,7 @@ function func_get_graph_datetime()
 	}
 }
 
-function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies )
+function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds )
 {
     $g_devices = array();
     foreach ( $_SESSION['GraphDevices'] as $gg )
@@ -176,6 +176,30 @@ function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $
         if ( $found == false )
         {
             foreach ( $frequencies as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            foreach ( $torques as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            foreach ( $rpmspeeds as $tt )
             {
                 if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
                 {
@@ -369,6 +393,8 @@ $levels = $db->GetLatestLevels( $_SESSION['GraphHours'], $datetime );
 $currents = $db->GetLatestCurrents( $_SESSION['GraphHours'], $datetime );
 $powers = $db->GetLatestPowers( $_SESSION['GraphHours'], $datetime );
 $frequencies = $db->GetLatestFrequencies( $_SESSION['GraphHours'], $datetime );
+$torques = $db->GetLatestTorques( $_SESSION['GraphHours'], $datetime );
+$rpmspeeds = $db->GetLatestRpmSpeeds( $_SESSION['GraphHours'], $datetime );
 
 $db_size = $db->GetDatabaseSize();
 
@@ -703,46 +729,50 @@ foreach ( $camera_list as $camera )
         $currents = $db->GetLatestCurrents( $_SESSION['GraphHours'], $datetime );
         $powers = $db->GetLatestPowers( $_SESSION['GraphHours'], $datetime );
         $frequencies = $db->GetLatestFrequencies( $_SESSION['GraphHours'], $datetime );
+        $torques = $db->GetLatestTorques( $_SESSION['GraphHours'], $datetime );
+        $rpmspeeds = $db->GetLatestRpmSpeeds( $_SESSION['GraphHours'], $datetime );
         
-        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies );
+        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds );
         
-        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $g_devices );
+        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $g_devices );
         func_draw_graph_div( true, "graphdiv", 1, $alert_width, $graph_bgcolor, $alert_okcolor, $alert_ngcolor, $g_data );
         func_create_graph( $g_data, "graphdiv" );
-        ?>
-		<div class="row">
+        
+		printf( "<div class='row'>" );
+		printf( "<div class='col-sm-12'>" );
 
-            <!-- ***************************************************************************
-            -->
-			<div class="col-sm-12">
+        printf( "<a href='?Hours=1'><input class='btn btn-outline-dark %s' type='button' name='Hours1' value='1 Hour'></a> ", ($_SESSION['GraphHours'] == 1 ? "btn-info" : "") );
+        printf( "<a href='?Hours=3'><input class='btn btn-outline-dark %s' type='button' name='Hours3' value='3 Hours'></a> ", ($_SESSION['GraphHours'] == 3 ? "btn-info" : "") );
+        printf( "<a href='?Hours=6'><input class='btn btn-outline-dark %s' type='button' name='Hours6' value='6 Hours'></a> ", ($_SESSION['GraphHours'] == 6 ? "btn-info" : "") );
+        printf( "<a href='?Hours=12'><input class='btn btn-outline-dark %s' type='button' name='Hours12' value='12 Hours'></a> ", ($_SESSION['GraphHours'] == 12 ? "btn-info" : "") );
+        printf( "<a href='?Hours=24'><input class='btn btn-outline-dark %s' type='button' name='Hours24' value='24 Hours'></a> ", ($_SESSION['GraphHours'] == 24 ? "btn-info" : "") );
+        printf( "<a href='?Hours=48'><input class='btn btn-outline-dark %s' type='button' name='Hours48' value='48 Hours'></a> ", ($_SESSION['GraphHours'] == 48 ? "btn-info" : "") );
+        printf( "<a href='?GraphMinusHour'><input class='btn btn-outline-dark' type='button' name='GraphMinusHour' value='-1 hrs'></a> " );
+        printf( "<a href='?GraphMinusDay'><input class='btn btn-outline-dark' type='button' name='GraphMinusDay' value='-24 hrs'></a> " );
+        printf( "<a href='?GraphPlusDay'><input class='btn btn-outline-dark' type='button' name='GraphPlusDay' value='+24 hrs'></a> " );
+        printf( "<a href='?GraphPlusHour'><input class='btn btn-outline-dark' type='button' name='GraphPlusHour' value='+1 hrs'></a> " );
 
-            <?php 
-            printf( "<p>" );
-            printf( "<a href='?Hours=1'><input class='btn btn-outline-dark %s' type='button' name='Hours1' value='1 Hour'></a> ", ($_SESSION['GraphHours'] == 1 ? "btn-info" : "") );
-            printf( "<a href='?Hours=3'><input class='btn btn-outline-dark %s' type='button' name='Hours3' value='3 Hours'></a> ", ($_SESSION['GraphHours'] == 3 ? "btn-info" : "") );
-            printf( "<a href='?Hours=6'><input class='btn btn-outline-dark %s' type='button' name='Hours6' value='6 Hours'></a> ", ($_SESSION['GraphHours'] == 6 ? "btn-info" : "") );
-            printf( "<a href='?Hours=12'><input class='btn btn-outline-dark %s' type='button' name='Hours12' value='12 Hours'></a> ", ($_SESSION['GraphHours'] == 12 ? "btn-info" : "") );
-            printf( "<a href='?Hours=24'><input class='btn btn-outline-dark %s' type='button' name='Hours24' value='24 Hours'></a> ", ($_SESSION['GraphHours'] == 24 ? "btn-info" : "") );
-            printf( "<a href='?Hours=48'><input class='btn btn-outline-dark %s' type='button' name='Hours48' value='48 Hours'></a> ", ($_SESSION['GraphHours'] == 48 ? "btn-info" : "") );
-            printf( "<a href='?GraphMinusHour'><input class='btn btn-outline-dark' type='button' name='GraphMinusHour' value='-1 hrs'></a> " );
-            printf( "<a href='?GraphMinusDay'><input class='btn btn-outline-dark' type='button' name='GraphMinusDay' value='-24 hrs'></a> " );
-            printf( "<a href='?GraphPlusDay'><input class='btn btn-outline-dark' type='button' name='GraphPlusDay' value='+24 hrs'></a> " );
-            printf( "<a href='?GraphPlusHour'><input class='btn btn-outline-dark' type='button' name='GraphPlusHour' value='+1 hrs'></a> " );
-            printf( "</p>" );
+        printf( "</div>" );
+        printf( "</div>" );
             
-            printf( "<p>" );
-            printf( "Historic: Date <input class='form-control' type='text' name='GStartDate' value='%s' size='8'> ", $_SESSION['GStartDate'] );
-            printf( "Time <input class='form-control' type='text' name='GStartTime' value='%s' size='5'> ", $_SESSION['GStartTime'] );
-            printf( "<a href='?GraphGo'><input class='btn btn-outline-dark' type='submit' name='GraphGo' value='Go'></a> " );
-            printf( "<a href='?CurrentGraph'><input class='btn btn-outline-dark' type='button' name='CurrentGraph' value='Graph Now'></a> " );
-            printf( "<a href='?ClearGraph&RefreshEnabled'><input class='btn btn-outline-dark' type='button' name='ClearGraph' value='Clear'></a> " );
-            printf( "</p>" );
-            ?>
+		printf( "<div class='row'>" );
+	
+		printf( "<div class='col-sm-2'>" );
+        printf( "<label for='GStartDate'>Historic: Date</label><input class='form-control' type='text' name='GStartDate' id='GStartDate' value='%s' size='8'> ", $_SESSION['GStartDate'] );
+        printf( "</div>" );
+        
+        printf( "<div class='col-sm-2'>" );
+        printf( "Time <input class='form-control' type='text' name='GStartTime' id='GStartTime' value='%s' size='5'> ", $_SESSION['GStartTime'] );
+        printf( "</div>" );
+        
+        printf( "<div class='col-sm-4'>" );
+        printf( "<a href='?GraphGo'><input class='btn btn-outline-dark' type='submit' name='GraphGo' value='Go'></a> " );
+        printf( "<a href='?CurrentGraph'><input class='btn btn-outline-dark' type='button' name='CurrentGraph' value='Graph Now'></a> " );
+        printf( "<a href='?ClearGraph&RefreshEnabled'><input class='btn btn-outline-dark' type='button' name='ClearGraph' value='Clear'></a> " );
 
-			</div>
-		</div> <!-- row -->
+		printf( "</div>" );
+		printf( "</div>" );
 
-	<?php
 	    }
 	}
 	?>

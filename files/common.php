@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 119 );
+define( "THIS_DATABASE_VERSION", 120 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -43,6 +43,8 @@ define( "E_DT_LEVEL_HDL", 7 );	     // level, HDL300 sensor
 define( "E_DT_ROTARY_ENC_12BIT", 8 );	     // rotary encoder, 12 bit
 define( "E_DT_VIPF_MON", 9 );           // PZEM-016 V/I Monitor
 define( "E_DT_CARD_READER", 10 );       // card reader
+define( "E_DT_VSD_NFLIXEN", 11 );       // NFlixen 9600 VSD
+define( "E_DT_VSD_PWRELECT", 12 );      // Power ELectronics SD700 VSD
 $_SESSION['E_DTD'] = array();
 $_SESSION['E_DTD'][] = "Unused";
 $_SESSION['E_DTD'][] = "Digital IO"; 
@@ -55,6 +57,8 @@ $_SESSION['E_DTD'][] = "Level HDL";
 $_SESSION['E_DTD'][] = "Rotary Encoder 12bit";
 $_SESSION['E_DTD'][] = "AC VIPF Monitor";
 $_SESSION['E_DTD'][] = "Card Reader";
+$_SESSION['E_DTD'][] = "NFlixen 9600 VSD";
+$_SESSION['E_DTD'][] = "PwrElect SD700 VSD";
 
 
 define( "E_IO_UNUSED", 0 );
@@ -94,6 +98,14 @@ define( "E_IO_POWER_HIGH", 33 );        // 33:  power measurement K02 too high
 define( "E_IO_POWER_LOW", 34 );         // 34:  power measurement K02 too low
 define( "E_IO_POWER_HIGHLOW", 35 );     // 35:  power measurement K02 too high or too low
 define( "E_IO_ON_OFF_INV", 36 );		// 36: 	manual on off switch inverted levels
+define( "E_IO_TORQUE_MONITOR", 37 );    // 37:  torque monitor only
+define( "E_IO_TORQUE_HIGH", 38 );       // 38:  torque too high
+define( "E_IO_TORQUE_LOW", 39 );        // 39:  torque too low
+define( "E_IO_TORQUE_HIGHLOW", 40 );    // 40:  torque too hight or too low
+define( "E_IO_RPMSPEED_MONITOR", 41 );  // 41:  rpm speed monitor only
+define( "E_IO_RPMSPEED_HIGH", 42 );     // 42:  rpm speed too high
+define( "E_IO_RPMSPEED_LOW", 43 );      // 43:  rpm speed too low
+define( "E_IO_RPMSPEED_HIGHLOW", 44 );  // 44:  rpm speed too high or too low
 $_SESSION['E_IOD'] = array();
 $_SESSION['E_IOD'][] = "Unused";
 $_SESSION['E_IOD'][] = "Manual On Off Switch";
@@ -132,6 +144,14 @@ $_SESSION['E_IOD'][] = "Power Too High";
 $_SESSION['E_IOD'][] = "Power Too Low";
 $_SESSION['E_IOD'][] = "Power Too High or Low";
 $_SESSION['E_IOD'][] = "Manual On Off Switch Inverted";
+$_SESSION['E_IOD'][] = "Torque Monitor Only";
+$_SESSION['E_IOD'][] = "Torque Too High";
+$_SESSION['E_IOD'][] = "Torque Too Low";
+$_SESSION['E_IOD'][] = "Torque Too High or Low";
+$_SESSION['E_IOD'][] = "RPM Speed Monitor Only";
+$_SESSION['E_IOD'][] = "RPM Speed Too High";
+$_SESSION['E_IOD'][] = "RPM Speed Too Low";
+$_SESSION['E_IOD'][] = "RPM Speed Too High or Low";
 
 define( "E_ET_CLICK", 0 );			// 0: single click
 define( "E_ET_DBLCLICK", 1 );		// 1: double click
@@ -150,6 +170,8 @@ define( "E_ET_POWERFACTOR", 13 );	// 13: power factor
 define( "E_ET_POWER", 14 );		    // 14: power
 define( "E_ET_CARDREADER", 15 );    // 15: card reader
 define( "E_ET_PLCEVENT", 16 );      // 16: plc event
+define( "E_ET_TORQUE", 17 );        // 17: torque
+define( "E_ET_RPMSPEED", 18 );      // 18: rpm speed
 $_SESSION['E_ETD'] = array();
 $_SESSION['E_ETD'][] = "Click";
 $_SESSION['E_ETD'][] = "Dbl CLick";
@@ -168,6 +190,8 @@ $_SESSION['E_ETD'][] = "Power Factor";
 $_SESSION['E_ETD'][] = "Power";
 $_SESSION['E_ETD'][] = "Card Reader";
 $_SESSION['E_ETD'][] = "PLC Event";
+$_SESSION['E_ETD'][] = "Torque %";
+$_SESSION['E_ETD'][] = "RPM Speed";
 
 define( "E_DS_ALIVE", 0 );			// 0:	alive
 define( "E_DSD_ALIVE", "Alive" );	
@@ -250,6 +274,8 @@ function func_session_init()
 	    $_SESSION['MonitorTime'] = "";
 	if ( !isset($_SESSION['monitor_audio']) )
 	    $_SESSION['monitor_audio'] = true;
+    if ( !isset($_SESSION['plc_Operation']) )
+        $_SESSION['plc_Operation'] = "";
     if ( !isset($_SESSION['plc_StateName']) )
         $_SESSION['plc_StateName'] = "";
 	        
@@ -646,6 +672,19 @@ function func_check_database( $db )
         
         $version = func_update_database_version( $db, 119 );
     }
+    
+    if ( $version === false || $version < 120 )
+    {   // we have some work to do
+        $query = "alter table devices add de_AlwaysPoweredOn char(1) not null default 'Y'";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table devices", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 120 );
+    }
 }
 
 function func_db_warning_count( $db )
@@ -893,20 +932,20 @@ class MySQLDB
 	}
 
 
-	function UpdateDevicesTable( $de_no, $com_port, $addr, $num_inputs, $num_outputs, $type, $name, $hostname, $baud )
+	function UpdateDevicesTable( $de_no, $com_port, $addr, $num_inputs, $num_outputs, $type, $name, $hostname, $baud, $apo )
 	{
 		if ( $de_no == 0 )
 		{	// insert
-			$query = sprintf( "insert into devices (de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate)
-					values('%s',%d,%d,%d,%d,'%s','%s',%d)",
-					addslashes($com_port), $addr, $num_inputs, $num_outputs, $type, addslashes($name), addslashes($hostname), $baud );
+			$query = sprintf( "insert into devices (de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate,de_AlwaysPoweredOn)
+					values('%s',%d,%d,%d,%d,'%s','%s',%d,'%s')",
+					addslashes($com_port), $addr, $num_inputs, $num_outputs, $type, addslashes($name), addslashes($hostname), $baud, $apo );
 		}
 		else
 		{
 			$query = sprintf( "update devices set de_ComPort='%s',de_Address=%d,de_NumInputs=%d,
-					de_NumOutputs=%d,de_Type=%d,de_Name='%s',de_Hostname='%s',de_BaudRate=%d 
+					de_NumOutputs=%d,de_Type=%d,de_Name='%s',de_Hostname='%s',de_BaudRate=%d,de_AlwaysPoweredOn='%s' 
                     where de_DeviceNo=%d",
-					addslashes($com_port), $addr, $num_inputs, $num_outputs, $type, addslashes($name), addslashes($hostname), $baud,
+					addslashes($com_port), $addr, $num_inputs, $num_outputs, $type, addslashes($name), addslashes($hostname), $baud, $apo,
 			         $de_no );
 		}
 		$result = $this->RunQuery( $query );
@@ -922,7 +961,7 @@ class MySQLDB
 	function ReadDevicesTable()
 	{
 		$info = array();
-		$query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate 
+		$query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate,de_AlwaysPoweredOn  
 				from devices order by de_Address" ); 
 		$result = $this->RunQuery( $query );
 		while ( $line = mysqli_fetch_row($result) )
@@ -930,7 +969,7 @@ class MySQLDB
 			$info[] = array( 'de_DeviceNo'=>$line[0], 'de_ComPort'=>stripslashes($line[1]), 'de_Address'=>$line[2],
 							'de_NumInputs'=>$line[3], 'de_NumOutputs'=>$line[4], 'de_Type'=>$line[5],
 							'de_Name'=>stripslashes($line[6]), 'de_Status'=>$line[7], 'de_Hostname'=>$line[8],
-			                 'de_BaudRate'=>$line[9] );
+			                 'de_BaudRate'=>$line[9], 'de_AlwaysPoweredOn'=>$line[10] );
 		}
 
 		$this->FreeQuery($result);
@@ -941,6 +980,8 @@ class MySQLDB
 	function DeleteDevice( $de_no, &$msg )
 	{
 		$ok = true;
+		$rc = false;
+		$ev = false;
 		
 		// TODO: check if we can delete the device
 		if ( ($info = $this->ReadDeviceInfoByDevice( $de_no )) !== false )
@@ -955,8 +996,7 @@ class MySQLDB
 		}
 		else if ( ($info = $this->ReadEventCount( $de_no )) > 0 )
 		{
-			$ok = false;
-			$msg = "events records exist";
+			$ev = true;
 		}
 		
 		if ( $ok )
@@ -965,17 +1005,26 @@ class MySQLDB
 			$result = $this->RunQuery( $query );
 			if ( mysqli_affected_rows($this->db_link) == 1 )
 			{	// success
-				return true;
+				$rc = true;
+			}
+			
+			if ( $ev )
+			{    // delete the events records
+			    $query = sprintf( "delete from events where ev_DeviceNo=%d", $de_no );
+			    $result = $this->RunQuery( $query );
+			    if ( mysqli_affected_rows($this->db_link) == 1 )
+			    {	// success
+			    }
 			}
 		}
 
-		return false;
+		return $rc;
 	}
 	
 	function ReadDeviceWithAddress( $addr )
 	{
 		$info = false;
-		$query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate from devices 
+		$query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate,de_AlwaysPoweredOn from devices 
 				where de_Address=%d", $addr ); 
 		
 		$result = $this->RunQuery( $query );
@@ -983,7 +1032,7 @@ class MySQLDB
 		{
 			$info = array( 'de_DeviceNo'=>$line[0], 'de_ComPort'=>stripslashes($line[1]), 'de_Address'=>$line[2],
 							'de_NumInputs'=>$line[3], 'de_NumOutputs'=>$line[4], 'de_Type'=>$line[5],
-							'de_Name'=>$line[6], 'de_Status'=>$line[7], 'de_Hostname'=>$line[8], 'de_BaudRate'=>$line[9] );
+							'de_Name'=>$line[6], 'de_Status'=>$line[7], 'de_Hostname'=>$line[8], 'de_BaudRate'=>$line[9], 'de_AlwaysPoweredOn'=>$line[10] );
 		}
 
 		$this->FreeQuery($result);
@@ -994,14 +1043,14 @@ class MySQLDB
 	function ReadDeviceWithName( $name )
 	{
 	    $info = false;
-	    $query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate from devices
+	    $query = sprintf( "select de_DeviceNo,de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Status,de_Hostname,de_BaudRate,de_AlwaysPoweredOn from devices
 				where de_Name='%s'", $name );
 	    $result = $this->RunQuery( $query );
 	    if ( $line = mysqli_fetch_row($result) )
 	    {
 	        $info = array( 'de_DeviceNo'=>$line[0], 'de_ComPort'=>stripslashes($line[1]), 'de_Address'=>$line[2],
 	            'de_NumInputs'=>$line[3], 'de_NumOutputs'=>$line[4], 'de_Type'=>$line[5],
-	            'de_Name'=>$line[6], 'de_Status'=>$line[7], 'de_Hostname'=>$line[8], 'de_BaudRate'=>$line[9] );
+	            'de_Name'=>$line[6], 'de_Status'=>$line[7], 'de_Hostname'=>$line[8], 'de_BaudRate'=>$line[9], 'de_AlwaysPoweredOn'=>$line[10] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -1230,8 +1279,13 @@ class MySQLDB
 	{
 	    $devices = array();
 	    
-	    $search = sprintf( "(%d,%d,%d,%d,%d,%d)", E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_VOLT_MONITOR );
-	    $query = sprintf( "select di_DeviceNo,di_IOChannel,di_IOName from deviceinfo where di_IOType in %s and di_MonitorPos like '%%%s%%'",
+//	    $search = sprintf( "(%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", 
+//	        E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_TEMP_HIGHLOW, E_IO_TEMP_MONITOR, 
+//	        E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_VOLT_HIGHLOW, E_IO_VOLT_MONITOR,
+//	        E_IO_CURRENT_HIGH, E_IO_CURRENT_LOW, E_IO_CURRENT_HIGHLOW, E_IO_CURRENT_MONITOR,
+//	        E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW, E_IO_LEVEL_MONITOR );
+        $search = sprintf( "(%d,%d,%d,%d,%d,%d,%d)", E_IO_UNUSED, E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, E_IO_ON_OFF_INV );
+	    $query = sprintf( "select di_DeviceNo,di_IOChannel,di_IOName from deviceinfo where di_IOType NOT in %s and di_MonitorPos like '%%%s%%'",
 	        $search, $pos );
 	    
 	    $result = $this->RunQuery( $query );
@@ -1735,6 +1789,18 @@ class MySQLDB
 	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_ROTARY_ENC );
 	}
 	
+	function GetLatestTorques( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_TORQUE_HIGH, E_IO_TORQUE_LOW, E_IO_TORQUE_MONITOR, E_IO_TORQUE_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_TORQUE );
+	}
+	
+	function GetLatestRpmSpeeds( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_RPMSPEED_HIGH, E_IO_RPMSPEED_LOW, E_IO_RPMSPEED_MONITOR, E_IO_RPMSPEED_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_RPMSPEED );
+	}
+	
 	function GetCurrentValue( $device_no, $channel )
 	{
 		$info = false;
@@ -2106,12 +2172,15 @@ class MySQLDB
 	    return $info;
 	}
 	
-	function DeletePlcStateRecord( $notify, $state_no )
+	function DeletePlcStateRecord( $notify, $state_no, $op_name, $st_name )
 	{
-	    $query = sprintf( "delete from plcstates where pl_StateNo=%d", $state_no );
+	    if ( $state_no == 0 )
+	        $query = sprintf( "delete from plcstates where pl_Operation='%s' and pl_StateName='%s'", addslashes($op_name), addslashes($st_name) );
+	    else
+    	    $query = sprintf( "delete from plcstates where pl_StateNo=%d", $state_no );
 	    
 	    $result = $this->RunQuery( $query );
-	    if ( mysqli_affected_rows($this->db_link) == 1 )
+	    if ( mysqli_affected_rows($this->db_link) >= 1 )
 	    {
 	        if ( $notify )
 	        {
@@ -2197,7 +2266,7 @@ class MySQLDB
 	    if ( $op == "" )
     	    $query = sprintf( "update plcstates set pl_StateIsActive='N'");
 	    else 
-	        $query = sprintf( "update plcstates set pl_StateIsActive='N' where pl_Operation!='%s'", addslashes($op) );
+	        $query = sprintf( "update plcstates set pl_StateIsActive='N' where pl_Operation='%s'", addslashes($op) );
 	    
         $result = $this->RunQuery( $query );
         if ( mysqli_affected_rows($this->db_link) >= 0 )
@@ -2242,6 +2311,18 @@ class MySQLDB
 	    $query = sprintf( "update plcstates set pl_InitialState='N' where pl_Operation='%s' and pl_StateNo!=%d", addslashes($op), $state_no );
 	    $result = $this->RunQuery( $query );
 	    if ( mysqli_affected_rows($this->db_link) >= 0 )
+	    {	// success
+	        return true;
+	    }
+	    
+	    return false;
+	}
+	
+	function RenameOperation( $old_op, $new_op )
+	{
+	    $query = sprintf( "update plcstates set pl_Operation='%s' where pl_Operation='%s'", addslashes($new_op), addslashes($old_op) );
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) >= 1 )
 	    {	// success
 	        return true;
 	    }
@@ -2467,6 +2548,16 @@ function func_calc_power( $cc )
 }
 
 function func_calc_frequency( $cc )
+{
+    return sprintf( "%.1f", $cc );
+}
+
+function func_calc_torque( $cc )
+{
+    return sprintf( "%.1f", $cc );
+}
+
+function func_calc_rpmspeed( $cc )
 {
     return sprintf( "%.1f", $cc );
 }
@@ -2962,7 +3053,7 @@ function func_disabled_non_user()
 //  Graph Functions
 //
 //****************************************************************************
-function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $devices )
+function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $devices )
 {
     $data = array();
     foreach ( $devices as $gg )
@@ -3058,6 +3149,36 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                 }
             }
         }
+        if ( $found == false )
+        {
+            $gvoltage = false;
+            foreach ( $torques as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['di_DeviceNo'] && $tt['di_IOChannel'] == $gg['di_IOChannel'] )
+                {
+                    $found = true;
+                    $myarray = $tt;
+                    $gname = $tt['di_IOName'];
+                    $atype = "Q";
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            $gvoltage = false;
+            foreach ( $rpmspeeds as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['di_DeviceNo'] && $tt['di_IOChannel'] == $gg['di_IOChannel'] )
+                {
+                    $found = true;
+                    $myarray = $tt;
+                    $gname = $tt['di_IOName'];
+                    $atype = "R";
+                    break;
+                }
+            }
+        }
         
         if ( $found )
         {
@@ -3086,6 +3207,14 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $alert = true;
                 }
                 else if ( $atype == "F" && func_calc_frequency($val) < $myarray['di_MonitorLo'] || func_calc_frequency($val) > $myarray['di_MonitorHi'] )
+                {
+                    $alert = true;
+                }
+                else if ( $atype == "Q" && func_calc_torque($val) < $myarray['di_MonitorLo'] || func_calc_torque($val) > $myarray['di_MonitorHi'] )
+                {
+                    $alert = true;
+                }
+                else if ( $atype == "R" && func_calc_rpmspeed($val) < $myarray['di_MonitorLo'] || func_calc_rpmspeed($val) > $myarray['di_MonitorHi'] )
                 {
                     $alert = true;
                 }
@@ -3139,6 +3268,10 @@ function func_create_graph( $gdata, $divname )
                $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_power($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
             else if ( $graph['atype'] == "F" )
                $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_frequency($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
+            else if ( $graph['atype'] == "Q" )
+               $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_torque($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
+            else if ( $graph['atype'] == "R" )
+               $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_rpmspeed($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
             else
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_voltage($data['ev_Value'],"A"), 'SeqNo'=>$graph['SeqNo'] );
         }
@@ -3371,9 +3504,9 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
     
     if ( count($div_data) != 0 )
     {   // set alert color
-        $hh = "h2";
+        $hh = "h3";
         if ( count($div_data) > 2 )
-            $hh = "h3";
+            $hh = "h4";
         foreach ( $div_data as $dat )
         {
             $a_bgcolor = $alert_okcolor;
@@ -3386,37 +3519,47 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
             }
             if ( $dat['atype'] == "T" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>&#8451</div></%s></td></tr></table>",
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>&#8451</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_temperature($val), $hh );
             }
             else if ( $dat['atype'] == "V" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>V</div></%s></td></tr></table>",
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>V</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_voltage($val,"V"), $hh );
             }
             else if ( $dat['atype'] == "A" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>A</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_current($val), $hh );
             }
             else if ( $dat['atype'] == "L" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_level($val), $hh );
             }
             else if ( $dat['atype'] == "W" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>W</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_power($val), $hh );
             }
             else if ( $dat['atype'] == "F" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>Hz</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_frequency($val), $hh );
+            }
+            else if ( $dat['atype'] == "Q" )
+            {
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_torque($val), $hh );
+            }
+            else if ( $dat['atype'] == "R" )
+            {
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>rpm</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_rpmspeed($val), $hh );
             }
             else
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center;'><tr><td><%s>%s<br><div class='small'><b>%s</b>A</div></%s></td></tr></table>",
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>A</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_voltage($val,"A"), $hh );
             }
         }

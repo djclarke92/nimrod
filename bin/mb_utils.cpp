@@ -23,12 +23,15 @@
 #include "mb_utils.h"
 
 
+extern bool gbPlcIsActive;
+
 bool gbUpgradeNow = false;
 bool gbRestartNow = false;
 time_t gtTarFileTimestamp = 0;
 char gszLogDir[256] = {""};
 char gszProgName[256] = {""};
 char gszTarFileName[256] = {""};
+time_t gtLastUpgradeMsgTime = 0;
 
 
 const double TimeNowMS()
@@ -270,8 +273,9 @@ pid_t CreateSSHTunnel()
 }
 
 #define MAX_DIR_LIST	4
-void CheckForUpgrade()
+bool CheckForUpgrade()
 {
+	bool bUpgrade = false;
 	int i;
 	int idx;
 	DIR *d;
@@ -281,7 +285,7 @@ void CheckForUpgrade()
 
 	if ( stat( "./no.upgrade", &statbuf ) == 0 || gbTerminateNow )
 	{
-		return;
+		return false;
 	}
 
 	// check for file in /var/www/html/uploads
@@ -398,17 +402,25 @@ void CheckForUpgrade()
 
 	if ( strlen( gszTarFileName ) != 0 )
 	{
-		LogMessage( E_MSG_INFO, "Found upgrade tar file '%s'", gszTarFileName );
+		bool bPrinted = false;
+		if ( gtLastUpgradeMsgTime + 60 < time(NULL) )
+		{
+			bPrinted = true;
+			LogMessage( E_MSG_INFO, "Found upgrade tar file '%s'", gszTarFileName );
+		}
 
 		if ( stat( gszTarFileName, &statbuf ) == 0 )
 		{
-			if ( statbuf.st_mtime + 5 < time(NULL) )
-			{
-				if ( CreateRestartScript( gszTarFileName ) )
+			if ( statbuf.st_mtime + 2 < time(NULL) )
+			{	// wait a bit to ensure the full tar file exists on the filesystem
+				if ( gtLastUpgradeMsgTime != 0 )
+				{
+					bUpgrade = true;
+				}
+				else if ( CreateRestartScript( gszTarFileName ) )
 				{
 					CreatePackageVerFile( gszTarFileName );
-					gbUpgradeNow = true;
-					gbTerminateNow = true;
+					bUpgrade = true;
 				}
 			}
 			else
@@ -420,7 +432,14 @@ void CheckForUpgrade()
 		{
 			LogMessage( E_MSG_ERROR, "stat(%s) failed with errno %d", gszTarFileName, errno );
 		}
+
+		if ( bPrinted && bUpgrade )
+		{
+			gtLastUpgradeMsgTime = time(NULL);
+		}
 	}
+
+	return bUpgrade;
 }
 
 bool CreateRestartScript( const char* szTar )

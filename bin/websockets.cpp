@@ -308,15 +308,18 @@ void CThread::websocket_init()
 	info.ka_time = 2;
 	info.ka_interval = 10;
 	info.ka_probes = 2;
-	info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
-	info.ssl_cert_filepath = pszCertFile;
-    info.ssl_private_key_filepath = pszKeyFile;
+	if ( m_bSecureWebSocket )
+	{
+		info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+		info.ssl_cert_filepath = pszCertFile;
+		info.ssl_private_key_filepath = pszKeyFile;
+	}
 
     lws_set_log_level( 0x0007, ws_log_message );
 
 	m_WSContext = lws_create_context( &info );
 
-	LogMessage( E_MSG_INFO, "websocket context created %p", m_WSContext );
+	LogMessage( E_MSG_INFO, "websocket context created %p, secure=%d", m_WSContext, (int)m_bSecureWebSocket );
 }
 
 void CThread::websocket_process( const char* szMsg )

@@ -25,6 +25,7 @@ function func_clear_de_array( &$de_array )
 	$de_array['de_Type'] = "";
 	$de_array['de_Name'] = "";
 	$de_array['de_Hostname'] = "";
+	$de_array['de_AlwaysPoweredOn'] = "Y";
 	$de_array['error_msg'] = "";
 	$de_array['info_msg'] = "";
 }
@@ -44,10 +45,10 @@ function func_check_de_array( &$de_array )
 	    $de_array['error_msg'] = "The Baud Rate must be 9600 or 19200.";
 	    return false;
 	}
-	else if ( $de_array['de_Address'] == "" || ($de_array['de_Address'] < 2 && $de_array['de_Address'] != 0) || $de_array['de_Address'] > 0xfe ||
+	else if ( $de_array['de_Address'] == "" || ($de_array['de_Address'] < 1 && $de_array['de_Address'] != 0) || $de_array['de_Address'] > 0xfe ||
 	    ($de_array['de_Address'] == 0 && $de_array['de_ComPort'] != 'Timer' && strncmp( $de_array['de_ComPort'], 'ESP', 3 ) != 0) )
 	{  // address is required except for time and ESP devices
-		$de_array['error_msg'] = "You must enter an Address in the range 0x02 - 0xfe.";
+		$de_array['error_msg'] = "You must enter an Address in the range 0x01 - 0xfe.";
 		return false;
 	}
 	else if ( $de_array['de_NumInputs'] < 0 || $de_array['de_NumInputs'] > 16 )
@@ -122,6 +123,10 @@ if ( isset( $_POST['de_Name']) )
 	$de_array['de_Name'] = $_POST['de_Name'];
 if ( isset( $_POST['de_Hostname']) )
 	$de_array['de_Hostname'] = $_POST['de_Hostname'];
+if ( isset($_POST['de_AlwaysPoweredOn']) )
+    $de_array['de_AlwaysPoweredOn'] = "Y";
+else
+    $de_array['de_AlwaysPoweredOn'] = "N";
 
 
 
@@ -131,7 +136,8 @@ if ( isset($_GET['DeviceNo']) )
     {
         $new_device = true;
     }
-	else if ( ($line=$db->GetFields( 'devices', 'de_DeviceNo', $de_array['de_DeviceNo'], "de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate" )) !== false )
+	else if ( ($line=$db->GetFields( 'devices', 'de_DeviceNo', $de_array['de_DeviceNo'], "de_ComPort,de_Address,de_NumInputs,de_NumOutputs,de_Type,de_Name,de_Hostname,de_BaudRate,
+            de_AlwaysPoweredOn" )) !== false )
 	{	// success
 		$de_array['de_ComPort'] = $line[0];
 		$de_array['de_Address'] = $line[1];
@@ -141,6 +147,7 @@ if ( isset($_GET['DeviceNo']) )
 		$de_array['de_Name'] = $line[5];
 		$de_array['de_Hostname'] = $line[6];
 		$de_array['de_BaudRate'] = $line[7];
+		$de_array['de_AlwaysPoweredOn'] = $line[8];
 	}
 	else
 	{
@@ -153,7 +160,9 @@ else if ( isset($_POST['DeleteDevice']) )
 	$de_array['de_DeviceNo'] = $_POST['de_DeviceNo']; 
 	if ( $db->DeleteDevice( $de_array['de_DeviceNo'], $msg ) )
 	{
-		$de_array['info_msg'] = sprintf( "Device deleted" );
+	    func_clear_de_array( $de_array );
+	    
+	    $de_array['info_msg'] = sprintf( "Device deleted" );
 		$de_array['de_DeviceNo'] = 0;
 	}
 	else 
@@ -181,7 +190,7 @@ else if ( isset($_POST['NewDevice']) || isset($_POST['UpdateDevice']) )
 	else if ( func_check_de_array( $de_array ) )
 	{
 		if ( $db->UpdateDevicesTable( $de_array['de_DeviceNo'], $de_array['de_ComPort'], $de_array['de_Address'],
-			$de_array['de_NumInputs'], $de_array['de_NumOutputs'], $de_array['de_Type'], $de_array['de_Name'], $de_array['de_Hostname'], $de_array['de_BaudRate'] ) )
+			$de_array['de_NumInputs'], $de_array['de_NumOutputs'], $de_array['de_Type'], $de_array['de_Name'], $de_array['de_Hostname'], $de_array['de_BaudRate'], $de_array['de_AlwaysPoweredOn'] ) )
 		{	// success
 			func_clear_de_array( $de_array );
 		
@@ -223,7 +232,7 @@ $devices_list = $db->ReadDevicesTable();
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-7">
+		<div class="col-sm-8">
 			<?php
 			if ( $de_array['error_msg'] != "" )
 			    printf( "<p class='text-danger'>%s</p>", $de_array['error_msg'] );
@@ -272,7 +281,7 @@ $devices_list = $db->ReadDevicesTable();
     <!-- *************************************************************************** -->
 	<div class="row">
 
-		<div class="col-sm-7">
+		<div class="col-sm-8">
 			<h3>Device Detail</h3>
 
 			<?php
@@ -326,7 +335,7 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			printf( "<div class='col'>" );
   			$tip = sprintf( "ESP and Level devices still need a unique address to be entered event though they do not use Modbus." );
-  			printf( "<input type='text' class='form-control' name='de_Address' id='de_Address' size='4' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $de_array['de_Address'], $tip );
+  			printf( "<input type='text' class='form-control' name='de_Address' id='de_Address' size='4' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", $de_array['de_Address'], $tip );
   			printf( "</div>" );
   			printf( "</div>" );
   			
@@ -335,7 +344,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<label for='de_NumInputs'>Num Inputs: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col'>" );
-  			printf( "<input type='text' class='form-control' name='de_NumInputs' id='de_NumInputs' size='3' value='%s'> ", $de_array['de_NumInputs'] );
+  			$tip = sprintf( "AC VIPF devices have 6 inputs (V/I/P/E/F/PF)<br>.VSD devices have 5 inputs (V/I/P/F/T) and 1 output (F)." );
+  			printf( "<input type='text' class='form-control' name='de_NumInputs' id='de_NumInputs' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html=true title='%s'> ", $de_array['de_NumInputs'], $tip );
   			printf( "</div>" );
   			printf( "</div>" );
   			
@@ -362,6 +372,15 @@ $devices_list = $db->ReadDevicesTable();
   			    $dt += 1;
   			}
   			printf( "</select>" );
+  			printf( "</div>" );
+  			printf( "</div>" );
+  			
+  			printf( "<div class='row'>" );
+  			printf( "<div class='col-sm-2'>" );
+  			printf( "<label for='de_AlwaysPoweredOn'>Always Powered On: </label>" );
+  			printf( "</div>" );
+  			printf( "<div class='col form-check-inline'>" );
+  			printf( "<input type='checkbox' name='de_AlwaysPoweredOn' id='de_AlwaysPoweredOn' %s>", ($de_array['de_AlwaysPoweredOn'] == "Y" ? "checked" : ""));
   			printf( "</div>" );
   			printf( "</div>" );
   			

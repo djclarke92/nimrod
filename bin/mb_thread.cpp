@@ -34,6 +34,7 @@
 #include "mb_socket.h"
 
 
+extern bool gbPlcIsActive;
 extern CThreadMsg gThreadMsg;
 
 pthread_mutex_t mutexLock[E_LT_MAX_LOCKS];
@@ -58,6 +59,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_tLastCameraSnapshot = time(NULL);
 	m_tCardReaderStart = 0;
 	m_iLevelMessage = 0;
+	m_bSecureWebSocket = true;
 
 	m_sslServerCtx = NULL;
 	m_sslClientCtx = NULL;
@@ -89,6 +91,13 @@ CThread::~CThread()
 			CloseSocket( m_iClientFd[i], i );
 		}
 	}
+
+	if ( IsTimerThread() )
+	{
+		gbPlcIsActive = false;
+	}
+
+	LogMessage( E_MSG_INFO, "Thread %s terminating", GetThreadType(m_eThreadType) );
 }
 
 SSL_CTX* CThread::InitServerCTX(void)
@@ -203,11 +212,14 @@ void CThread::Worker()
 	int iDayMinutes;
 	int iLastDayMinutes = -1;
 	int iAllDeadCheckPeriod = 10;
-	time_t tLastTemperatureCheck = 0;
-	time_t tLastVoltageCheck = 0;
-	time_t tLastLevelCheck = 0;
-	time_t tLastRotEncCheck = 0;
-	time_t tLastVIPFCheck = 0;
+	double dLastTemperatureCheck = 0;
+	double dLastVoltageCheck = 0;
+	double dLastLevelCheck = 0;
+	double dLastRotEncCheck = 0;
+	double dLastVIPFCheck = 0;
+	double dLastVSDNFlixenCheck = 0;
+	double dLastVSDPwrElectCheck = 0;
+	double dLastVSDToshibaCheck = 0;
 	time_t tTimenow;
 	time_t tUpdated;
 	time_t tAllDeadStart = 0;
@@ -266,6 +278,13 @@ void CThread::Worker()
 
 	if ( IsWebsocketThread() )
 	{
+		char szBuf[100] = "";
+		ReadSiteConfig( "SECURE_WEBSOCKET", szBuf, sizeof(szBuf) );
+		if ( strlen(szBuf) != 0 )
+		{
+			m_bSecureWebSocket = (bool)atoi(szBuf);
+		}
+
 		websocket_init();
 	}
 
@@ -297,6 +316,8 @@ void CThread::Worker()
 			gThreadMsg.GetMessage( szMsg, sizeof(szMsg) );
 
 			websocket_process( szMsg );
+
+			usleep( 10000 );
 		}
 		else if ( IsTcpipThread() )
 		{
@@ -498,36 +519,36 @@ void CThread::Worker()
 					if ( m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_DS ||
 							m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_K1 )
 					{	// temperature sensor
-						if ( tLastTemperatureCheck + TEMPERATURE_CHECK_PERIOD <= time(NULL) )
+						if ( dLastTemperatureCheck + TEMPERATURE_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check temperature devices every 5 seconds
-							tLastTemperatureCheck = time(NULL);
+							dLastTemperatureCheck = TimeNowMS();
 
 							HandleTemperatureDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VOLTAGE )
 					{
-						if ( tLastVoltageCheck + VOLTAGE_CHECK_PERIOD <= time(NULL) )
+						if ( dLastVoltageCheck + VOLTAGE_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check voltage devices every 5 seconds
-							tLastVoltageCheck = time(NULL);
+							dLastVoltageCheck = TimeNowMS();
 
 							HandleVoltageDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HDL )
 					{
-						if ( tLastLevelCheck + LEVEL_CHECK_PERIOD <= time(NULL) )
+						if ( dLastLevelCheck + LEVEL_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check level devices every 5 seconds
-							tLastLevelCheck = time(NULL);
+							dLastLevelCheck = TimeNowMS();
 
 							HandleHdlLevelDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_ROTARY_ENC_12BIT )
 					{
-						if ( tLastRotEncCheck + ROTENC_CHECK_PERIOD <= time(NULL) )
+						if ( dLastRotEncCheck + ROTENC_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check rotary encoder devices every 1 seconds
-							tLastRotEncCheck = time(NULL);
+							dLastRotEncCheck = TimeNowMS();
 
 							// to avoid "response not from requested slave" error
 							//usleep( 20000 );
@@ -536,11 +557,50 @@ void CThread::Worker()
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VIPF_MON )
 					{
-						if ( tLastVIPFCheck + VIPF_CHECK_PERIOD <= time(NULL) )
+						if ( dLastVIPFCheck + VIPF_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check VIPF devices every 1 seconds
-							tLastVIPFCheck = time(NULL);
+							dLastVIPFCheck = TimeNowMS();
 
 							HandleVIPFDevice( myDB, ctx, idx, bAllDead );
+
+							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
+								bAllDead = false;
+						}
+					}
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VSD_NFLIXEN )
+					{
+						if ( dLastVSDNFlixenCheck + VSD_CHECK_PERIOD <= TimeNowMS() )
+						{	// only check VSD devices every 0.5 seconds
+							dLastVSDNFlixenCheck = TimeNowMS();
+
+							HandleVSDNFlixenDevice( myDB, ctx, idx, bAllDead );
+
+							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
+								bAllDead = false;
+						}
+					}
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VSD_PWRELECT )
+					{
+						if ( dLastVSDPwrElectCheck + VSD_CHECK_PERIOD <= TimeNowMS() )
+						{	// only check VSD devices every 0.5 seconds
+							dLastVSDPwrElectCheck = TimeNowMS();
+
+							HandleVSDPwrElectDevice( myDB, ctx, idx, bAllDead );
+
+							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
+								bAllDead = false;
+						}
+					}
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VSD_TOSHIBA )
+					{
+						if ( dLastVSDToshibaCheck + VSD_CHECK_PERIOD <= TimeNowMS() )
+						{	// only check VSD devices every 0.5 seconds
+							dLastVSDToshibaCheck = TimeNowMS();
+
+							HandleVSDToshibaDevice( myDB, ctx, idx, bAllDead );
+
+							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
+								bAllDead = false;
 						}
 					}
 					else
@@ -2596,6 +2656,566 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 	}
 }
 
+void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
+{
+	int iChannel;
+	int rc;
+	int err;
+	int addr;
+	int iLoop;
+	int iRetry = 3;
+	int iCheckAgain = 1;
+
+
+	addr = 0x1001;
+	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
+	{	// read 10 bytes
+		int count = 10;
+		uint16_t uiVal[10];
+
+		// VIPF devices may not respond as they are powered by the 230VAC they are monitoring
+		if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_ALIVE )
+		{
+			iCheckAgain = 0;
+			if ( time(NULL) % 10 == 0 || m_tThreadStartTime + 10 >= time(NULL) )
+			{	// check if the device has come alive every 10 seconds
+				//LogMessage( E_MSG_INFO, "Check VSD again %d, address %d", m_pmyDevices->GetDeviceStatus(idx), m_pmyDevices->GetAddress(idx) );
+				iCheckAgain = -1;
+			}
+		}
+
+		if ( iCheckAgain != 0 )
+		{
+			rc = modbus_read_registers( ctx, addr, count, uiVal );
+		}
+		else
+		{
+			break;
+		}
+		if ( rc == -1 )
+		{	// failed
+			// don't retry VSD devices
+			err = errno;
+
+			//if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
+			if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_BURIED )
+			{	// device has just failed
+				LogMessage( E_MSG_INFO, "VSD device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+				// do not record this in the DB - expected failure
+				//myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "VSD device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			}
+
+			//if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
+			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
+			{
+				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+			}
+
+			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
+			{
+				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+			}
+
+			iLoop = iRetry;
+
+			memset( uiVal, 0, 10*sizeof(uint16_t) );
+		}
+
+		if ( true )
+		{	// success
+			// put register data into channel data
+			// voltage
+			m_pmyDevices->GetNewData(idx)[0] = uiVal[2];	// 0x1003: Output Voltage 1V
+			// current
+			m_pmyDevices->GetNewData(idx)[1] = uiVal[3];	// 0x1004: Output Current 0.1A
+			// power
+			m_pmyDevices->GetNewData(idx)[2] = uiVal[4];	// 0x1005: Output Power 0.1kW
+			// frequency
+			m_pmyDevices->GetNewData(idx)[3] = uiVal[0];	// 0x1001: Frequency Hz 0.01Hz
+			// torque
+			m_pmyDevices->GetNewData(idx)[4] = uiVal[5];	// 0x1006: Torque %
+
+
+			if ( rc != -1 )
+			{
+				bAllDead = false;
+				if ( iLoop > 0 )
+				{
+					LogMessage( E_MSG_INFO, "modbus_read_registers() retry successful, loop %d", iLoop );
+				}
+
+				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+				{
+					LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+				}
+
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				}
+			}
+
+			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
+			{
+				double dDiff;
+				double dValNew;
+				double dValOld;
+				char szUnits[10] = "?";
+				char szDesc[20] = "?";
+				char szName[50] = "VSD Monitor";
+				E_EVENT_TYPE eEventType = E_ET_VOLTAGE;
+				E_IO_TYPE eIOTypeL = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeH = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeHL = E_IO_VOLT_MONITOR;
+
+				dValOld = m_pmyDevices->CalcVSDNFlixenValue(idx,iChannel,false);
+				dValNew = m_pmyDevices->CalcVSDNFlixenValue(idx,iChannel,true);
+				switch ( iChannel )
+				{
+				default:
+					dDiff = 5;
+					dValNew = 0;
+					break;
+				case 0:		// voltage
+					dDiff = 5;	// 0.5 volts
+					eEventType = E_ET_VOLTAGE;
+					strcpy( szUnits, "V" );
+					strcpy( szDesc, "Voltage" );
+					eIOTypeL = E_IO_VOLT_LOW;
+					eIOTypeH = E_IO_VOLT_HIGH;
+					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					break;
+				case 1:		// current
+					dDiff = 0.1;	// 100mA
+					eEventType = E_ET_CURRENT;
+					strcpy( szUnits, "A" );
+					strcpy( szDesc, "Current" );
+					eIOTypeL = E_IO_CURRENT_LOW;
+					eIOTypeH = E_IO_CURRENT_HIGH;
+					eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+					break;
+				case 2:		// power
+					dDiff = 20;	// 20 Watts
+					eEventType = E_ET_POWER;
+					strcpy( szUnits, "W" );
+					strcpy( szDesc, "Power" );
+					eIOTypeL = E_IO_VOLT_LOW;
+					eIOTypeH = E_IO_VOLT_HIGH;
+					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					break;
+				case 3:		// frequency
+					dDiff = 1;	// 1Hz
+					eEventType = E_ET_FREQUENCY;
+					strcpy( szUnits, "Hz" );
+					strcpy( szDesc, "Frequency" );
+					eIOTypeL = E_IO_FREQ_LOW;
+					eIOTypeH = E_IO_FREQ_HIGH;
+					eIOTypeHL = E_IO_FREQ_HIGHLOW;
+					break;
+				case 4:		// torque %
+					dDiff = 1;	//
+					eEventType = E_ET_TORQUE;
+					strcpy( szUnits, "T%" );
+					strcpy( szDesc, "Torque Percent" );
+					eIOTypeL = E_IO_TORQUE_LOW;
+					eIOTypeH = E_IO_TORQUE_HIGH;
+					eIOTypeHL = E_IO_TORQUE_HIGHLOW;
+					break;
+				}
+
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+			}	// end for loop
+
+			// break out of retry loop
+			break;
+		}
+	}
+}
+
+void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
+{
+	int iChannel;
+	int rc;
+	int err;
+	int addr;
+	int iLoop;
+	int iRetry = 3;
+	int iCheckAgain = 1;
+
+
+	addr = 40162;
+	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
+	{	// read 10 bytes
+		int count = 10;
+		uint16_t uiVal[10];
+
+		// VIPF devices may not respond as they are powered by the 230VAC they are monitoring
+		if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_ALIVE )
+		{
+			iCheckAgain = 0;
+			if ( time(NULL) % 10 == 0 || m_tThreadStartTime + 10 >= time(NULL) )
+			{	// check if the device has come alive every 10 seconds
+				//LogMessage( E_MSG_INFO, "Check VSD again %d, address %d", m_pmyDevices->GetDeviceStatus(idx), m_pmyDevices->GetAddress(idx) );
+				iCheckAgain = -1;
+			}
+		}
+
+		if ( iCheckAgain != 0 )
+		{
+			rc = modbus_read_registers( ctx, addr, count, uiVal );
+		}
+		else
+		{
+			break;
+		}
+		if ( rc == -1 )
+		{	// failed
+			// don't retry VSD devices
+			err = errno;
+
+			//if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
+			if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_BURIED )
+			{	// device has just failed
+				LogMessage( E_MSG_INFO, "VSD device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+				// do not record this in the DB - expected failure
+				//myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "VSD device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			}
+
+			//if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
+			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
+			{
+				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+			}
+
+			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
+			{
+				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+			}
+
+			iLoop = iRetry;
+
+			memset( uiVal, 0, 10*sizeof(uint16_t) );
+		}
+
+		if ( true )
+		{	// success
+			// put register data into channel data
+			// voltage
+			m_pmyDevices->GetNewData(idx)[0] = uiVal[4];	// 40166: Output Voltage 1V
+			// current
+			m_pmyDevices->GetNewData(idx)[1] = uiVal[1];	// 40163: Output Current 0.1A
+			// power
+			m_pmyDevices->GetNewData(idx)[2] = uiVal[3];	// 40165: Output Power 0.1kW
+			// frequency
+			m_pmyDevices->GetNewData(idx)[3] = uiVal[5];	// 40167: Frequency Hz 0.1Hz
+			// torque
+			m_pmyDevices->GetNewData(idx)[4] = uiVal[2];	// 40164: Torque %
+
+
+			if ( rc != -1 )
+			{
+				bAllDead = false;
+				if ( iLoop > 0 )
+				{
+					LogMessage( E_MSG_INFO, "modbus_read_registers() retry successful, loop %d", iLoop );
+				}
+
+				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+				{
+					LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+				}
+
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				}
+			}
+
+			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
+			{
+				double dDiff;
+				double dValNew;
+				double dValOld;
+				char szUnits[10] = "?";
+				char szDesc[20] = "?";
+				char szName[50] = "VSD Monitor";
+				E_EVENT_TYPE eEventType = E_ET_VOLTAGE;
+				E_IO_TYPE eIOTypeL = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeH = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeHL = E_IO_VOLT_MONITOR;
+
+				dValOld = m_pmyDevices->CalcVSDPwrElectValue(idx,iChannel,false);
+				dValNew = m_pmyDevices->CalcVSDPwrElectValue(idx,iChannel,true);
+				switch ( iChannel )
+				{
+				default:
+					dDiff = 5;
+					dValNew = 0;
+					break;
+				case 0:		// voltage
+					dDiff = 5;	// 0.5 volts
+					eEventType = E_ET_VOLTAGE;
+					strcpy( szUnits, "V" );
+					strcpy( szDesc, "Voltage" );
+					eIOTypeL = E_IO_VOLT_LOW;
+					eIOTypeH = E_IO_VOLT_HIGH;
+					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					break;
+				case 1:		// current
+					dDiff = 0.1;	// 100mA
+					eEventType = E_ET_CURRENT;
+					strcpy( szUnits, "A" );
+					strcpy( szDesc, "Current" );
+					eIOTypeL = E_IO_CURRENT_LOW;
+					eIOTypeH = E_IO_CURRENT_HIGH;
+					eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+					break;
+				case 2:		// power
+					dDiff = 20;	// 20 Watts
+					eEventType = E_ET_POWER;
+					strcpy( szUnits, "W" );
+					strcpy( szDesc, "Power" );
+					eIOTypeL = E_IO_VOLT_LOW;
+					eIOTypeH = E_IO_VOLT_HIGH;
+					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					break;
+				case 3:		// frequency
+					dDiff = 1;	// 1Hz
+					eEventType = E_ET_FREQUENCY;
+					strcpy( szUnits, "Hz" );
+					strcpy( szDesc, "Frequency" );
+					eIOTypeL = E_IO_FREQ_LOW;
+					eIOTypeH = E_IO_FREQ_HIGH;
+					eIOTypeHL = E_IO_FREQ_HIGHLOW;
+					break;
+				case 4:		// torque %
+					dDiff = 1;	//
+					eEventType = E_ET_TORQUE;
+					strcpy( szUnits, "T%" );
+					strcpy( szDesc, "Torque Percent" );
+					eIOTypeL = E_IO_TORQUE_LOW;
+					eIOTypeH = E_IO_TORQUE_HIGH;
+					eIOTypeHL = E_IO_TORQUE_HIGHLOW;
+					break;
+				}
+
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+			}	// end for loop
+
+			// break out of retry loop
+			break;
+		}
+	}
+}
+
+// must read each data byte one at a time
+void CThread::HandleVSDToshibaDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
+{
+	int iChannel;
+	int rc;
+	int err;
+	int addr;
+	int iLoop;
+	int iRetry = 3;
+	int iCheckAgain = 1;
+	int iSleepTime = 40000;
+
+
+	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
+	{	// read 1 byte
+		int count = 1;
+		uint16_t uiVal[2];
+
+		// VSD devices may not respond as they may be powered off
+		if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_ALIVE )
+		{
+			iCheckAgain = 0;
+			if ( time(NULL) % 10 == 0 || m_tThreadStartTime + 10 >= time(NULL) )
+			{	// check if the device has come alive every 10 seconds
+				//LogMessage( E_MSG_INFO, "Check VSD again %d, address %d", m_pmyDevices->GetDeviceStatus(idx), m_pmyDevices->GetAddress(idx) );
+				iCheckAgain = -1;
+			}
+		}
+
+		memset( uiVal, 0, 2*sizeof(uint16_t) );
+
+		addr = 0xfe05;	// motor voltage
+		if ( iCheckAgain != 0 )
+		{
+			rc = modbus_read_registers( ctx, addr, count, uiVal );
+		}
+		else
+		{
+			break;
+		}
+		if ( rc == -1 )
+		{	// failed
+			// don't retry VSD devices
+			err = errno;
+
+			//if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
+			if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_BURIED )
+			{	// device has just failed
+				LogMessage( E_MSG_INFO, "VSD device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+				// do not record this in the DB - expected failure
+				//myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "VSD device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			}
+
+			//if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
+			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
+			{
+				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+			}
+
+			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
+			{
+				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+			}
+
+			iLoop = iRetry;
+		}
+		// voltage
+		m_pmyDevices->GetNewData(idx)[0] = uiVal[0];	// ?
+
+		usleep( iSleepTime );
+
+		addr = 0xfe03;	// motor current
+		rc = modbus_read_registers( ctx, addr, count, uiVal );
+		if ( rc != -1 )
+		{
+			// current
+			m_pmyDevices->GetNewData(idx)[1] = uiVal[0];	// ?
+		}
+
+		usleep( iSleepTime );
+
+		addr = 0xfe30;	// motor power
+		rc = modbus_read_registers( ctx, addr, count, uiVal );
+		if ( rc != -1 )
+		{
+			// power
+			m_pmyDevices->GetNewData(idx)[2] = uiVal[0];	// ?
+		}
+
+		usleep( iSleepTime );
+
+		addr = 0xfd00;	// frequency
+		rc = modbus_read_registers( ctx, addr, count, uiVal );
+		if ( rc != -1 )
+		{
+			// frequency
+			m_pmyDevices->GetNewData(idx)[3] = uiVal[0];	// ?
+		}
+
+		usleep( iSleepTime );
+
+		addr = 0xfe18;	// torque
+		rc = modbus_read_registers( ctx, addr, count, uiVal );
+		if ( rc != -1 )
+		{
+			// torque
+			m_pmyDevices->GetNewData(idx)[4] = uiVal[0];	// ?
+		}
+
+		if ( true )
+		{	// success
+
+			if ( rc != -1 )
+			{
+				bAllDead = false;
+				if ( iLoop > 0 )
+				{
+					LogMessage( E_MSG_INFO, "modbus_read_registers() retry successful, loop %d", iLoop );
+				}
+
+				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+				{
+					LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+				}
+
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				}
+			}
+
+			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
+			{
+				double dDiff;
+				double dValNew;
+				double dValOld;
+				char szUnits[10] = "?";
+				char szDesc[20] = "?";
+				char szName[50] = "VSD Monitor";
+				E_EVENT_TYPE eEventType = E_ET_VOLTAGE;
+				E_IO_TYPE eIOTypeL = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeH = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeHL = E_IO_VOLT_MONITOR;
+
+				dValOld = m_pmyDevices->CalcVSDToshibaValue(idx,iChannel,false);
+				dValNew = m_pmyDevices->CalcVSDToshibaValue(idx,iChannel,true);
+				switch ( iChannel )
+				{
+				default:
+					dDiff = 5;
+					dValNew = 0;
+					break;
+				case 0:		// voltage
+					dDiff = 5;	// 0.5 volts
+					eEventType = E_ET_VOLTAGE;
+					strcpy( szUnits, "V" );
+					strcpy( szDesc, "Voltage" );
+					eIOTypeL = E_IO_VOLT_LOW;
+					eIOTypeH = E_IO_VOLT_HIGH;
+					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					break;
+				case 1:		// current
+					dDiff = 0.1;	// 100mA
+					eEventType = E_ET_CURRENT;
+					strcpy( szUnits, "A" );
+					strcpy( szDesc, "Current" );
+					eIOTypeL = E_IO_CURRENT_LOW;
+					eIOTypeH = E_IO_CURRENT_HIGH;
+					eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+					break;
+				case 2:		// power
+					dDiff = 20;	// 20 Watts
+					eEventType = E_ET_POWER;
+					strcpy( szUnits, "W" );
+					strcpy( szDesc, "Power" );
+					eIOTypeL = E_IO_VOLT_LOW;
+					eIOTypeH = E_IO_VOLT_HIGH;
+					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					break;
+				case 3:		// frequency
+					dDiff = 1;	// 1Hz
+					eEventType = E_ET_FREQUENCY;
+					strcpy( szUnits, "Hz" );
+					strcpy( szDesc, "Frequency" );
+					eIOTypeL = E_IO_FREQ_LOW;
+					eIOTypeH = E_IO_FREQ_HIGH;
+					eIOTypeHL = E_IO_FREQ_HIGHLOW;
+					break;
+				case 4:		// torque %
+					dDiff = 1;	//
+					eEventType = E_ET_TORQUE;
+					strcpy( szUnits, "T%" );
+					strcpy( szDesc, "Torque Percent" );
+					eIOTypeL = E_IO_TORQUE_LOW;
+					eIOTypeH = E_IO_TORQUE_HIGH;
+					eIOTypeHL = E_IO_TORQUE_HIGHLOW;
+					break;
+				}
+
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+			}	// end for loop
+
+			// break out of retry loop
+			break;
+		}
+	}
+}
+
 void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
 	int iChannel;
@@ -3614,6 +4234,10 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 		double dValue = 0;
 		char szEventName[50] = "?";
 
+		if ( !gbPlcIsActive )
+			LogMessage( E_MSG_INFO, "PLC is active" );
+		gbPlcIsActive = true;
+
 		iStateNo = myDB.ReadPlcStatesScreenButton();
 		if ( iStateNo == 0 )
 		{
@@ -4155,6 +4779,12 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 				dLastStateWSTime = TimeNowMS();
 			}
 		}
+	}
+	else
+	{
+		if ( gbPlcIsActive )
+			LogMessage( E_MSG_INFO, "PLC is no longer active" );
+		gbPlcIsActive = false;
 	}
 }
 

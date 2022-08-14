@@ -17,6 +17,7 @@
 #define LEVEL_CHECK_PERIOD					5		// seconds
 #define ROTENC_CHECK_PERIOD					1		// seconds
 #define VIPF_CHECK_PERIOD					1		// seconds
+#define VSD_CHECK_PERIOD					0.5		// seconds
 #define MAX_TCPIP_SOCKETS					16
 #define ESP_PING_TIMEOUT					60
 #define CAMERA_SNAPSHOT_PERIOD				60	// seconds
@@ -200,6 +201,7 @@ class CThread {
 private:
 	bool* m_pbThreadRunning;
 	bool* m_pbAllDevicesDead;
+	bool m_bSecureWebSocket;
 	enum E_THREAD_TYPE m_eThreadType;
 	int m_iLevelMessage;
 	int m_iClientCount;
@@ -261,6 +263,9 @@ public:
 	void HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
+	void HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
+	void HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
+	void HandleVSDToshibaDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int iButton );
 	void CheckForTimerOffTime( CMysql& myDB, const int idx );

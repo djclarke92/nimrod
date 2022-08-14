@@ -146,6 +146,9 @@ $pl_array = array();
 func_clear_pl_array( $pl_array );
 $new_state = false;
 
+$existing_state_name = "";
+$new_state_name = "";
+
 if ( isset($_GET['StateNo']) )
     $pl_array['pl_StateNo'] = $_GET['StateNo'];
 if ( isset($_POST['pl_StateNo']) )
@@ -212,7 +215,11 @@ if (isset($_GET['OpFilter']))
     $pl_array['op_filter'] = $_GET['OpFilter'];
 if (isset($_POST['OpFilter']))
     $pl_array['op_filter'] = $_POST['OpFilter'];
-        
+if ( isset($_POST['ExistingStateName']) )
+    $existing_state_name = $_POST['ExistingStateName'];
+if ( isset($_POST['NewStateName']) )
+    $new_state_name = $_POST['NewStateName'];
+
     
 $di_list = $db->ReadDeviceInfoTable();
 $di_list_out = array();
@@ -230,7 +237,48 @@ foreach ( $di_list as $di )
 }
     
     
-if ( isset($_POST['ClearState']) )
+if ( isset($_POST['CopyStateName']) )
+{
+    if ( $existing_state_name != "" && $new_state_name != "" )
+    {
+        $state_list = $db->ReadPlcStatesTable(0,$pl_array['op_filter']);
+        
+        // check if the new state name already exists
+        foreach ( $state_list as $state )
+        {
+            if ( $state['pl_StateName'] == $new_state_name )
+            {
+                $pl_array['error_msg'] = sprintf( "New State Name '%s':'%s' already exists", $state['pl_Operation'], $new_state_name );
+                break;
+            }
+        }
+        
+        if ( $pl_array['error_msg'] == "" )
+        {
+            foreach ( $state_list as $state )
+            {
+                if ( $state['pl_StateName'] == $existing_state_name )
+                {
+                    $state_no = 0;
+                    $state_timestamp = "";
+                        
+                    if ( !$db->SavePlcState( false, $state_no, $state['pl_Operation'], $new_state_name, $state['pl_StateIsActive'], $state_timestamp, $state['pl_RuleType'], $state['pl_DeviceNo'],
+                        $state['pl_IOChannel'], $state['pl_Value'], $state['pl_Test'], $state['pl_NextStateName'], $state['pl_Order'], $state['pl_DelayTime'], $state['pl_TimerValues'],
+                        $state['pl_PrintOrder'], $state['pl_DelayKey'], $state['pl_InitialState'] ) )
+                    {
+                        $newop_msg = sprintf( "Error: Failed to insert record '%s', '%s'", $state['pl_Operation'], $new_state_name );
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        $pl_array['error_msg'] = sprintf( "You must enter the Existing State Name and New State Name before copying" );
+    }
+}
+else if ( isset($_POST['ClearState']) )
 {
     $state_filter = $pl_array['state_filter'];
     $op_filter = $pl_array['op_filter'];
@@ -313,6 +361,7 @@ else if ( isset($_POST['UpdateState']) || isset($_POST['NewState']) )
             
             $pl_array['info_msg'] = "State details saved successfully.";
             $new_state = false;
+            $pl_array['pl_StateNo'] = 0;
         }
         else
         {
@@ -329,7 +378,7 @@ else if ( isset($_POST['DeleteState']) )
     {
         if ( $info[0]['pl_RuleType'] != "" )
         {   // delete this rule detail record
-            if ( $db->DeletePlcStateRecord( true, $state_no ) )
+            if ( $db->DeletePlcStateRecord( true, $state_no, "", "" ) )
             {
                 $pl_array['info_msg'] = sprintf( "Successfully delete the rule detail plcstate record" );
             }
@@ -345,7 +394,7 @@ else if ( isset($_POST['DeleteState']) )
             $count = $db->CountOperationStateName( $info[0]['pl_Operation'], $info[0]['pl_StateName'] );
             if ( $count == 1 )
             {
-                if ( $db->DeletePlcStateRecord( true, $state_no ) )
+                if ( $db->DeletePlcStateRecord( true, $state_no, "", "" ) )
                 {
                     $pl_array['info_msg'] = sprintf( "Successfully deleted the marker plcstate record" );
                 }
@@ -358,7 +407,16 @@ else if ( isset($_POST['DeleteState']) )
             }
             else
             {
-                $pl_array['error_msg'] = sprintf( "You cannot delete a marker record while rule detail records exist." );
+                if ( $db->DeletePlcStateRecord( true, 0, $info[0]['pl_Operation'], $info[0]['pl_StateName'] ) )
+                {
+                    $pl_array['info_msg'] = sprintf( "Successfully deleted the marker plcstate record" );
+                }
+                else
+                {
+                    $pl_array['error_msg'] = sprintf( "Failed to delete the marker plcstate record %d", $state_no );
+                }
+                
+                $pl_array['pl_StateNo'] = 0;
             }
         }
     }
@@ -472,6 +530,8 @@ function onChangeRuleType()
 			    printf( "<p class='text-danger'>%s</p>", $pl_array['error_msg'] );
 		    else if ( $pl_array['info_msg'] != "" )
 		        printf( "<p class='text-info'>%s</p>", $pl_array['info_msg'] );
+		    else
+		        printf( "<p>&nbsp;</p>" );
             ?>
 
             <?php 
@@ -566,8 +626,38 @@ function onChangeRuleType()
             <?php 
             if ( $_SESSION['us_AuthLevel'] == SECURITY_LEVEL_ADMIN )
             {
-                printf( "<p><a href='?StateNo=0&StateFilter=%s&OpFilter=%s'>Add New State</a></p>", $pl_array['state_filter'], $pl_array['op_filter'] );
+                printf( "<p><a href='?StateNo=0&StateFilter=%s&OpFilter=%s'>Add New State</a>", $pl_array['state_filter'], $pl_array['op_filter'] );
+                if ( $pl_array['state_filter'] != "" && $pl_array['op_filter'] != "" )
+                {
+                    printf( "&nbsp;&nbsp;&nbsp;" );
+                    printf( "State Name: " );
+                    printf( "<select name='ExistingStateName' id='ExistingStateName' size='1'>" );
+                    printf( "<option></option>" );
+                    if ( $pl_array['state_filter'] != "" && $pl_array['op_filter'] != "" )
+                    {
+                        $last_state = "";
+                        foreach ( $state_list as $state )
+                        {
+                            if ( $state['pl_Operation'] != $pl_array['op_filter'] )
+                                continue;
+                            
+                            if ( $last_state != $state['pl_StateName'] )
+                            {
+                                $last_state = $state['pl_StateName'];
+                                printf( "<option>%s</option>", $state['pl_StateName'] );
+                            }
+                        }
+                    }
+                    printf( "</select>" );
+                    printf( "&nbsp;&nbsp;" );
+                    printf( "New Name: <input type='text' name='NewStateName' id='NewStateName' size='15'>" );
+                    printf( "&nbsp;&nbsp;&nbsp;" );
+                    printf( "<button type='submit' class='btn btn-outline-dark' name='CopyStateName' id='CopyStateName' value='Copy State Name' %s>Copy State Name</button>", 
+                        ($_SESSION['plc_Operation'] != "" ? "disabled" : "") );
+                }
+                printf( "</p>" );
             }
+            
             ?>
             
 		</div>
@@ -822,7 +912,10 @@ function onChangeRuleType()
     		printf( "<button type='submit' class='btn btn-outline-dark' name='NewState' id='NewState' value='New' %s>New</button>", 
     		    ($pl_array['pl_StateNo'] != 0 || $_SESSION['plc_Operation'] != '' || func_disabled_non_admin() ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;&nbsp;" );
-    		$onclick = sprintf( "return confirm(\"Are you sure you want to delete this state record ?\")" );
+    		if ( $disabled2 != "" )
+    		  $onclick = sprintf( "return confirm(\"Are you sure you want to delete all state records for state %s ?\")", $pl_array['pl_StateName'] );
+    		else
+    		  $onclick = sprintf( "return confirm(\"Are you sure you want to delete this state record ?\")" );
     		printf( "<button type='submit' class='btn btn-outline-dark' name='DeleteState' id='DeleteState' value='Delete' onclick='%s' %s>Delete</button>", $onclick,
     		    ($pl_array['pl_StateNo'] == "" || $_SESSION['plc_Operation'] != '' || func_disabled_non_admin() != "" ? "disabled" : "") );
     		printf( "&nbsp;&nbsp;&nbsp;" );

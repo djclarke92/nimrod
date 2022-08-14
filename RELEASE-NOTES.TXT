@@ -1,10 +1,17 @@
 #-----------------------------------------------------------------------
-#	Nimrod Website
+#	Nimrod Automation System
 #	Copyright (c) Dave Clarke
 #	Author: Dave Clarke
 #-----------------------------------------------------------------------
 
 Nimrod Release Notes and History
+
+
+Version 0.2.4		AUgusy 2022
+1.	Add support for Variable Speed Drives (VSD) from NFlixen, Power Electronics and Toshiba
+2.	Handle the case where some devices are powered off some of the time
+3.	Fix code for html tooltips in BS5
+4.	
 
 
 Version 0.2.3		July 2022

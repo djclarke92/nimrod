@@ -30,6 +30,7 @@ extern int NIMROD_BUILD_NUMBER;
 
 
 bool gbDebug = false;
+bool gbPlcIsActive = false;
 bool gbTerminateNow = false;
 bool gbReadConfig = false;
 char gszHostname[HOST_NAME_MAX+1] = "";
@@ -70,6 +71,7 @@ int main( int argc, char *argv[] )
     time_t tLastUpgradeCheck = 0;
     time_t tConfigTime = 0;
     time_t tUpdated = 0;
+    time_t tLastUpgradeMsgTime = 0;
     pid_t pid;
 	pid_t pidChild;
 	pthread_t threadId[MAX_THREADS];
@@ -126,8 +128,12 @@ int main( int argc, char *argv[] )
 	snprintf( gszProgName, sizeof(gszProgName), "%s", basename(argv[0]) );
 
 
-	CheckForUpgrade();
-	if ( !gbTerminateNow )
+	if ( CheckForUpgrade() )
+	{
+		gbTerminateNow = true;
+		gbUpgradeNow = true;
+	}
+	else
 	{
 		pidChild = CreateSSHTunnel();
 
@@ -157,9 +163,11 @@ int main( int argc, char *argv[] )
 			{
 				tLastUpgradeCheck = time(NULL);
 
-				CheckForUpgrade();
-				if ( gbTerminateNow )
+				if ( CheckForUpgrade() )
 				{
+					gbUpgradeNow = true;
+					gbTerminateNow = true;
+
 					break;
 				}
 			}
@@ -220,9 +228,10 @@ int main( int argc, char *argv[] )
 			{
 				tLastUpgradeCheck = time(NULL);
 
-				CheckForUpgrade();
-				if ( gbTerminateNow )
+				if ( CheckForUpgrade() )
 				{
+					gbUpgradeNow = true;
+					gbTerminateNow = true;
 					break;
 				}
 			}
@@ -326,10 +335,22 @@ int main( int argc, char *argv[] )
 				{
 					tLastUpgradeCheck = time(NULL);
 
-					CheckForUpgrade();
-					if ( gbTerminateNow )
-					{
-						break;
+					if ( CheckForUpgrade() )
+					{	// only upgrade is plcstate machine is idle
+						if ( gbPlcIsActive )
+						{
+							if ( tLastUpgradeMsgTime + 60 < time(NULL) )
+							{
+								tLastUpgradeMsgTime = time(NULL);
+								LogMessage( E_MSG_INFO, "Skipping upgrade, plc is active" );
+							}
+						}
+						else
+						{
+							gbUpgradeNow = true;
+							gbTerminateNow = true;
+							break;
+						}
 					}
 				}
 
@@ -345,7 +366,7 @@ int main( int argc, char *argv[] )
 		}
 
 		// wait for threads to exit
-		LogMessage( E_MSG_INFO, "Wait for threads to exit" );
+		LogMessage( E_MSG_INFO, "Wait for %d threads to exit", iThreads );
 		bool bWait = true;
 		time_t tStart = time(NULL);
 		while ( bWait )
@@ -364,6 +385,10 @@ int main( int argc, char *argv[] )
 						// SIGTERM will kill the process immediately, systemd will restart us
 						pthread_kill( threadId[i], SIGTERM );
 					}
+				}
+				else
+				{
+					LogMessage( E_MSG_INFO, "Thread %d not running", i );
 				}
 			}
 

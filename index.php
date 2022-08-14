@@ -128,7 +128,7 @@ else if ( isset($_GET['MonitorPage']) )
 {
     $monitor_page = $_GET['MonitorPage'];
 }
-else if ( isset($POST['PlcStateRefresh']) )
+else if ( isset($POST['PlcStateRefresh']) || isset($_GET['PlcStateFinished']) )
 {
     $display_mode = "PlcState";
 }
@@ -379,7 +379,10 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	<script>
 		$(document).ready(function()
 		{
-  			$('[data-toggle="tooltip"]').tooltip();
+  			var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+              return new bootstrap.Tooltip(tooltipTriggerEl)
+            });
 		});
 	</script>
 	
@@ -388,14 +391,14 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	{
     ?>
 		<script type = "text/javascript">
-		var wshost = "<?php printf( "wss://%s:%d", ($_SERVER['SERVER_PORT'] == 8080 ? "127.0.0.1" : $_SERVER['SERVER_ADDR']), ($_SERVER['SERVER_PORT'] == 8080 ? 8081 : 8000) ); ?>";
+		var wshost = "<?php printf( "%s://%s:%d", (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != "" ? "wss" : "ws"), ($_SERVER['SERVER_PORT'] == 8080 ? "127.0.0.1" : $_SERVER['SERVER_ADDR']), ($_SERVER['SERVER_PORT'] == 8080 ? 8081 : 8000) ); ?>";
   	  	var socket = new WebSocket( wshost, "nimrod-protocol" );
   	  	var plcCounter = 0;
 
   	  	function plcTimer() {
   	  	  	plcCounter += 1;
 
-  	  	  	if ( plcCounter >= 5 ) {
+  	  	  	if ( plcCounter >= <?php printf( "%d", ($_SESSION['plc_Operation'] == "" ? 30 : 5) ); ?> ) {
 	  	    	window.location.replace('index.php?PageMode=PlcState'); 
   	  		}
 
@@ -538,7 +541,7 @@ if ( $display_mode == "" )
       {
         printf( "<li class='nav-item'>" );
         $tip = sprintf( "You are logged in as %s", $_SESSION['us_Username'] );
-        printf( "<a class='nav-link' href='?Logout=1' data-toggle='tooltip' data-html='true' title='%s'>Logout</a>", $tip );
+        printf( "<a class='nav-link' href='?Logout=1' data-bs-toggle='tooltip' data-bs-html='true' title='%s'>Logout</a>", $tip );
         printf( "</li>" );    
       }
       ?>
@@ -590,9 +593,18 @@ else if ( $display_mode == "PlcState" )
     
     printf( "<table width='100%%' border='0'>" );
     printf( "<tr>" );
-    printf( "<td><a href='index.php?PageMode=Home'><input type='button' name='PageMode' value='Home'></a></td>" );
-
     printf( "<td>" );
+    printf( "<a href='index.php?PageMode=Home'><input type='button' name='PageMode' value='Home'></a>" );
+    $list = glob( sprintf( "%s/nimrod-*.tgz", $_SERVER['DOCUMENT_ROOT'] ) );
+    if ( count($list) != 0 ) 
+    {
+        printf( "&nbsp;&nbsp;<i>Upgrade pending...</i>" );
+    }
+    printf( "</td>" );
+    
+    printf( "<td>" );
+    printf( "<a href='index.php?PlcStateFinished=1'>Finished</a>&nbsp;&nbsp;" );
+    printf( "&nbsp;&nbsp;&nbsp;" );
     printf( "<input type='submit' name='PlcStateRefresh' id='PlcStateRefresh' value='Refresh'>" );
     printf( "</td>" );
     

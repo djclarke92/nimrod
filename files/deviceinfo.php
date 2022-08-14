@@ -192,120 +192,118 @@ function func_get_dir($type, &$sdir)
             $sdir = "Out";
             break;
         case E_IO_TEMP_HIGHLOW:
-            $dir = 0;
             $sdir = "Temp.H/L";
             break;
         case E_IO_TEMP_HIGH:
-            $dir = 0;
             $sdir = "Temp.H";
             break;
         case E_IO_TEMP_LOW:
-            $dir = 0;
             $sdir = "Temp.L";
             break;
         case E_IO_TEMP_MONITOR:
-            $dir = 0;
             $sdir = "T.Mon";
             break;
         case E_IO_VOLT_HIGHLOW:
-            $dir = 0;
             $sdir = "Volt.H/L";
             break;
         case E_IO_VOLT_HIGH:
-            $dir = 0;
             $sdir = "Volt.H";
             break;
         case E_IO_VOLT_LOW:
-            $dir = 0;
             $sdir = "Volt.L";
             break;
         case E_IO_VOLT_MONITOR:
-            $dir = 0;
             $sdir = "Volt.Mon";
             break;
         case E_IO_LEVEL_MONITOR:
-            $dir = 0;
             $sdir = "Lvl.Mon";
             break;
         case E_IO_LEVEL_HIGH:
-            $dir = 0;
             $sdir = "Lvl.H";
             break;
         case E_IO_LEVEL_LOW:
-            $dir = 0;
             $sdir = "Lvl.L";
             break;
         case E_IO_LEVEL_HIGHLOW:
-            $dir = 0;
             $sdir = "Lvl.H/L";
             break;
         case E_IO_ROTENC_MONITOR:
-            $dir = 0;
             $sdir = "RE.Mon";
             break;
         case E_IO_ROTENC_HIGH:
-            $dir = 0;
             $sdir = "RE.H";
             break;
         case E_IO_ROTENC_LOW:
-            $dir = 0;
             $sdir = "RE.L";
             break;
         case E_IO_ROTENC_HIGHLOW:
-            $dir = 0;
             $sdir = "RE.H/L";
             break;
         case E_IO_CURRENT_MONITOR:
-            $dir = 0;
             $sdir = "Amps.Mon";
             break;
         case E_IO_CURRENT_HIGH:
-            $dir = 0;
             $sdir = "Amps.H";
             break;
         case E_IO_CURRENT_LOW:
-            $dir = 0;
             $sdir = "Amps.L";
             break;
         case E_IO_CURRENT_HIGHLOW:
-            $dir = 0;
             $sdir = "Amps.H/L";
             break;
-        case E_IO_POWER_MONITOR:
-            $dir = 0;
-            $sdir = "Pwr.Mon";
-            break;
-        case E_IO_POWER_HIGH:
-            $dir = 0;
-            $sdir = "Pwr.H";
-            break;
-        case E_IO_POWER_LOW:
-            $dir = 0;
-            $sdir = "Pwr.L";
-            break;
-        case E_IO_POWER_HIGHLOW:
-            $dir = 0;
-            $sdir = "Pwr.H/L";
-            break;
         case E_IO_FREQ_MONITOR:
-            $dir = 0;
             $sdir = "Freq.Mon";
             break;
         case E_IO_FREQ_HIGH:
-            $dir = 0;
             $sdir = "Freq.H";
             break;
         case E_IO_FREQ_LOW:
-            $dir = 0;
             $sdir = "Freq.L";
             break;
         case E_IO_FREQ_HIGHLOW:
-            $dir = 0;
             $sdir = "Freq.H/L";
             break;
         case E_IO_PWRFACT_MONITOR:
-            $dir = 0;
             $sdir = "PwrFact.H/L";
+            break;
+        case E_IO_POWER_MONITOR:
+            $sdir = "Pwr.Mon";
+            break;
+        case E_IO_POWER_HIGH:
+            $sdir = "Pwr.H";
+            break;
+        case E_IO_POWER_LOW:
+            $sdir = "Pwr.L";
+            break;
+        case E_IO_POWER_HIGHLOW:
+            $sdir = "Pwr.H/L";
+            break;
+        case E_IO_ON_OFF_INV:
+            $sdir = "On/Off Inverted";
+            break;
+        case E_IO_TORQUE_MONITOR:
+            $sdir = "Torque.Mon";
+            break;
+        case E_IO_TORQUE_HIGH:
+            $sdir = "Torque.H";
+            break;
+        case E_IO_TORQUE_LOW:
+            $sdir = "Torque.L";
+            break;
+        case E_IO_TORQUE_HIGHLOW:
+            $sdir = "Torque.H/L";
+            break;
+        case E_IO_RPMSPEED_MONITOR:
+            $sdir = "Rpm.Mon";
+            break;
+        case E_IO_RPMSPEED_HIGH:
+            $sdir = "Rpm.H";
+            break;
+        case E_IO_RPMSPEED_LOW:
+            $sdir = "Rpm.L";
+            break;
+        case E_IO_RPMSPEED_HIGHLOW:
+            $sdir = "Rpm.H/L";
             break;
     }
     
@@ -842,7 +840,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_IOChannel'>IO Channel: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='di_IOChannel' id='di_IOChannel' size='3' value='%s'> (1-16)", ($di_array['di_IOChannel'] === "" ? "" : $di_array['di_IOChannel'] + 1) );
+    		$tip = sprintf( "VIPF device 6 channels are V/I/P/E/F/PF.<br>VSD device 5 channels are V/I/P/F/T." );
+    		printf( "<input type='text' class='form-control' name='di_IOChannel' id='di_IOChannel' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html=true title='%s'> (1-16)", ($di_array['di_IOChannel'] === "" ? "" : $di_array['di_IOChannel'] + 1), $tip );
     		printf( "</div>" );
     		printf( "</div>" );
 
@@ -860,7 +859,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_IOType'>IO Type: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf("<select class='custom-select' size='1' name='di_IOType' id='di_IOType' onChange='ioTypeChange();'>");
+    		printf("<select class='form-control custom-select' size='1' name='di_IOType' id='di_IOType' onChange='ioTypeChange();'>");
     		printf("<option></option>");
     		$e_io = 0;
     		foreach ( $_SESSION['E_IOD'] as $e_iod )
@@ -919,12 +918,15 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_AnalogType'>Analog Type: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf("<select class='custom-select' size='1' name='di_AnalogType' id='di_AnalogType'>");
+    		printf("<select class='form-control custom-select' size='1' name='di_AnalogType' id='di_AnalogType'>");
     		printf("<option></option>");
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "V" ? "selected" : ""), "V. Voltage");
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "A" ? "selected" : ""), "A. Current");
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "W" ? "selected" : ""), "W. Power");
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "F" ? "selected" : ""), "F. Frequency");
+    		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "Q" ? "selected" : ""), "Q. Torque");
+    		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "R" ? "selected" : ""), "R. RPM Speed");
+    		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "T" ? "selected" : ""), "T. Temperature");
     		printf("</select>");
     		printf( "</div>" );
     		printf( "</div>" );
@@ -954,7 +956,8 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		$tip = sprintf( "Analog Voltage devices only measure 0-10V directly, so if you are measuring 100V via a 10:1 divider the calc factor would be 10.0<br>" );
     		$tip .= sprintf( "For Level devices the Calc Factor is the max water level in mm.<br>" );
     		$tip .= sprintf( "For Rotary Encoders the Calc Factor is the distance in mm for one rotation." );
-    		printf( "<input type='text' class='form-control' name='di_CalcFactor' id='di_CalcFactor' size='5' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $di_array['di_CalcFactor'], $tip );
+    		printf( "<input type='text' class='form-control' name='di_CalcFactor' id='di_CalcFactor' size='5' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
+    		    $di_array['di_CalcFactor'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -964,7 +967,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		$tip = sprintf( "For Analog Current the Offest is the 0 Amp voltage, e.g. 2.49V.<br>For Level devices the Offset is the sensor height above the max level." );
-    		printf( "<input type='text' class='form-control' name='di_Offset' id='di_Offset' size='5' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", $di_array['di_Offset'], $tip );
+    		printf( "<input type='text' class='form-control' name='di_Offset' id='di_Offset' size='5' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", $di_array['di_Offset'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -974,12 +977,16 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		$tip = sprintf( "Enter 3 characters:<br>1st: monitor number 1 or 2<br>2nd: F, L or R for full width, left or right<br>3rd: graph row number, 1 to 4" );
-    		printf( "<input type='text' class='form-control' name='di_MonitorPos1' id='di_MonitorPos1' size='3' value='%s' data-toggle='tooltip' data-html='true' title='%s'> ", 
+    		printf( "<input type='text' class='form-control' name='di_MonitorPos1' id='di_MonitorPos1' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
     		    $di_array['di_MonitorPos1'], $tip );
-    		printf( "<input type='text' class='form-control' name='di_MonitorPos2' id='di_MonitorPos2' size='3' value='%s'> ", $di_array['di_MonitorPos2'] );
-    		printf( "<input type='text' class='form-control' name='di_MonitorPos3' id='di_MonitorPos3' size='3' value='%s'> ", $di_array['di_MonitorPos3'] );
-    		printf( "<input type='text' class='form-control' name='di_MonitorPos4' id='di_MonitorPos4' size='3' value='%s'> ", $di_array['di_MonitorPos4'] );
-    		printf( "<input type='text' class='form-control' name='di_MonitorPos5' id='di_MonitorPos5' size='3' value='%s'> ", $di_array['di_MonitorPos5'] );
+    		printf( "<input type='text' class='form-control' name='di_MonitorPos2' id='di_MonitorPos2' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
+    		    $di_array['di_MonitorPos2'], $tip );
+    		printf( "<input type='text' class='form-control' name='di_MonitorPos3' id='di_MonitorPos3' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
+    		    $di_array['di_MonitorPos3']. $tip );
+    		printf( "<input type='text' class='form-control' name='di_MonitorPos4' id='di_MonitorPos4' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
+    		    $di_array['di_MonitorPos4'], $tip );
+    		printf( "<input type='text' class='form-control' name='di_MonitorPos5' id='di_MonitorPos5' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
+    		    $di_array['di_MonitorPos5'], $tip );
     		printf( "<br>[Monitor <b>1</b>,<b>2</b>][<b>F</b>ull,<b>L</b>eft,<b>R</b>ight][Graph No. <b>1</b>-<b>4</b>]" );
     		printf( "</div>" );
     		printf( "</div>" );

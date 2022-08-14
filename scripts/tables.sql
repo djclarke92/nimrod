@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS `devices` (
 	`de_Status` int(10) NOT NULL default '0',					# device status: alive, dead, buried
 	`de_Hostname` varchar(20) NOT NULL default '',				# pi hostname or ip address
 	`de_BaudRate` int(10) NOT NULL default 19200,				# baud rate
+	`de_AlwaysPoweredOn` char(1) NOT NULL default 'Y',			# expect the device to always be there or not
 	PRIMARY KEY (`de_DeviceNo`),
 	UNIQUE KEY `de_address_index` (`de_Address`)
 ) ;
