@@ -278,6 +278,35 @@ if ( isset($_POST['CopyStateName']) )
         $pl_array['error_msg'] = sprintf( "You must enter the Existing State Name and New State Name before copying" );
     }
 }
+else if ( isset($_POST['RenameStateName']) )
+{
+    if ( $existing_state_name != "" && $new_state_name != "" )
+    {
+        $state_list = $db->ReadPlcStatesTable(0,$pl_array['op_filter']);
+        
+        // check if the new state name already exists
+        foreach ( $state_list as $state )
+        {
+            if ( $state['pl_StateName'] == $new_state_name )
+            {
+                $pl_array['error_msg'] = sprintf( "New State Name '%s':'%s' already exists", $state['pl_Operation'], $new_state_name );
+                break;
+            }
+        }
+        
+        if ( $pl_array['error_msg'] == "" )
+        {
+            if ( !$db->PlcRenameStateName( $pl_array['op_filter'], $existing_state_name, $new_state_name ) )
+            {
+                $newop_msg = sprintf( "Failed to rename state '%s' to '%s'", $existing_state_name, $new_state_name );
+            }
+        }
+    }
+    else
+    {
+        $pl_array['error_msg'] = sprintf( "You must enter the Existing State Name and New State Name before renaming" );
+    }
+}
 else if ( isset($_POST['ClearState']) )
 {
     $state_filter = $pl_array['state_filter'];
@@ -653,6 +682,9 @@ function onChangeRuleType()
                     printf( "New Name: <input type='text' name='NewStateName' id='NewStateName' size='15'>" );
                     printf( "&nbsp;&nbsp;&nbsp;" );
                     printf( "<button type='submit' class='btn btn-outline-dark' name='CopyStateName' id='CopyStateName' value='Copy State Name' %s>Copy State Name</button>", 
+                        ($_SESSION['plc_Operation'] != "" ? "disabled" : "") );
+                    printf( "&nbsp;&nbsp;&nbsp;" );
+                    printf( "<button type='submit' class='btn btn-outline-dark' name='RenameStateName' id='RenameStateName' value='Rename State Name' %s>Rename State Name</button>",
                         ($_SESSION['plc_Operation'] != "" ? "disabled" : "") );
                 }
                 printf( "</p>" );

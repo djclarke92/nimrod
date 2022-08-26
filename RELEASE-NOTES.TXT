@@ -11,7 +11,8 @@ Version 0.2.4		AUgusy 2022
 1.	Add support for Variable Speed Drives (VSD) from NFlixen, Power Electronics and Toshiba
 2.	Handle the case where some devices are powered off some of the time
 3.	Fix code for html tooltips in BS5
-4.	
+4.	Allow PLC Operations and State Names to be copied and renamed
+5.	
 
 
 Version 0.2.3		July 2022

@@ -25,7 +25,7 @@ int gRS485_iStopBits = 1;
 
 
 void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int newBaud, int type );
-void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperation );
+void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperation, int vsdValue );
 
 
 int main( int argc, char** argv )
@@ -36,6 +36,7 @@ int main( int argc, char** argv )
 	int oldBaud = 9600;
 	int newBaud = 9600;
 	int vsdOperation = 0;
+	int vsdValue = 0;
 	modbus_t* ctx = NULL;
 
 	printf( "Compiled against libmodbus v%s\n", LIBMODBUS_VERSION_STRING );
@@ -53,6 +54,8 @@ int main( int argc, char** argv )
 
 		if ( argc >= 8 )
 			vsdOperation = atoi(argv[7] );
+		if ( argc >= 9 )
+			vsdValue = atoi(argv[8] );
 
 		gRS485_iBaud = oldBaud;
 
@@ -101,7 +104,7 @@ int main( int argc, char** argv )
 			printf( "Ctx %p\n", ctx );
 		}
 
-		ReadData( ctx, newAddr, newBaud, type, vsdOperation );
+		ReadData( ctx, newAddr, newBaud, type, vsdOperation, vsdValue );
 
 
 		modbus_free( ctx );
@@ -109,7 +112,7 @@ int main( int argc, char** argv )
 	}
 	else
 	{
-		printf( "Usage: '%s <com_port> <old_addr> <new_addr> <old_baud> <new_baud> <device_type> <vsd_op>' to set comms parameters\n", argv[0] );
+		printf( "Usage: '%s <com_port> <old_addr> <new_addr> <old_baud> <new_baud> <device_type> [vsd_op] [vsd_val]' to set comms parameters\n", argv[0] );
 		printf( "    where device_type: 0 Digital Input devices\n" );
 		printf( "                       1 Digital Output devices\n" );
 		printf( "                       2 Voltage device and temperature devices\n" );
@@ -127,6 +130,8 @@ int main( int argc, char** argv )
 		printf( "                       5 free stop\n");
 		printf( "                       6 speed down stop\n");
 		printf( "                       7 fault reset\n");
+		printf( "                       8 set frequency\n");
+		printf( "              vsd_val: xx frequency in Hz <= 50\n");
 	}
 
 	return 0;
@@ -353,7 +358,8 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 			}
 		}
 		else if ( type == 4 )
-		{
+		{	// HDL300 level sensor
+
 			if ( newAddr != oldAddr )
 			{
 				printf( "Setting new address 0x%02x -> 0x%02x\n", oldAddr, newAddr );
@@ -392,6 +398,23 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 				{
 					printf( "New baud rate %d set\n", newBaud );
 				}
+			}
+
+			if ( newAddr != oldAddr || newBaud != oldBaud )
+			{	// write changes to eeprom
+				usleep( 50000 );
+
+				reg = 0x0f;
+				if ( modbus_write_register( ctx, reg, 0x0000) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "Changes saved\n" );
+				}
+
+				usleep( 200000 );
 			}
 		}
 		else if ( type == 5 )
@@ -486,7 +509,7 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 	usleep( 30000 );
 }
 
-void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperation )
+void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperation, int vsdValue )
 {
 	int rc;
 	int addr;
@@ -654,6 +677,20 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 			printf( "Depth = %d mm\n", ulInputs[0] + (ulInputs[1]>>8) );
 		}
 
+		usleep( 50000 );
+
+		iLen = 2;
+		addr = 0x0f;
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: 0x%04x\n", ulInputs[0] + (ulInputs[1]>>8) );
+		}
+
 /*		for ( addr = 0x00; addr < 17 ; addr += 8 )
 		{
 			rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
@@ -728,6 +765,7 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 	}
 	else if ( type == 7 )
 	{	// NFlixen VSD
+		int iSleep = 50000;
 		printf( "Setting slave addr to %d\n", newAddr );
 		if ( modbus_set_slave( ctx, newAddr ) == -1 )
 		{
@@ -763,7 +801,7 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 		}
 		printf("\n");
 
-		usleep( 50000 );
+		usleep( iSleep );
 
 		// output current
 		iLen = 1;
@@ -779,7 +817,7 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 		}
 		printf("\n");
 
-		usleep( 50000 );
+		usleep( iSleep );
 
 		// status
 		iLen = 1;
@@ -803,7 +841,7 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 		}
 		printf("\n");
 
-		usleep( 50000 );
+		usleep( iSleep );
 
 		// fault code
 		iLen = 1;
@@ -822,7 +860,8 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 
 		if ( vsdOperation >= 1 && vsdOperation <= 7 )
 		{	// vsd must be set for communications control P0-02 = 2
-			usleep( 50000 );
+			// P0-03 = 9 for frequency control by communications
+			usleep( iSleep );
 
 			addr = 0x2000;
 
@@ -836,9 +875,30 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 				printf( "VSD operation set to %d\n", vsdOperation );
 			}
 		}
+		else if ( vsdOperation == 8 )
+		{	// set frequency
+			// value is % * 100 of max frequency (50Hz)
+			usleep( iSleep );
+
+			addr = 0x1000;
+
+			int val = 10000 * ((double)vsdValue / 50);
+			if ( val > 10000 )
+				val = 10000;
+
+			rc = modbus_write_register( ctx, addr, val );
+			if ( rc == -1 )
+			{
+				printf( "Error: modbus_write_register() failed: %s\n", modbus_strerror(errno) );
+			}
+			else
+			{
+				printf( "VSD operation set to %d, %d Hz -> %d\n", vsdOperation, vsdValue, val );
+			}
+		}
 	}
 	else if ( type == 8 )
-	{	// Power ELectronics VSD
+	{	// Power Electronics VSD
 		printf( "Setting slave addr to %d\n", newAddr );
 		if ( modbus_set_slave( ctx, newAddr ) == -1 )
 		{

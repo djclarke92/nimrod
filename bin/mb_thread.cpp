@@ -2043,6 +2043,41 @@ bool CThread::SendTcpipChangeOutputToHost( const char* szHostname, const int iIn
 	return bRc;
 }
 
+void CThread::HandleVSDOutputDevice( CMysql& myDB, const int idx, const int iChannel, double dVsdFreq )
+{
+	int rc;
+	int addr;
+
+	modbus_t* ctx = m_pmyDevices->GetContext(idx);
+
+	switch ( m_pmyDevices->GetDeviceType(idx) )
+	{
+	default:
+		LogMessage( E_MSG_ERROR, "HandleVSDOutputDevice: unhandled device type %d", m_pmyDevices->GetDeviceType(idx) );
+		break;
+	case E_DT_VSD_NFLIXEN:
+		// value is % * 100 of max frequency (50Hz)
+
+		addr = 0x1000;
+
+		int val = 10000 * (dVsdFreq / 50);
+		if ( val > 10000 )
+			val = 10000;
+
+		rc = modbus_write_register( ctx, addr, val );
+		if ( rc == -1 )
+		{
+			LogMessage( E_MSG_ERROR, "HandleVSDOutputDevice: modbus_write_register() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			LogMessage( E_MSG_INFO, "VSD frequency set to %.1f Hz -> %d\n", dVsdFreq, val );
+		}
+
+		break;
+	}
+}
+
 void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
 	int i;
@@ -3759,8 +3794,18 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 				case E_IO_ROTENC_MONITOR:
 					if ( !bIsEsp )
 					{
-						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
-							bError = true;
+						switch ( m_pmyDevices->GetDeviceType(iOutIdx) )
+						{
+						case E_DT_VSD_NFLIXEN:
+						case E_DT_VSD_PWRELECT:
+						case E_DT_VSD_TOSHIBA:
+							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, 50.0 );
+							break;
+						default:
+							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
+								bError = true;
+							break;
+						}
 					}
 					else
 					{	// format the response message to the esp device
@@ -3814,8 +3859,18 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 					{
 						if ( !bIsEsp )
 						{
-							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, true ) )
-								bError = true;
+							switch ( m_pmyDevices->GetDeviceType(iOutIdx) )
+							{
+							case E_DT_VSD_NFLIXEN:
+							case E_DT_VSD_PWRELECT:
+							case E_DT_VSD_TOSHIBA:
+								HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, 50.0 );
+								break;
+							default:
+								if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, true ) )
+									bError = true;
+								break;
+							}
 						}
 						else
 						{	// format the response message to the esp device
@@ -3848,8 +3903,18 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 					if ( !bIsEsp )
 					{
-						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, bState ) )
-							bError = true;
+						switch ( m_pmyDevices->GetDeviceType(iOutIdx) )
+						{
+						case E_DT_VSD_NFLIXEN:
+						case E_DT_VSD_PWRELECT:
+						case E_DT_VSD_TOSHIBA:
+							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, (bState ? 50.0 : 0.0) );
+							break;
+						default:
+							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, bState ) )
+								bError = true;
+							break;
+						}
 					}
 					else
 					{	// format the response message to the esp device
@@ -3896,8 +3961,18 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 					if ( !bIsEsp )
 					{
-						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, bState ) )
-							bError = true;
+						switch ( m_pmyDevices->GetDeviceType(iOutIdx) )
+						{
+						case E_DT_VSD_NFLIXEN:
+						case E_DT_VSD_PWRELECT:
+						case E_DT_VSD_TOSHIBA:
+							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, (bState ? 50.0 : 0.0) );
+							break;
+						default:
+							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, bState ) )
+								bError = true;
+							break;
+						}
 					}
 					else
 					{	// format the response message to the esp device
@@ -3954,8 +4029,18 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 				case E_IO_ROTENC_MONITOR:
 					if ( !bIsEsp )
 					{
-						if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
-							bError = true;
+						switch ( m_pmyDevices->GetDeviceType(iOutIdx) )
+						{
+						case E_DT_VSD_NFLIXEN:
+						case E_DT_VSD_PWRELECT:
+						case E_DT_VSD_TOSHIBA:
+							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, 0.0 );
+							break;
+						default:
+							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
+								bError = true;
+							break;
+						}
 					}
 					else
 					{	// format the response message to the esp device
@@ -4748,9 +4833,20 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 						pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
 
-						// TODO: handle ESP devices
-						// TODO: handle sending to another pi
-						ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
+						switch ( m_pmyDevices->GetDeviceType(iOutIdx) )
+						{
+						default:
+							// TODO: handle ESP devices
+							// TODO: handle sending to another pi
+							ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
+							break;
+
+						case E_DT_VSD_NFLIXEN:
+						case E_DT_VSD_PWRELECT:
+						case E_DT_VSD_TOSHIBA:
+							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, pPlcStates->GetState(idx).GetValue() );
+							break;
+						}
 
 						pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
 

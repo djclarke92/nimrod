@@ -2330,6 +2330,18 @@ class MySQLDB
 	    return false;
 	}
 	
+	function PlcRenameStateName( $op, $existing_name, $new_name )
+	{
+	    $query = sprintf( "update plcstates set pl_StateName='%s' where pl_Operation='%s' and pl_StateName='%s'", addslashes($new_name), addslashes($op), addslashes($existing_name) );
+	    $result = $this->RunQuery( $query );
+	    if ( mysqli_affected_rows($this->db_link) >= 1 )
+	    {	// success
+	        return true;
+	    }
+	    
+	    return false;
+	}
+	
 	function OperationStateNameExists( $op, $state_name )
 	{
 	    $rc = false;
