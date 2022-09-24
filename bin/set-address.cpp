@@ -24,7 +24,7 @@ int gRS485_iDataBits = 8;
 int gRS485_iStopBits = 1;
 
 
-void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int newBaud, int type );
+void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int newBaud, int type, int vsdOperation );
 void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperation, int vsdValue );
 
 
@@ -74,10 +74,10 @@ int main( int argc, char** argv )
 			exit( 1 );
 		}
 
-		printf( "Ctx %p\n", ctx );
+		printf( "Ctx %p (vsdOp %d)\n", ctx, vsdOperation );
 
 
-		SetNewAddress( ctx, oldAddr, newAddr, oldBaud, newBaud, type );
+		SetNewAddress( ctx, oldAddr, newAddr, oldBaud, newBaud, type, vsdOperation );
 
 		if ( oldBaud != newBaud )
 		{
@@ -122,7 +122,6 @@ int main( int argc, char** argv )
 		printf( "                       6 PZEM-016 AC V/A Monitor\n" );
 		printf( "                       7 NFlixen 9600 VSD\n" );
 		printf( "                       8 Power Electronics SD700 VSD\n" );
-		printf( "                       9 Toshiba VS11 VSD\n" );
 		printf( "    optional   vsd_op: 1 forward\n");
 		printf( "                       2 backward\n");
 		printf( "                       3 forward jog\n");
@@ -173,8 +172,8 @@ int main( int argc, char** argv )
 // Register 0x04 = depth in mm
 // Cable red = +12V
 //       black = 0V
-//       white = rs485A
-//       blue = rs485B
+//       white = rs485B
+//       blue = rs485A
 
 // PD30xx sereies devices (thermocouple)
 // function code 0x03 = read, 0x06 = write
@@ -196,7 +195,7 @@ int main( int argc, char** argv )
 //		rounding		0xff
 //		sample rate		0-255 seconds (0 same as 1)
 
-void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int newBaud, int type )
+void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int newBaud, int type, int vsdOperation )
 {
 	bool bBaudOk = true;
 	int modBaud = 2;
@@ -254,7 +253,7 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 	{
 		printf( "Error: Invalid new baud rate %d\n", newBaud );
 	}
-	else if ( newAddr == oldAddr && newBaud == oldBaud )
+	else if ( newAddr == oldAddr && newBaud == oldBaud && vsdOperation == 0 )
 	{
 		printf( "Nothing to set 0x%02x, %d\n", newAddr, newBaud );
 	}
@@ -491,10 +490,9 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 				printf( "Only supports 9600 baud %d\n", oldBaud );
 			}
 		}
-		else if ( type == 7 || type == 8 || type == 9 )
+		else if ( type == 7 || type == 8 )
 		{	// NFlixen VSD - baud rate set on the VSD
 			// Power Electronics VSD
-			// Toshiba VSD
 			if ( newBaud != oldBaud )
 			{
 				printf( "Ignoring baud rate change\n" );
@@ -658,8 +656,42 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
 		}
 
-		addr = 0x04;
 		uint16_t ulInputs[iLen];
+
+		int iFactor = 1;
+
+		iLen = 2;
+		addr = 0x02;
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: 0x%02x (units)  0x%02x (decimal)\n", ulInputs[0], ulInputs[1] );
+			
+			// check decimal point
+			switch ( ulInputs[1] )
+			{
+			default:
+				break;
+			case 0:	// xxxx
+				iFactor = 1000;
+				break;
+			case 1:	// xxx.x
+				iFactor = 100;
+				break;
+			case 2:	// xx.xx
+				iFactor = 10;
+				break;
+			case 3:	// x.xxx
+				iFactor = 1;
+				break;
+			}
+		}
+
+		addr = 0x04;
 
 		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
 		if ( rc == -1 )
@@ -674,22 +706,10 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 				printf( "%u ", ulInputs[i] );
 			}
 			printf ( "\n" );
-			printf( "Depth = %d mm\n", ulInputs[0] + (ulInputs[1]>>8) );
+			printf( "Depth = %d mm\n", ulInputs[0] * iFactor );
 		}
 
 		usleep( 50000 );
-
-		iLen = 2;
-		addr = 0x0f;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: 0x%04x\n", ulInputs[0] + (ulInputs[1]>>8) );
-		}
 
 /*		for ( addr = 0x00; addr < 17 ; addr += 8 )
 		{
@@ -944,152 +964,6 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 		printf("\n");
 
 		usleep( 50000 );
-
-		if ( vsdOperation >= 1 && vsdOperation <= 7 )
-		{	// vsd must be set for communications control
-			printf( "VSD operation not supported\n" );
-		}
-	}
-	else if ( type == 9 )
-	{	// Toshiba VSD
-		printf( "Setting slave addr to %d\n", newAddr );
-		if ( modbus_set_slave( ctx, newAddr ) == -1 )
-		{
-			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
-		}
-
-		iLen = 1;
-
-		uint16_t ulInputs[iLen];
-
-		// 0xfd00: operation frequency, 0.01 Hz
-		// 0xfd01: current status, bit 9 fwd/rev, bit 10 stop/run
-		// 0xfe03: motor current, 0.01 %
-		// 0xfe05: motor voltage, 0.01%
-		// 0xfe30: motor power, 0.01 kW
-		// 0xfe18: motor torque, 0.01 %
-		// 0xfe70: rated current
-		// 0xfe71: rated voltage
-
-		addr = 0xfd00;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: Frequency %u %.2f Hz", ulInputs[0], (double)ulInputs[0] / 100 );
-		}
-		printf("\n");
-
-		usleep( 50000 );
-
-		// status
-		addr = 0xfd01;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: Status 0x%08x %s %s", ulInputs[0], ((ulInputs[0] & 0x0400) == 0 ? "Stop" : "Run"), ((ulInputs[0] & 0x0200) == 0 ? "Forward" : "Reverse") );
-		}
-		printf("\n");
-
-		usleep( 50000 );
-
-		// current
-		addr = 0xfe03;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: Motor Current %u %.02f A", ulInputs[0], (double)ulInputs[0] / 100 );
-		}
-		printf("\n");
-
-		usleep( 50000 );
-
-		// voltage
-		addr = 0xfe05;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: Motor Voltage %u %.02f V", ulInputs[0], (double)ulInputs[0] / 100 );
-		}
-		printf("\n");
-
-		usleep( 50000 );
-
-		// power
-		addr = 0xfe30;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: Motor Power %u %.02f kW", ulInputs[0], (double)ulInputs[0] / 100 );
-		}
-		printf("\n");
-
-		usleep( 50000 );
-
-		// torque
-		addr = 0xfe18;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: Motor Torque %u %.02f %%", ulInputs[0], (double)ulInputs[0] / 100 );
-		}
-		printf("\n");
-
-		usleep( 50000 );
-
-		// rated current
-		addr = 0xfe70;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: Rated Current %u %.02f A", ulInputs[0], (double)ulInputs[0] / 100 );
-		}
-		printf("\n");
-
-		usleep( 50000 );
-
-		// rated voltage
-		addr = 0xfe71;
-		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-		if ( rc == -1 )
-		{
-			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-		}
-		else
-		{
-			printf( "Read registers: Rated Voltage %u %.02f V", ulInputs[0], (double)ulInputs[0] / 100 );
-		}
-		printf("\n");
-
-		usleep( 50000 );
-
 
 		if ( vsdOperation >= 1 && vsdOperation <= 7 )
 		{	// vsd must be set for communications control

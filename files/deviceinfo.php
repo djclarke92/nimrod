@@ -969,7 +969,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_Offset'>Offset Voltage: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-2'>" );
-    		$tip = sprintf( "For Analog Current the Offest is the 0 Amp voltage, e.g. 2.49V.<br>For Level devices the Offset is the sensor height above the max level." );
+    		$tip = sprintf( "For Analog Current the Offset is the 0 Amp voltage, e.g. 2.49V.<br>For K02 Level devices the Offset is the sensor height above the max level.<br> For HDL Level devices the Offset is the decimal pt multiplication factor." );
     		printf( "<input type='text' class='form-control' name='di_Offset' id='di_Offset' size='5' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", $di_array['di_Offset'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );

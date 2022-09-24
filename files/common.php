@@ -2221,11 +2221,11 @@ class MySQLDB
 	    $result = $this->RunQuery( $query );
 	    if ( mysqli_affected_rows($this->db_link) >= 0 )
 	    {	// success
-	        if ( $state_active == "Y" )
+	        if ( $state_active == "Y" && $state_no != 0 )
 	        {  // make other states inactive
 	            $this->PlcStateClearActive( $op, $state_no );
 	        }
-	        if ( $initial_state == "Y" )
+	        if ( $initial_state == "Y" && $state_no != 0 )
 	        {  // make other states not initial
 	            $this->PlcStateClearInitial( $op, $state_no );
 	        }

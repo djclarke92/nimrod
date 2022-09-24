@@ -348,7 +348,8 @@ const int CPlcStates::ReadInputEvent( int& iDeviceNo, int& iIOChannel, double& d
 			if ( strcmp( m_State[m_iActiveStateIdx].GetOperation(), m_State[i].GetOperation() ) == 0 &&
 				 strcmp( m_State[m_iActiveStateIdx].GetStateName(), m_State[i].GetStateName() ) == 0 )
 			{	// same operation and state
-				if ( m_State[i].GetRuleType()[0] == 'E' && iDeviceNo == m_State[i].GetDeviceNo() && iIOChannel == m_State[i].GetIOChannel() )
+				if ( m_State[i].GetRuleType()[0] == 'E' && strlen(m_State[i].GetNextStateName()) != 0 && 
+					iDeviceNo == m_State[i].GetDeviceNo() && iIOChannel == m_State[i].GetIOChannel() )
 				{	// valid input event
 					iStateNo = m_State[i].GetStateNo();
 					break;

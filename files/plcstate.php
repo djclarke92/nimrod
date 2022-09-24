@@ -133,7 +133,7 @@ else if ( isset($_POST['PlcCopyOperation']) )
                 $state_no = 0;
                 $state_timestamp = "";
                         
-                if ( !$db->SavePlcState( false, $state_no, $new_operation, $state['pl_StateName'], $state['pl_StateIsActive'], $state_timestamp, $state['pl_RuleType'], $state['pl_DeviceNo'], 
+                if ( !$db->SavePlcState( false, $state_no, $new_operation, $state['pl_StateName'], 'N', $state_timestamp, $state['pl_RuleType'], $state['pl_DeviceNo'], 
                     $state['pl_IOChannel'], $state['pl_Value'], $state['pl_Test'], $state['pl_NextStateName'], $state['pl_Order'], $state['pl_DelayTime'], $state['pl_TimerValues'], 
                     $state['pl_PrintOrder'], $state['pl_DelayKey'], $state['pl_InitialState'] ) )
                 {

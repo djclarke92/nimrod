@@ -406,18 +406,20 @@ const double CMyDevice::CalcLevel( const int iChannel, const bool bNew )
 	double dVal = 0.0;
 	double dMaxHeight;
 	double dUnit;
+	double dOffset = 1.0;
 
 	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
 	{
 		dMaxHeight = m_dCalcFactor[iChannel];
+		if ( m_dOffset[iChannel] != 0 )
+		{
+			dOffset = m_dOffset[iChannel];
+		}
 
 		if ( bNew )
 			dUnit = (double)(m_uNewData[iChannel]);
 		else
 			dUnit = (double)(m_uLastData[iChannel]);
-
-		// subtract the sensor height above the max level
-		dUnit -= m_dOffset[iChannel];	// in mm
 
 		if ( strlen(m_szInIOName[iChannel]) == 0 || dMaxHeight == 0 )
 		{	// sensor is not connected
@@ -427,11 +429,14 @@ const double CMyDevice::CalcLevel( const int iChannel, const bool bNew )
 		{
 			if ( GetDeviceType() == E_DT_LEVEL_K02 )
 			{
+				// K02 - subtract the sensor height above the max level
+				dUnit -= m_dOffset[iChannel];	// in mm
+
 				dVal = 100 * ((dMaxHeight - dUnit) / dMaxHeight);
 			}
 			else
 			{
-				dVal = 100 * (dUnit / dMaxHeight);
+				dVal = 100 * ((dUnit * dOffset) / dMaxHeight);
 			}
 		}
 	}

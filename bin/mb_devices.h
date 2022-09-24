@@ -34,7 +34,6 @@ enum E_DEVICE_TYPE {
 	E_DT_CARD_READER,		// 10: HID card reader with pin pad
 	E_DT_VSD_NFLIXEN,		// 11: NFlixen 9600 VSD
 	E_DT_VSD_PWRELECT,		// 12: Power Electronics SD700 VSD
-	E_DT_VSD_TOSHIBA,		// 13: Toshiba VS11 VSD
 };
 
 enum E_IO_TYPE {

@@ -444,18 +444,6 @@ foreach ( $camera_list as $camera )
 
 <div class="container" style="margin-top:30px">
 	<!-- *************************************************************************** -->
-	<div class="row">
-		<div class="col-sm-4">
-			<div class="progress">
-  				<div class="progress-bar bg-info" id='refresh-progress-bar' style="width:0%;height:10px">Refresh</div>
-  			</div>
-		</div>
-		<div class="col-sm-1">
-			<div>
-				<input class=form-check-input type='checkbox' id='RefreshEnabled' name='RefreshEnabled' value='Refresh'>
-			</div>
-		</div>
-	</div>
 
     <?php
     if ( count($devices) > 1 || (count($devices) == 1 && $devices[0]['de_Type'] != E_DT_TIMER) )
@@ -478,8 +466,19 @@ foreach ( $camera_list as $camera )
     				<h3>Status</h3>
     			</div>
     			<div class='col'>
-					<a href='#row_dvt' data-toggle='collapse' class='small'><i>Hide/Show</i></a>
+					<a href='#row_dvt' data-bs-toggle='collapse' class='small'><i>Hide/Show</i></a>
 				</div>
+                <div class="col text-end">
+                    <button class="btn btn-outline-primary btn-sm" id='refresh-progress-bar' name='refresh-progress-bar' disabled>
+                        <span class="spinner-border spinner-border-sm"></span>
+                        &nbsp;&nbsp;&nbsp;
+                    </button>
+                </div>
+                <div class="col">
+                    <div>
+                        <input class=form-check-input type='checkbox' id='RefreshEnabled' name='RefreshEnabled' value='Refresh'>
+                    </div>
+                </div>
 			</div>
 
 			<div id="row_dvt" class="collapse  <?php echo $show_row_dvt; ?>">
@@ -796,7 +795,7 @@ foreach ( $camera_list as $camera )
     				<h3>Control</h3>
     			</div>
     			<div class='col'>
-					<a href='#row_cfd' data-toggle='collapse' class='small'><i>Hide/Show</i></a>
+					<a href='#row_cfd' data-bs-toggle='collapse' class='small'><i>Hide/Show</i></a>
 				</div>
 			</div>
 

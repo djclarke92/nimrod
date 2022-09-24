@@ -749,8 +749,7 @@ function onChangeRuleType()
     		printf( "</div>" );
     		printf( "<div class='col-sm-2 form-check'>" );
     		printf( "<label class='form-check-label'>" );
-    		printf( "<input type='checkbox' class='form-check-input' name='pl_StateIsActive' id='pl_StateIsActive' %s %s %s>", ($pl_array['pl_StateIsActive'] == "Y" ? "checked" : ""), $disabled,
-    		    ($pl_array['pl_StateIsActive'] == "Y" ? "disabled" : "") );
+    		printf( "<input type='checkbox' class='form-check-input' name='pl_StateIsActive' id='pl_StateIsActive' %s disabled>", ($pl_array['pl_StateIsActive'] == "Y" ? "checked" : "") );
     		printf( "State Is Active</label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-2 form-check'>" );

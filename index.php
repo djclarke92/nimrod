@@ -287,14 +287,16 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 		
 		function homeTimer()
 		{
-		    var progressBar = $("#refresh-progress-bar");
+		    var progressBar = document.getElementById('refresh-progress-bar');
 		    var refreshCheck = document.getElementById('RefreshEnabled');
 		    var cameraRefresh = document.getElementById('CameraRefresh');
 			if ( refreshCheck != null && progressBar != null ) {
 			  if ( refreshCheck.checked ) { 
     	        counter = counter + 1;
-			  }
-              progressBar.css("width", (100 - (3.3 * counter)) + "%");
+                progressBar.innerHTML = '<span class="spinner-border spinner-border-sm"></span>&nbsp;&nbsp;' + (counter < 10 ? '&nbsp;' : '') + (30-counter);
+			  } else {
+                progressBar.innerHTML = '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' + (counter < 10 ? '&nbsp;' : '') + (30-counter);
+              }
 			}
 			else if ( cameraRefresh != null ) {
 				counter = counter + 1;

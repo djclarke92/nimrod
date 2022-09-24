@@ -219,7 +219,6 @@ void CThread::Worker()
 	double dLastVIPFCheck = 0;
 	double dLastVSDNFlixenCheck = 0;
 	double dLastVSDPwrElectCheck = 0;
-	double dLastVSDToshibaCheck = 0;
 	time_t tTimenow;
 	time_t tUpdated;
 	time_t tAllDeadStart = 0;
@@ -586,18 +585,6 @@ void CThread::Worker()
 							dLastVSDPwrElectCheck = TimeNowMS();
 
 							HandleVSDPwrElectDevice( myDB, ctx, idx, bAllDead );
-
-							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
-								bAllDead = false;
-						}
-					}
-					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VSD_TOSHIBA )
-					{
-						if ( dLastVSDToshibaCheck + VSD_CHECK_PERIOD <= TimeNowMS() )
-						{	// only check VSD devices every 0.5 seconds
-							dLastVSDToshibaCheck = TimeNowMS();
-
-							HandleVSDToshibaDevice( myDB, ctx, idx, bAllDead );
 
 							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
 								bAllDead = false;
@@ -3043,213 +3030,6 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 	}
 }
 
-// must read each data byte one at a time
-void CThread::HandleVSDToshibaDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
-{
-	int iChannel;
-	int rc;
-	int err;
-	int addr;
-	int iLoop;
-	int iRetry = 3;
-	int iCheckAgain = 1;
-	int iSleepTime = 40000;
-
-
-	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
-	{	// read 1 byte
-		int count = 1;
-		uint16_t uiVal[2];
-
-		// VSD devices may not respond as they may be powered off
-		if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_ALIVE )
-		{
-			iCheckAgain = 0;
-			if ( time(NULL) % 10 == 0 || m_tThreadStartTime + 10 >= time(NULL) )
-			{	// check if the device has come alive every 10 seconds
-				//LogMessage( E_MSG_INFO, "Check VSD again %d, address %d", m_pmyDevices->GetDeviceStatus(idx), m_pmyDevices->GetAddress(idx) );
-				iCheckAgain = -1;
-			}
-		}
-
-		memset( uiVal, 0, 2*sizeof(uint16_t) );
-
-		addr = 0xfe05;	// motor voltage
-		if ( iCheckAgain != 0 )
-		{
-			rc = modbus_read_registers( ctx, addr, count, uiVal );
-		}
-		else
-		{
-			break;
-		}
-		if ( rc == -1 )
-		{	// failed
-			// don't retry VSD devices
-			err = errno;
-
-			//if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
-			if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_BURIED )
-			{	// device has just failed
-				LogMessage( E_MSG_INFO, "VSD device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
-				// do not record this in the DB - expected failure
-				//myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "VSD device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
-			}
-
-			//if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
-			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
-			{
-				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-			}
-
-			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
-			{
-				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
-			}
-
-			iLoop = iRetry;
-		}
-		// voltage
-		m_pmyDevices->GetNewData(idx)[0] = uiVal[0];	// ?
-
-		usleep( iSleepTime );
-
-		addr = 0xfe03;	// motor current
-		rc = modbus_read_registers( ctx, addr, count, uiVal );
-		if ( rc != -1 )
-		{
-			// current
-			m_pmyDevices->GetNewData(idx)[1] = uiVal[0];	// ?
-		}
-
-		usleep( iSleepTime );
-
-		addr = 0xfe30;	// motor power
-		rc = modbus_read_registers( ctx, addr, count, uiVal );
-		if ( rc != -1 )
-		{
-			// power
-			m_pmyDevices->GetNewData(idx)[2] = uiVal[0];	// ?
-		}
-
-		usleep( iSleepTime );
-
-		addr = 0xfd00;	// frequency
-		rc = modbus_read_registers( ctx, addr, count, uiVal );
-		if ( rc != -1 )
-		{
-			// frequency
-			m_pmyDevices->GetNewData(idx)[3] = uiVal[0];	// ?
-		}
-
-		usleep( iSleepTime );
-
-		addr = 0xfe18;	// torque
-		rc = modbus_read_registers( ctx, addr, count, uiVal );
-		if ( rc != -1 )
-		{
-			// torque
-			m_pmyDevices->GetNewData(idx)[4] = uiVal[0];	// ?
-		}
-
-		if ( true )
-		{	// success
-
-			if ( rc != -1 )
-			{
-				bAllDead = false;
-				if ( iLoop > 0 )
-				{
-					LogMessage( E_MSG_INFO, "modbus_read_registers() retry successful, loop %d", iLoop );
-				}
-
-				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
-				{
-					LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
-				}
-
-				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
-				{
-					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				}
-			}
-
-			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
-			{
-				double dDiff;
-				double dValNew;
-				double dValOld;
-				char szUnits[10] = "?";
-				char szDesc[20] = "?";
-				char szName[50] = "VSD Monitor";
-				E_EVENT_TYPE eEventType = E_ET_VOLTAGE;
-				E_IO_TYPE eIOTypeL = E_IO_VOLT_MONITOR;
-				E_IO_TYPE eIOTypeH = E_IO_VOLT_MONITOR;
-				E_IO_TYPE eIOTypeHL = E_IO_VOLT_MONITOR;
-
-				dValOld = m_pmyDevices->CalcVSDToshibaValue(idx,iChannel,false);
-				dValNew = m_pmyDevices->CalcVSDToshibaValue(idx,iChannel,true);
-				switch ( iChannel )
-				{
-				default:
-					dDiff = 5;
-					dValNew = 0;
-					break;
-				case 0:		// voltage
-					dDiff = 5;	// 0.5 volts
-					eEventType = E_ET_VOLTAGE;
-					strcpy( szUnits, "V" );
-					strcpy( szDesc, "Voltage" );
-					eIOTypeL = E_IO_VOLT_LOW;
-					eIOTypeH = E_IO_VOLT_HIGH;
-					eIOTypeHL = E_IO_VOLT_HIGHLOW;
-					break;
-				case 1:		// current
-					dDiff = 0.1;	// 100mA
-					eEventType = E_ET_CURRENT;
-					strcpy( szUnits, "A" );
-					strcpy( szDesc, "Current" );
-					eIOTypeL = E_IO_CURRENT_LOW;
-					eIOTypeH = E_IO_CURRENT_HIGH;
-					eIOTypeHL = E_IO_CURRENT_HIGHLOW;
-					break;
-				case 2:		// power
-					dDiff = 20;	// 20 Watts
-					eEventType = E_ET_POWER;
-					strcpy( szUnits, "W" );
-					strcpy( szDesc, "Power" );
-					eIOTypeL = E_IO_VOLT_LOW;
-					eIOTypeH = E_IO_VOLT_HIGH;
-					eIOTypeHL = E_IO_VOLT_HIGHLOW;
-					break;
-				case 3:		// frequency
-					dDiff = 1;	// 1Hz
-					eEventType = E_ET_FREQUENCY;
-					strcpy( szUnits, "Hz" );
-					strcpy( szDesc, "Frequency" );
-					eIOTypeL = E_IO_FREQ_LOW;
-					eIOTypeH = E_IO_FREQ_HIGH;
-					eIOTypeHL = E_IO_FREQ_HIGHLOW;
-					break;
-				case 4:		// torque %
-					dDiff = 1;	//
-					eEventType = E_ET_TORQUE;
-					strcpy( szUnits, "T%" );
-					strcpy( szDesc, "Torque Percent" );
-					eIOTypeL = E_IO_TORQUE_LOW;
-					eIOTypeH = E_IO_TORQUE_HIGH;
-					eIOTypeHL = E_IO_TORQUE_HIGHLOW;
-					break;
-				}
-
-				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
-			}	// end for loop
-
-			// break out of retry loop
-			break;
-		}
-	}
-}
 
 void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
@@ -3798,7 +3578,6 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						{
 						case E_DT_VSD_NFLIXEN:
 						case E_DT_VSD_PWRELECT:
-						case E_DT_VSD_TOSHIBA:
 							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, 50.0 );
 							break;
 						default:
@@ -3863,7 +3642,6 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 							{
 							case E_DT_VSD_NFLIXEN:
 							case E_DT_VSD_PWRELECT:
-							case E_DT_VSD_TOSHIBA:
 								HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, 50.0 );
 								break;
 							default:
@@ -3907,7 +3685,6 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						{
 						case E_DT_VSD_NFLIXEN:
 						case E_DT_VSD_PWRELECT:
-						case E_DT_VSD_TOSHIBA:
 							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, (bState ? 50.0 : 0.0) );
 							break;
 						default:
@@ -3965,7 +3742,6 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						{
 						case E_DT_VSD_NFLIXEN:
 						case E_DT_VSD_PWRELECT:
-						case E_DT_VSD_TOSHIBA:
 							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, (bState ? 50.0 : 0.0) );
 							break;
 						default:
@@ -4033,7 +3809,6 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						{
 						case E_DT_VSD_NFLIXEN:
 						case E_DT_VSD_PWRELECT:
-						case E_DT_VSD_TOSHIBA:
 							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, 0.0 );
 							break;
 						default:
@@ -4215,57 +3990,86 @@ void CThread::ReadCameraRecords( CMysql& myDB, CCameraList& CameraList )
 void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 {
 	int i;
+	int iOps = 0;
 	int iNumFields;
+	char szOperation[100] = "";
 	MYSQL_ROW row;
 
 	LogMessage( E_MSG_INFO, "Reading plcstates list, active idx %d", pPlcStates->GetActiveStateIdx() );
 
 	pPlcStates->Init();
 
-	// read from mysql
-	//                          0          1            2            3                               4                  5
-	if ( myDB.RunQuery( "SELECT pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,unix_timestamp(pl_StateTimestamp),pl_RuleType,"
-		//   6           7            8        9       10               11       12           13
-			"pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues "
-			"FROM plcstates order by pl_Operation,pl_StateName,pl_RuleType,pl_Order") != 0 )
+	// find out which operation is active
+	if ( myDB.RunQuery( "SELECT pl_Operation from plcstates where pl_StateIsActive='Y'" ) )
 	{
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
 	}
 	else
 	{
-		i = 0;
 		while ( (row = myDB.FetchRow( iNumFields )) )
 		{
-			int iStateNo = atoi( (const char*)row[0] );
-			pPlcStates->GetState(i).SetStateNo( iStateNo );
-			pPlcStates->GetState(i).SetOperation( (const char*)row[1] );
-			pPlcStates->GetState(i).SetStateName( (const char*)row[2] );
-			pPlcStates->GetState(i).SetStateIsActive( (const char*)row[3] );
-			pPlcStates->GetState(i).SetStateTimestampMS( (const double)atof((const char*)row[4]) );
-			pPlcStates->GetState(i).SetRuleType( (const char*)row[5] );
-			pPlcStates->GetState(i).SetDeviceNo( (const int)atoi((const char*)row[6]) );
-			pPlcStates->GetState(i).SetIOChannel( (const int)atoi((const char*)row[7]) );
-			pPlcStates->GetState(i).SetValue( (const double)atof((const char*)row[8]) );
-			pPlcStates->GetState(i).SetTest( (const char*)row[9] );
-			pPlcStates->GetState(i).SetNextStateName( (const char*)row[10] );
-			pPlcStates->GetState(i).SetOrder( (const int)atoi((const char*)row[11]) );
-			pPlcStates->GetState(i).SetDelayTime( (const double)atof((const char*)row[12]) );
-			pPlcStates->GetState(i).SetTimerValues( (const char*)row[13] );
-			pPlcStates->AddState();
-
-			if ( pPlcStates->GetState(i).GetStateIsActive() )
-			{
-				pPlcStates->SetActiveStateIdx( i );
-			}
-
-			LogMessage( E_MSG_INFO, "%d: StateNo:%d, Op:%s, State:%s, Active:%d, RuleType:%s, DeviceNo:%d, IOChannel:%d, Value:%.1f, Test:'%s', NextState:%s, Order:%d, Delay:%.1f, TValues:%s",
-					i, pPlcStates->GetState(i).GetStateNo(), pPlcStates->GetState(i).GetOperation(), pPlcStates->GetState(i).GetStateName(),
-					pPlcStates->GetState(i).GetStateIsActive(), pPlcStates->GetState(i).GetRuleType(), pPlcStates->GetState(i).GetDeviceNo(), pPlcStates->GetState(i).GetIOChannel(),
-					pPlcStates->GetState(i).GetValue(), pPlcStates->GetState(i).GetTest(), pPlcStates->GetState(i).GetNextStateName(), pPlcStates->GetState(i).GetOrder(),
-					pPlcStates->GetState(i).GetDelayTime(), pPlcStates->GetState(i).GetTimerValues() );
-
-			i += 1;
+			iOps += 1;
+			snprintf( szOperation, sizeof(szOperation), "%s", (const char*)row[0] );
 		}
+	}
+
+	if ( iOps == 1 )
+	{
+		LogMessage( E_MSG_INFO, "PLC Operation '%s' is active", szOperation );
+		
+		// read from mysql
+		//                          0          1            2            3                               4                  5
+		if ( myDB.RunQuery( "SELECT pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,unix_timestamp(pl_StateTimestamp),pl_RuleType,"
+			//   6           7            8        9       10               11       12           13
+				"pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues "
+				"FROM plcstates where pl_Operation='%s' order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_StateNo", szOperation) != 0 )
+		{
+			LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+		}
+		else
+		{
+			i = 0;
+			while ( (row = myDB.FetchRow( iNumFields )) )
+			{
+				int iStateNo = atoi( (const char*)row[0] );
+				pPlcStates->GetState(i).SetStateNo( iStateNo );
+				pPlcStates->GetState(i).SetOperation( (const char*)row[1] );
+				pPlcStates->GetState(i).SetStateName( (const char*)row[2] );
+				pPlcStates->GetState(i).SetStateIsActive( (const char*)row[3] );
+				pPlcStates->GetState(i).SetStateTimestampMS( (const double)atof((const char*)row[4]) );
+				pPlcStates->GetState(i).SetRuleType( (const char*)row[5] );
+				pPlcStates->GetState(i).SetDeviceNo( (const int)atoi((const char*)row[6]) );
+				pPlcStates->GetState(i).SetIOChannel( (const int)atoi((const char*)row[7]) );
+				pPlcStates->GetState(i).SetValue( (const double)atof((const char*)row[8]) );
+				pPlcStates->GetState(i).SetTest( (const char*)row[9] );
+				pPlcStates->GetState(i).SetNextStateName( (const char*)row[10] );
+				pPlcStates->GetState(i).SetOrder( (const int)atoi((const char*)row[11]) );
+				pPlcStates->GetState(i).SetDelayTime( (const double)atof((const char*)row[12]) );
+				pPlcStates->GetState(i).SetTimerValues( (const char*)row[13] );
+				pPlcStates->AddState();
+
+				if ( pPlcStates->GetState(i).GetStateIsActive() )
+				{
+					pPlcStates->SetActiveStateIdx( i );
+				}
+
+				LogMessage( E_MSG_INFO, "%d: StateNo:%d, Op:%s, State:%s, Active:%d, RuleType:%s, DeviceNo:%d, IOChannel:%d, Value:%.1f, Test:'%s', NextState:%s, Order:%d, Delay:%.1f, TValues:%s",
+						i, pPlcStates->GetState(i).GetStateNo(), pPlcStates->GetState(i).GetOperation(), pPlcStates->GetState(i).GetStateName(),
+						pPlcStates->GetState(i).GetStateIsActive(), pPlcStates->GetState(i).GetRuleType(), pPlcStates->GetState(i).GetDeviceNo(), pPlcStates->GetState(i).GetIOChannel(),
+						pPlcStates->GetState(i).GetValue(), pPlcStates->GetState(i).GetTest(), pPlcStates->GetState(i).GetNextStateName(), pPlcStates->GetState(i).GetOrder(),
+						pPlcStates->GetState(i).GetDelayTime(), pPlcStates->GetState(i).GetTimerValues() );
+
+				i += 1;
+			}
+		}
+	}
+	else if ( iOps == 0 )
+	{
+		LogMessage( E_MSG_INFO, "There are no Operations with an active state" );
+	}
+	else
+	{
+		LogMessage( E_MSG_ERROR, "There are %d Operations with an active state", iOps );
 	}
 
 	myDB.FreeResult();
@@ -4276,16 +4080,15 @@ void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 void CThread::ReadPlcStatesTableDelayTime( CMysql& myDB, CPlcStates* pPlcStates )
 {
 	int i;
+	int iOps = 0;
 	int iNumFields;
+	char szOperation[100] = "";
 	MYSQL_ROW row;
 
 	LogMessage( E_MSG_INFO, "Reading plcstates DelayTime" );
 
-
-	// read from mysql
-	//                          0          1
-	if ( myDB.RunQuery( "SELECT pl_StateNo,pl_DelayTime "
-			"FROM plcstates order by pl_Operation,pl_StateName,pl_RuleType,pl_Order") != 0 )
+	// find out which operation is active
+	if ( myDB.RunQuery( "SELECT pl_Operation from plcstates where pl_StateIsActive='Y'" ) )
 	{
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
 	}
@@ -4293,13 +4096,38 @@ void CThread::ReadPlcStatesTableDelayTime( CMysql& myDB, CPlcStates* pPlcStates 
 	{
 		while ( (row = myDB.FetchRow( iNumFields )) )
 		{
-			int iStateNo = atoi( (const char*)row[0] );
-			i = pPlcStates->FindStateNo(iStateNo);
-			pPlcStates->GetState(i).SetDelayTime( (const double)atof((const char*)row[1]) );
-
-			LogMessage( E_MSG_INFO, "idx %d: StateNo:%d, Delay:%.1f",
-					i, pPlcStates->GetState(i).GetStateNo(), pPlcStates->GetState(i).GetDelayTime() );
+			iOps += 1;
+			snprintf( szOperation, sizeof(szOperation), "%s", (const char*)row[0] );
 		}
+	}
+
+	if ( iOps == 1 )
+	{
+		LogMessage( E_MSG_INFO, "PLC Operation '%s' is active", szOperation );
+
+		// read from mysql
+		//                          0          1
+		if ( myDB.RunQuery( "SELECT pl_StateNo,pl_DelayTime "
+				"FROM plcstates order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_StateNo") != 0 )
+		{
+			LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+		}
+		else
+		{
+			while ( (row = myDB.FetchRow( iNumFields )) )
+			{
+				int iStateNo = atoi( (const char*)row[0] );
+				i = pPlcStates->FindStateNo(iStateNo);
+				pPlcStates->GetState(i).SetDelayTime( (const double)atof((const char*)row[1]) );
+
+				LogMessage( E_MSG_INFO, "idx %d: StateNo:%d, Delay:%.1f",
+						i, pPlcStates->GetState(i).GetStateNo(), pPlcStates->GetState(i).GetDelayTime() );
+			}
+		}
+	}
+	else if ( iOps != 0 )
+	{
+		LogMessage( E_MSG_ERROR, "There are %d Operations with an active state", iOps );
 	}
 
 	myDB.FreeResult();
@@ -4843,7 +4671,6 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 						case E_DT_VSD_NFLIXEN:
 						case E_DT_VSD_PWRELECT:
-						case E_DT_VSD_TOSHIBA:
 							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, pPlcStates->GetState(idx).GetValue() );
 							break;
 						}
