@@ -397,6 +397,32 @@ const double CMyDevice::CalcVoltage( const int iChannel, const bool bNew )
 	return dVal;
 }
 
+// HDHK current meter
+const double CMyDevice::CalcCurrent( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		if ( bNew )
+			dUnit = (double)(m_uNewData[iChannel]);
+		else
+			dUnit = (double)(m_uLastData[iChannel]);
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 )
+		{	// sensor is not connected
+
+		}
+		else
+		{
+			dVal = ((double)dUnit / 100);
+		}
+	}
+
+	return dVal;
+}
+
 // data from K02 is in mm
 // water height = <max_water_height> - (<measured_value> - <offset_above_max_level>)
 // CalcFactor is the max water level height in mm
@@ -637,57 +663,6 @@ const double CMyDevice::CalcVSDPwrElectValue( const int iChannel, const bool bNe
 	return dVal;
 }
 
-const double CMyDevice::CalcVSDToshibaValue( const int iChannel, const bool bNew )
-{
-	double dVal = 0.0;
-	double dUnit;
-
-	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
-	{
-		if ( bNew )
-		{
-			dUnit = (double)(m_uNewData[iChannel]);
-		}
-		else
-		{
-			dUnit = (double)(m_uLastData[iChannel]);
-		}
-
-		if ( strlen(m_szInIOName[iChannel]) == 0 )
-		{	// sensor is not connected
-
-		}
-		else
-		{
-			switch ( iChannel )
-			{
-			default:
-				break;
-			case 0:		// voltage, volts
-				dVal = (double)dUnit;
-				break;
-			case 1:		// current, 0.1 amps
-				dVal = (double)dUnit / 10;
-				break;
-			case 2:		// power, 0.1kW
-				dVal = (double)dUnit / 10;
-				break;
-			case 3:		// frequency, 0.01Hz
-				dVal = (double)dUnit / 10;
-				break;
-			case 4:		// torque %
-				dVal = 100 * (double)dUnit / 8192;
-				break;
-			case 5:		// running speed, rpm
-				dVal = (double)dUnit;
-				break;
-			}
-		}
-	}
-
-	return dVal;
-}
-
 const bool CMyDevice::IsSensorConnected( const int iChannel )
 {
 	bool bRc = false;
@@ -854,6 +829,11 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 
 		case E_DT_VIPF_MON:
 			dVal = CalcVIPFValue( iLinkChannel, true );
+			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
+			break;
+
+		case E_DT_HDHK_CURRENT:
+			dVal = CalcCurrent( iLinkChannel, true );
 			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
 			break;
 		}
@@ -1906,6 +1886,16 @@ const double CDeviceList::CalcVoltage( const int idx, const int iChannel, const 
 	return 0.0;
 }
 
+const double CDeviceList::CalcCurrent( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcCurrent( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
 const double CDeviceList::CalcLevel( const int idx, const int iChannel, const bool bNew )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
@@ -1951,16 +1941,6 @@ const double CDeviceList::CalcVSDPwrElectValue( const int idx, const int iChanne
 	if ( idx >= 0 && idx < MAX_DEVICES )
 	{
 		return m_Device[idx].CalcVSDPwrElectValue( iChannel, bNew );
-	}
-
-	return 0.0;
-}
-
-const double CDeviceList::CalcVSDToshibaValue( const int idx, const int iChannel, const bool bNew )
-{
-	if ( idx >= 0 && idx < MAX_DEVICES )
-	{
-		return m_Device[idx].CalcVSDToshibaValue( iChannel, bNew );
 	}
 
 	return 0.0;

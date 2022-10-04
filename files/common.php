@@ -45,6 +45,7 @@ define( "E_DT_VIPF_MON", 9 );           // PZEM-016 V/I Monitor
 define( "E_DT_CARD_READER", 10 );       // card reader
 define( "E_DT_VSD_NFLIXEN", 11 );       // NFlixen 9600 VSD
 define( "E_DT_VSD_PWRELECT", 12 );      // Power ELectronics SD700 VSD
+define( "E_DT_HDHK_CURRENT", 13 );		// HDHK 8 channel current meter
 $_SESSION['E_DTD'] = array();
 $_SESSION['E_DTD'][] = "Unused";
 $_SESSION['E_DTD'][] = "Digital IO"; 
@@ -59,6 +60,7 @@ $_SESSION['E_DTD'][] = "AC VIPF Monitor";
 $_SESSION['E_DTD'][] = "Card Reader";
 $_SESSION['E_DTD'][] = "NFlixen 9600 VSD";
 $_SESSION['E_DTD'][] = "PwrElect SD700 VSD";
+$_SESSION['E_DTD'][] = "HDHK 8Ch Current Meter";
 
 
 define( "E_IO_UNUSED", 0 );

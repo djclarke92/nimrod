@@ -34,6 +34,7 @@ enum E_DEVICE_TYPE {
 	E_DT_CARD_READER,		// 10: HID card reader with pin pad
 	E_DT_VSD_NFLIXEN,		// 11: NFlixen 9600 VSD
 	E_DT_VSD_PWRELECT,		// 12: Power Electronics SD700 VSD
+	E_DT_HDHK_CURRENT,		// 13: HDHK 8 channel current meter
 };
 
 enum E_IO_TYPE {
@@ -262,12 +263,12 @@ public:
 	const double CalculateTemperature( const uint16_t uVal );
 	const double CalcTemperature( const int iChannel, const bool bNew );
 	const double CalcVoltage( const int iChannel, const bool bNew );
+	const double CalcCurrent( const int iChannel, const bool bNew );
 	const double CalcLevel( const int iChannel, const bool bNew );
 	const double CalcRotaryEncoderDistance( const int iChannel, const bool bNew );
 	const double CalcVIPFValue( const int iChannel, const bool bNew );
 	const double CalcVSDNFlixenValue( const int iChannel, const bool bNew );
 	const double CalcVSDPwrElectValue( const int iChannel, const bool bNew );
-	const double CalcVSDToshibaValue( const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int iChannel );
 	const bool WasSensorConnected( const int iChannel );
 	const bool IsTimerEnabledToday( const int iChannel );
@@ -384,12 +385,12 @@ public:
 	const bool IsOffTime( const int idx, const int iOutCoil );
 	const double CalcTemperature( const int idx, const int iChannel, const bool bNew );
 	const double CalcVoltage( const int idx, const int iChannel, const bool bNew );
+	const double CalcCurrent( const int idx, const int iChannel, const bool bNew );
 	const double CalcLevel( const int idx, const int iChannel, const bool bNew );
 	const double CalcRotaryEncoderDistance( const int idx, const int iChannel, const bool bNew );
 	const double CalcVIPFValue( const int idx, const int iChannel, const bool bNew );
 	const double CalcVSDNFlixenValue( const int idx, const int iChannel, const bool bNew );
 	const double CalcVSDPwrElectValue( const int idx, const int iChannel, const bool bNew );
-	const double CalcVSDToshibaValue( const int idx, const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int idx, const int iChannel );
 	const bool WasSensorConnected( const int idx, const int iChannel );
 	const bool IsTimerEnabledToday( const int idx, const int iChannel );

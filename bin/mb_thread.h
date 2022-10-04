@@ -16,8 +16,9 @@
 #define VOLTAGE_CHECK_PERIOD				2		// seconds
 #define LEVEL_CHECK_PERIOD					5		// seconds
 #define ROTENC_CHECK_PERIOD					1		// seconds
-#define VIPF_CHECK_PERIOD					1		// seconds
+#define VIPF_CHECK_PERIOD					0.5		// seconds
 #define VSD_CHECK_PERIOD					0.5		// seconds
+#define HDHK_CHECK_PERIOD					0.5		// seconds
 #define MAX_TCPIP_SOCKETS					16
 #define ESP_PING_TIMEOUT					60
 #define CAMERA_SNAPSHOT_PERIOD				60	// seconds
@@ -263,6 +264,7 @@ public:
 	void HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
+	void HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );

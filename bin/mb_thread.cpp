@@ -217,6 +217,7 @@ void CThread::Worker()
 	double dLastLevelCheck = 0;
 	double dLastRotEncCheck = 0;
 	double dLastVIPFCheck = 0;
+	double dLastHDHKCheck = 0;
 	double dLastVSDNFlixenCheck = 0;
 	double dLastVSDPwrElectCheck = 0;
 	time_t tTimenow;
@@ -557,10 +558,22 @@ void CThread::Worker()
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VIPF_MON )
 					{
 						if ( dLastVIPFCheck + VIPF_CHECK_PERIOD <= TimeNowMS() )
-						{	// only check VIPF devices every 1 seconds
+						{	// only check VIPF devices every 0.5 seconds
 							dLastVIPFCheck = TimeNowMS();
 
 							HandleVIPFDevice( myDB, ctx, idx, bAllDead );
+
+							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
+								bAllDead = false;
+						}
+					}
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_HDHK_CURRENT )
+					{
+						if ( dLastHDHKCheck + HDHK_CHECK_PERIOD <= TimeNowMS() )
+						{	// check HDHK devices every 0.5 seconds
+							dLastHDHKCheck = TimeNowMS();
+
+							HandleHDHKDevice( myDB, ctx, idx, bAllDead );
 
 							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
 								bAllDead = false;
@@ -2375,7 +2388,7 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
 			{
 				// level is in mm
-				double dDiff = 20;
+				double dDiff = 2;
 
 				E_EVENT_TYPE eEventType = E_ET_LEVEL;
 				E_IO_TYPE eIOTypeL = E_IO_LEVEL_LOW;
@@ -2480,7 +2493,7 @@ void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
 			{
 				// distance is in mm
-				double dDiff = 5;
+				double dDiff = 0.2;
 
 				E_EVENT_TYPE eEventType = E_ET_ROTARY_ENC;
 				E_IO_TYPE eIOTypeL = E_IO_ROTENC_LOW;
@@ -2620,7 +2633,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 					dValNew = 0;
 					break;
 				case 0:		// voltage
-					dDiff = 5;	// 0.5 volts
+					dDiff = 0.5;	// 0.5 volts
 					eEventType = E_ET_VOLTAGE;
 					strcpy( szUnits, "V" );
 					strcpy( szDesc, "Voltage" );
@@ -2629,7 +2642,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 					eIOTypeHL = E_IO_VOLT_HIGHLOW;
 					break;
 				case 1:		// current
-					dDiff = 100;	// 100mA
+					dDiff = 0.1;	// 100mA
 					eEventType = E_ET_CURRENT;
 					strcpy( szUnits, "A" );
 					strcpy( szDesc, "Current" );
@@ -2659,7 +2672,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 					eIOTypeHL = E_IO_FREQ_HIGHLOW;
 					break;
 				case 5:		// power factor
-					dDiff = 5;	// 0.05 deg
+					dDiff = 0.55;	// 0.05 deg
 					eEventType = E_ET_POWERFACTOR;
 					strcpy( szUnits, "PF" );
 					strcpy( szDesc, "Power Factor" );
@@ -2975,7 +2988,7 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 					dValNew = 0;
 					break;
 				case 0:		// voltage
-					dDiff = 5;	// 0.5 volts
+					dDiff = 0.5;	// 0.5 volts
 					eEventType = E_ET_VOLTAGE;
 					strcpy( szUnits, "V" );
 					strcpy( szDesc, "Voltage" );
@@ -3099,8 +3112,8 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
 			{
-				// 20mV change
-				double dDiff = 20;
+				// 50mV change
+				double dDiff = 0.05;
 
 				E_EVENT_TYPE eEventType = E_ET_VOLTAGE;
 				E_IO_TYPE eIOTypeL = E_IO_VOLT_LOW;
@@ -3111,6 +3124,97 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 				char szName[50] = "Voltage";
 				double dValOld = m_pmyDevices->CalcVoltage(idx,iChannel,false);
 				double dValNew = m_pmyDevices->CalcVoltage(idx,iChannel,true);
+
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+			}	// end for loop
+
+			// break out of retry loop
+			break;
+		}
+	}
+}
+
+// HDHK 8Ch current meter
+void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
+{
+	int iChannel;
+	int rc;
+	int err;
+	int addr;
+	int iLoop;
+	int iRetry = 3;
+
+	addr = 0x0008;
+	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
+	{
+		rc = modbus_read_registers( ctx, addr, m_pmyDevices->GetNumInputs(idx), m_pmyDevices->GetNewData(idx) );
+		if ( rc == -1 )
+		{	// failed
+			err = errno;
+			if ( iLoop+1 >= iRetry )
+			{	// give up
+				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
+				{	// device has just failed
+					LogMessage( E_MSG_INFO, "Voltage device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "Voltage device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+				}
+
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				}
+
+				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
+				{
+					LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+				}
+			}
+			else
+			{	// retry
+				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d retry", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+
+				usleep( 10000 + (10000*iLoop) );
+
+				if ( modbus_set_slave( ctx, m_pmyDevices->GetAddress(idx) ) == -1 )
+				{
+					LogMessage( E_MSG_ERROR, "modbus_set_slave(%p) %d failed: %s", ctx, idx, modbus_strerror(errno) );
+				}
+
+				usleep( 10000 + (10000*iLoop) );
+			}
+		}
+		else
+		{	// success
+			bAllDead = false;
+			if ( iLoop > 0 )
+			{
+				LogMessage( E_MSG_INFO, "modbus_read_registers() retry successful, loop %d", iLoop );
+			}
+
+			if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+			{
+				LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			}
+
+			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+			{
+				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+			}
+
+			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
+			{
+				// 0.5A change
+				double dDiff = 0.5;
+
+				E_EVENT_TYPE eEventType = E_ET_CURRENT;
+				E_IO_TYPE eIOTypeL = E_IO_CURRENT_LOW;
+				E_IO_TYPE eIOTypeH = E_IO_CURRENT_HIGH;
+				E_IO_TYPE eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+				char szUnits[10] = "A";
+				char szDesc[20] = "Current";
+				char szName[50] = "Current";
+				double dValOld = m_pmyDevices->CalcCurrent(idx,iChannel,false);
+				double dValNew = m_pmyDevices->CalcCurrent(idx,iChannel,true);
 
 				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
@@ -3268,7 +3372,7 @@ void CThread::ProcessTemperatureData( CMysql& myDB, const int idx, const int iCh
 
 
 	//0.2 degC change = 2 units
-	double dDiff = 2;
+	double dDiff = 0.2;
 
 	E_EVENT_TYPE eEventType = E_ET_TEMPERATURE;
 	E_IO_TYPE eIOTypeL = E_IO_TEMP_LOW;
@@ -3305,7 +3409,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 		}
 
 		bLogit = false;
-		if ( abs(m_pmyDevices->GetNewData(idx,iChannel) - m_pmyDevices->GetLastLogData(idx,iChannel)) >= dDiff ||
+		if ( fabs(dValNew - dValOld) >= dDiff ||
 				m_pmyDevices->GetLastRecorded(idx,iChannel) + MAX_EVENT_PERIOD < time(NULL) )
 		{	// interesting amount of change
 			bLogit = true;
@@ -3936,6 +4040,7 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 		else
 		{
 			m_tLastCameraSnapshot = time(NULL);
+			ReadCameraRecords( myDB, CameraList );
 		}
 	}
 }

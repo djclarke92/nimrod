@@ -101,7 +101,7 @@ int main( int argc, char** argv )
 				exit( 1 );
 			}
 
-			printf( "Ctx %p\n", ctx );
+			printf( "Ctx %p, Baud Rate %d\n", ctx, newBaud );
 		}
 
 		ReadData( ctx, newAddr, newBaud, type, vsdOperation, vsdValue );
@@ -122,6 +122,7 @@ int main( int argc, char** argv )
 		printf( "                       6 PZEM-016 AC V/A Monitor\n" );
 		printf( "                       7 NFlixen 9600 VSD\n" );
 		printf( "                       8 Power Electronics SD700 VSD\n" );
+		printf( "                       9 HDHK 8Ch Current Meter\n" );
 		printf( "    optional   vsd_op: 1 forward\n");
 		printf( "                       2 backward\n");
 		printf( "                       3 forward jog\n");
@@ -195,6 +196,25 @@ int main( int argc, char** argv )
 //		rounding		0xff
 //		sample rate		0-255 seconds (0 same as 1)
 
+// HDHK 8CH Current Meter
+// function code 0x03 read single registers
+// function code 0x06 write single register
+// function code 0x10 write multiple registers
+// register 0x0000 r/o - program version 650 = 6.50
+// register 0x0001 r/o - current A-D (ch 01-04) channel range, unsigned int, 40 = 40A
+// register 0x0002 r/o - current E-H (ch 05-08) channel range, unsigned int, 40 = 40A
+// register 0x0003 r/w - address and baud rate, default 0x0001
+//                       high byte high nibble:  0-3 N81, E81, O81, N82
+//                       high byte low nibble: 0-8 9600, 1200, 2400, 4800, 9600, 19200, 38200, 57600, 115200
+//                       low byte: module address
+// register 0x0004 r/o - factory date - high byte year, low byte month
+// register 0x0005 - reserved
+// register 0x0006 r/w - freq division coefficient(1 - 5, def = 5), sample freq = 10Hz * 5 / coeff, sample freq = 400Hz
+// register 0x0007 r/w -  high byte measurement result value, low byte is freq selection coefficient
+// register 0x0008 - 0x000F r/o - channel A-H current, unsigned, 0.01A
+// register 0x0010 - 0x0017 r/o - channel A-H frequency, unsigned, 0.1Hz
+// register 0x0018 - 0x001F r/w - channel A-H current transformer ratio, unsigned 
+
 void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int newBaud, int type, int vsdOperation )
 {
 	bool bBaudOk = true;
@@ -203,6 +223,7 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 	int modBaud3 = 0;
 	int modBaud4 = 0;
 	int modBaud5 = 0;
+	int modBaudHDHK = 0;
 	int reg;
 
 	// check the baud rate
@@ -215,18 +236,21 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 		modBaud = 1;
 		modBaud2 = 3;
 		modBaud4 = 2;
+		modBaudHDHK = 3;
 		break;
 	case 9600:		// no baud rate change
 		modBaud = 2;
 		modBaud2 = 0;
 		modBaud4 = 3;
 		modBaud5 = 1;
+		modBaudHDHK = 0;
 		break;
 	case 19200:
 		modBaud = 3;
 		modBaud2 = 6;
 		modBaud4 = 4;
 		modBaud5 = 2;
+		modBaudHDHK = 5;
 		break;
 	}
 
@@ -496,6 +520,40 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 			if ( newBaud != oldBaud )
 			{
 				printf( "Ignoring baud rate change\n" );
+			}
+		}
+		else if ( type == 9 )
+		{	// HDHK 8Ch current meter
+			if ( newAddr != oldAddr || newBaud != oldBaud )
+			{
+				reg = 0x0003;
+
+				uint16_t parms = ((0x00 * 0x0f) << 12);	// N81
+				uint16_t val = parms + ((modBaudHDHK & 0x0f) << 8) + parms + (newAddr & 0xff);
+
+				if ( modbus_write_register( ctx, reg, val ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					if ( newAddr != oldAddr )
+					{
+						printf( "New slave address 0x%02x set\n", newAddr );
+
+						if ( modbus_set_slave( ctx, newAddr ) == -1 )
+						{
+							printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+						}
+					}
+					if ( newBaud != oldBaud )
+					{
+						printf( "New baud rate %d set, sleep 3 sec\n", newBaud );
+						usleep( 3000000 );
+					}
+				}
+
+				usleep( 50000 );
 			}
 		}
 		else
@@ -969,6 +1027,86 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 		{	// vsd must be set for communications control
 			printf( "VSD operation not supported\n" );
 		}
+	}
+	else if ( type == 9 )
+	{	// HDHK 8Ch current meter
+		printf( "Setting slave addr to %d\n", newAddr );
+		if ( modbus_set_slave( ctx, newAddr ) == -1 )
+		{
+			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+		}
+
+		iLen = 8;
+		uint16_t ulInputs[iLen];
+
+		// read address and baud rate
+		addr = 0x0000;
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Version %.2f\n", (double)ulInputs[0] / 100 );
+			printf( "Channel A-D range %dA\n", ulInputs[1] );
+			printf( "Channel E-H range %dA\n", ulInputs[1] );
+			printf( "Baud Rate %d\n", ((ulInputs[3] & 0x0f00) >> 8) );
+			printf( "Address %d\n", (ulInputs[3] & 0x00ff) );
+			printf( "Freq Div Coeff %d\n", ulInputs[6] );
+		}
+
+		addr = 0x0008;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%.2fA ", (double)ulInputs[i] / 100 );
+			}
+			printf ( " current\n" );
+		}
+
+		usleep( 30000 );
+
+		addr = 0x0010;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%.1fHz ", (double)ulInputs[i] / 10 );
+			}
+			printf ( " measurement frequency\n" );
+		}
+
+		usleep( 30000 );
+
+		addr = 0x0018;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", ulInputs[i] );
+			}
+			printf ( " current transformer ratio\n" );
+		}	
 	}
 }
 

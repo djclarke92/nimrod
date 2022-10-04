@@ -13,7 +13,8 @@ Version 0.2.4		AUgusy 2022
 3.	Fix code for html tooltips in BS5
 4.	Allow PLC Operations and State Names to be copied and renamed
 5.	Fix bug in retaining parameter changes on HDL-300 water level sensor
-6.
+6.	Add support for HDHK 8 channel current meter
+7.	
 
 
 Version 0.2.3		July 2022
