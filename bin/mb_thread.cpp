@@ -212,14 +212,6 @@ void CThread::Worker()
 	int iDayMinutes;
 	int iLastDayMinutes = -1;
 	int iAllDeadCheckPeriod = 10;
-	double dLastTemperatureCheck = 0;
-	double dLastVoltageCheck = 0;
-	double dLastLevelCheck = 0;
-	double dLastRotEncCheck = 0;
-	double dLastVIPFCheck = 0;
-	double dLastHDHKCheck = 0;
-	double dLastVSDNFlixenCheck = 0;
-	double dLastVSDPwrElectCheck = 0;
 	time_t tTimenow;
 	time_t tUpdated;
 	time_t tAllDeadStart = 0;
@@ -519,36 +511,36 @@ void CThread::Worker()
 					if ( m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_DS ||
 							m_pmyDevices->GetDeviceType(idx) == E_DT_TEMPERATURE_K1 )
 					{	// temperature sensor
-						if ( dLastTemperatureCheck + TEMPERATURE_CHECK_PERIOD <= TimeNowMS() )
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + TEMPERATURE_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check temperature devices every 5 seconds
-							dLastTemperatureCheck = TimeNowMS();
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
 
 							HandleTemperatureDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VOLTAGE )
 					{
-						if ( dLastVoltageCheck + VOLTAGE_CHECK_PERIOD <= TimeNowMS() )
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + VOLTAGE_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check voltage devices every 5 seconds
-							dLastVoltageCheck = TimeNowMS();
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
 
 							HandleVoltageDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HDL )
 					{
-						if ( dLastLevelCheck + LEVEL_CHECK_PERIOD <= TimeNowMS() )
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + LEVEL_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check level devices every 5 seconds
-							dLastLevelCheck = TimeNowMS();
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
 
 							HandleHdlLevelDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_ROTARY_ENC_12BIT )
 					{
-						if ( dLastRotEncCheck + ROTENC_CHECK_PERIOD <= TimeNowMS() )
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + ROTENC_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check rotary encoder devices every 1 seconds
-							dLastRotEncCheck = TimeNowMS();
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
 
 							// to avoid "response not from requested slave" error
 							//usleep( 20000 );
@@ -557,9 +549,9 @@ void CThread::Worker()
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VIPF_MON )
 					{
-						if ( dLastVIPFCheck + VIPF_CHECK_PERIOD <= TimeNowMS() )
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + VIPF_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check VIPF devices every 0.5 seconds
-							dLastVIPFCheck = TimeNowMS();
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
 
 							HandleVIPFDevice( myDB, ctx, idx, bAllDead );
 
@@ -569,9 +561,9 @@ void CThread::Worker()
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_HDHK_CURRENT )
 					{
-						if ( dLastHDHKCheck + HDHK_CHECK_PERIOD <= TimeNowMS() )
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + HDHK_CHECK_PERIOD <= TimeNowMS() )
 						{	// check HDHK devices every 0.5 seconds
-							dLastHDHKCheck = TimeNowMS();
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
 
 							HandleHDHKDevice( myDB, ctx, idx, bAllDead );
 
@@ -581,9 +573,9 @@ void CThread::Worker()
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VSD_NFLIXEN )
 					{
-						if ( dLastVSDNFlixenCheck + VSD_CHECK_PERIOD <= TimeNowMS() )
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + VSD_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check VSD devices every 0.5 seconds
-							dLastVSDNFlixenCheck = TimeNowMS();
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
 
 							HandleVSDNFlixenDevice( myDB, ctx, idx, bAllDead );
 
@@ -593,9 +585,9 @@ void CThread::Worker()
 					}
 					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_VSD_PWRELECT )
 					{
-						if ( dLastVSDPwrElectCheck + VSD_CHECK_PERIOD <= TimeNowMS() )
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + VSD_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check VSD devices every 0.5 seconds
-							dLastVSDPwrElectCheck = TimeNowMS();
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
 
 							HandleVSDPwrElectDevice( myDB, ctx, idx, bAllDead );
 
@@ -2387,14 +2379,14 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
 			{
-				// level is in mm
-				double dDiff = 2;
+				// level is in %
+				double dDiff = 0.1;
 
 				E_EVENT_TYPE eEventType = E_ET_LEVEL;
 				E_IO_TYPE eIOTypeL = E_IO_LEVEL_LOW;
 				E_IO_TYPE eIOTypeH = E_IO_LEVEL_HIGH;
 				E_IO_TYPE eIOTypeHL = E_IO_LEVEL_HIGHLOW;
-				char szUnits[10] = "mm";
+				char szUnits[10] = "%";
 				char szDesc[20] = "Level";
 				char szName[50] = "HDL Level";
 				double dValOld = m_pmyDevices->CalcLevel(idx,iChannel,false);
@@ -3425,6 +3417,9 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			if ( eEventType == E_ET_ROTARY_ENC )
 				LogMessage( E_MSG_INFO, "%s %d '%s' %d %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					(int16_t)(m_pmyDevices->GetNewData( idx, iChannel+1 )), dValNew, szUnits );
+			else if ( eEventType == E_ET_LEVEL )
+				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int)m_pmyDevices->GetOffset(idx,iChannel) * (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+					dValNew, szUnits );
 			else
 				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					dValNew, szUnits );
@@ -3434,6 +3429,9 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			if ( eEventType == E_ET_ROTARY_ENC )
 				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					(int16_t)(m_pmyDevices->GetNewData( idx, iChannel+1 )), dValNew, szUnits );
+			else if ( eEventType == E_ET_LEVEL )
+				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int)m_pmyDevices->GetOffset(idx,iChannel) * (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+					dValNew, szUnits );
 			else
 				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					dValNew, szUnits );
@@ -3525,6 +3523,9 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 		if ( eEventType == E_ET_ROTARY_ENC )
 			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 				(int16_t)(m_pmyDevices->GetNewData( idx, iChannel+1 )), dValNew, szUnits );
+		else if ( eEventType == E_ET_LEVEL )
+			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int)m_pmyDevices->GetOffset(idx,iChannel) * (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+				dValNew, szUnits );
 		else
 			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 				dValNew, szUnits );

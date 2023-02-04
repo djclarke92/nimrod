@@ -223,6 +223,7 @@ private:
 	int m_iAddress;
 	int m_iNumInputs;
 	int m_iTimeoutCount;
+	double m_dLastCheckedTimeMS;
 	enum E_DEVICE_STATUS m_eDeviceStatus;
 	enum E_DEVICE_TYPE m_eDeviceType;
 	bool m_bAlarmTriggered[MAX_IO_PORTS];
@@ -275,6 +276,7 @@ public:
 	const bool LinkTestPassed( const int iLinkChannel, const char* szLinkTest, const double dLinkValue, bool& bInvertState );
 	const bool TestValue( const char* szLinkTest, const double dLinkValue, const double dVal, bool& bInvertState );
 
+	const double GetLastCheckedTimeMS(){ return m_dLastCheckedTimeMS; };
 	const int GetComHandle(){ return m_iComHandle; };
 	modbus_t* GetContext(){ return m_pCtx; };
 	const int GetDeviceNo(){ return m_iDeviceNo; };
@@ -321,6 +323,7 @@ public:
 	const char* GetMonitorPos( const int i ){ return m_szMonitorPos[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	void GetEventTime( const int i, struct timespec& ts ){ ts = m_tEventTime[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 
+	void SetLastCheckedTimeMS( const double dTimeMS ){ m_dLastCheckedTimeMS = dTimeMS; };
 	void SetComHandle( int iHandle ){ m_iComHandle = iHandle; };
 	void SetContext( modbus_t* pCtx ){ m_pCtx = pCtx; };
 	void SetDeviceNo( const int iDeviceNo ){ m_iDeviceNo = iDeviceNo; };
@@ -383,6 +386,7 @@ public:
 	void LogOnTime( const int iDevice, const int iOutCoil );
 	void CheckForTimerOff();
 	const bool IsOffTime( const int idx, const int iOutCoil );
+	const double GetLastCheckedTimeMS( const int idx );
 	const double CalcTemperature( const int idx, const int iChannel, const bool bNew );
 	const double CalcVoltage( const int idx, const int iChannel, const bool bNew );
 	const double CalcCurrent( const int idx, const int iChannel, const bool bNew );
@@ -449,6 +453,7 @@ public:
 	const char* GetDayNightStateName();
 	const bool IsEspDevice( const int idx );
 
+	void SetLastCheckedTimeMS( const int idx, const double dTimeMS );
 	void SetContext( const int idx, modbus_t* pCtx );
 	void SetDeviceNo( const int idx, const int iDeviceNo );
 	void SetBaudRate( const int idx, const int iBaudRate );

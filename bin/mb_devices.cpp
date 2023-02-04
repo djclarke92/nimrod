@@ -45,6 +45,7 @@ void CMyDevice::Init()
 	tspec.tv_nsec = 0;
 	tspec.tv_sec = 0;
 
+	SetLastCheckedTimeMS( 0.0 );
 	SetDeviceNo( 0 );
 	SetComPort( "" );
 	SetDeviceName( "" );
@@ -1298,6 +1299,18 @@ void CDeviceList::FreeAllContexts()
 	}
 }
 
+const double CDeviceList::GetLastCheckedTimeMS( const int idx )
+{
+	double dTimeMS = 0.0;
+
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		dTimeMS = m_Device[idx].GetLastCheckedTimeMS();
+	}
+
+	return dTimeMS;
+}
+
 const int CDeviceList::GetDeviceNo( const int idx )
 {
 	int iDeviceNo = 0;
@@ -1976,6 +1989,14 @@ const bool CDeviceList::IsTimerEnabledToday( const int idx, const int iChannel )
 	}
 
 	return bRc;
+}
+
+void CDeviceList::SetLastCheckedTimeMS( const int idx, const double dTimeMS )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		m_Device[idx].SetLastCheckedTimeMS( dTimeMS );
+	}
 }
 
 void CDeviceList::SetContext( const int idx, modbus_t* pCtx )

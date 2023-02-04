@@ -165,12 +165,14 @@ int main( int argc, char** argv )
 //       green = rs485A
 //       yellow - rs486B
 //       white = factory reset (connect to 0V during use)
-//
+
 // HDL300 water level sensor
 // function code 0x03 = read
 // Register 0x00 = modbus address
 // Register 0x01 = baud rate
-// Register 0x04 = depth in mm
+// Register 0x02 = pressure units (0=Mpa, 1= Kpa, 2=pa, 3=bar, 4=Mbar, 5=kg/cm2, 6= psi, 7=m h2o, 8=mm h2o)
+// Register 0x03 = decimal place (0= xxxx, 1= xxx.x, 2= xx.xx, 3= x.xxx, 4= .xxxx)
+// Register 0x04 = depth in units (-32768 to 32767)
 // Cable red = +12V
 //       black = 0V
 //       white = rs485B
@@ -729,6 +731,7 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 		{
 			printf( "Read registers: 0x%02x (units)  0x%02x (decimal)\n", ulInputs[0], ulInputs[1] );
 			
+			// TODO: iFactor needs to change depending on what units are being read. This code assume units=7 (m h2o)
 			// check decimal point
 			switch ( ulInputs[1] )
 			{
@@ -769,18 +772,6 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 
 		usleep( 50000 );
 
-/*		for ( addr = 0x00; addr < 17 ; addr += 8 )
-		{
-			rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
-			if ( rc == -1 )
-			{
-				printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
-			}
-			else
-			{
-				printf( "Read registers 0x%x: %X %X %X %X %X %X %X %X\n", addr, ulInputs[0], ulInputs[1], ulInputs[2], ulInputs[3], ulInputs[4], ulInputs[5], ulInputs[6], ulInputs[7] );
-			}
-		} */
 	}
 	else if ( type == 5 )
 	{	// rotary encoder
