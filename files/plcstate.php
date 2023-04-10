@@ -460,9 +460,11 @@ if ( $_SESSION['plc_Operation'] != "" )
                 
                 $name = func_find_deviceinfo_name( $di_list, $state['pl_DeviceNo'], $state['pl_IOChannel'], $state['pl_RuleType'] );
                 $test = "";
+                $disabled = "";
                 $btnName = "ps_EventButton";
                 if ( $state['pl_Test'] != '' )
                 {
+                    $disabled = "disabled";
                     $test = sprintf( "<small>%s %.1f</small><br>", $state['pl_Test'], $state['pl_Value'] );
                 }
                 else if ( $state['pl_DelayTime'] != 0 )
@@ -498,12 +500,16 @@ if ( $_SESSION['plc_Operation'] != "" )
                     $colour = "background-color:#FCAD4E;"; // orange
                 
                 printf( "<td>" );
-                printf( "<p><a href='?PageMode=PlcState&PlcEventButton=%d'><button type='button' style='display: block; width: 100%%;%s' name='%s' id='%s'>%s</button></a></p>", 
-                    $state['pl_StateNo'], $colour, $btnName, $btnName, $name );
+                printf( "<p><a href='?PageMode=PlcState&PlcEventButton=%d'><button type='button' style='display: block; width: 100%%;%s' name='%s' id='%s' %s><p>%s</p></button></a></p>", 
+                    $state['pl_StateNo'], $colour, $btnName, $btnName, $disabled, $name );
                 printf( "</td>" );
                 
                 printf( "<td>" );
-                printf( "<p>%sGoto -> %s</p>", $test, $state['pl_NextStateName'] );
+                if ( $state['pl_NextStateName'] != "" )
+                    printf( "<p>%sGoto -> '%s'</p>", $test, $state['pl_NextStateName'] );
+                else
+                    printf( "<p>%sPre Condition</p>", $test );
+
                 printf( "</td>" );
                 
                 printf( "</tr>" );

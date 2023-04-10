@@ -151,8 +151,16 @@ if ( isset($_POST['MonitorPeriod']) )
 if ( isset($_POST['MonitorRefreshPeriod']) )
 {
     $_SESSION['MonitorRefreshPeriod'] = intval($_POST['MonitorRefreshPeriod']);
-    if ( $_SESSION['MonitorRefreshPeriod'] <= 4 )
-        $_SESSION['MonitorRefreshPeriod'] = 15;
+    if ( $_SESSION['MonitorPeriod'] >= 3600 )
+    {
+        if ( $_SESSION['MonitorRefreshPeriod'] <= 4 )
+            $_SESSION['MonitorRefreshPeriod'] = 15;
+    }
+    else
+    {
+        if ( $_SESSION['MonitorRefreshPeriod'] <= 1 )
+            $_SESSION['MonitorRefreshPeriod'] = 2;
+    }
 }
 if ( isset($_POST['MonitorRefreshEnabled']) )
     $_SESSION['MonitorRefreshEnabled'] = true;
@@ -162,6 +170,37 @@ if ( isset($_POST['MonitorDate']) )
     $_SESSION['MonitorDate'] = $_POST['MonitorDate'];
 if ( isset($_POST['MonitorTime']) )
     $_SESSION['MonitorTime'] = $_POST['MonitorTime'];
+if ( isset($_POST['MonitorFaster']) )
+{
+    $display_mode = "Monitor";
+    $_SESSION['MonitorDate'] = "";
+    $_SESSION['MonitorTime'] = "";
+    
+    if ( $_SESSION['MonitorRefreshPeriod'] > 30)
+        $_SESSION['MonitorRefreshPeriod'] = 30;
+    else if ( $_SESSION['MonitorRefreshPeriod'] > 15)
+        $_SESSION['MonitorRefreshPeriod'] = 15;
+    else if ( $_SESSION['MonitorRefreshPeriod'] > 5)
+        $_SESSION['MonitorRefreshPeriod'] = 5;
+    else if ( $_SESSION['MonitorRefreshPeriod'] > 2)
+    {
+        $_SESSION['MonitorRefreshPeriod'] = 2;
+        $_SESSION['MonitorPeriod'] = 0.5;
+    }
+}
+if ( isset($_POST['MonitorSlower']) )
+{
+    $display_mode = "Monitor";
+    $_SESSION['MonitorDate'] = "";
+    $_SESSION['MonitorTime'] = "";
+    
+    if ( $_SESSION['MonitorRefreshPeriod'] < 5 )
+        $_SESSION['MonitorRefreshPeriod'] = 5;
+    else if ( $_SESSION['MonitorRefreshPeriod'] < 15)
+        $_SESSION['MonitorRefreshPeriod'] = 15;
+    else if ( $_SESSION['MonitorRefreshPeriod'] < 30)
+        $_SESSION['MonitorRefreshPeriod'] = 30;
+}
 if ( isset($_POST['MonitorNow']) )
 {
     $_SESSION['MonitorDate'] = "";
@@ -171,7 +210,11 @@ if ( isset($_POST['MonitorNow']) || isset($_POST['MonitorGo']) )
 {
     $display_mode = "Monitor";
 }
-if ( isset($_GET['RefreshEnabled']) )
+if ( $_SESSION['MonitorDate'] != "" || $_SESSION['MonitorTime'] != "" )
+{
+    $_SESSION['MonitorRefreshEnabled'] = false;
+}
+if ( isset($_GET['RefreshEnabled']) || isset($_GET['MonitorRefreshEnabled']) )
     $from_refresh = true;
     
     
@@ -263,16 +306,6 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
   <script language="javascript">
 		var counter = 0;
 
-		function refreshTimer()
-		{
-			<?php
-			printf( "   if ( document.getElementById('MonitorRefreshEnabled').checked ) {" );
-		    printf( "	  document.getElementById('MonitorNow').click();" );
-		    printf( "   }" );
-		    printf( "   setTimeout( 'refreshTimer()', %d );", $_SESSION['MonitorRefreshPeriod'] * 1000 );
-		    ?>
-		}
-
 		function firstTime()
 		{
 			<?php
@@ -281,14 +314,19 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 			    printf( "if ( document.getElementById('RefreshEnabled') != null ) {" );
 			    printf( "  document.getElementById('RefreshEnabled').checked = true;" );
 			    printf( "}" );
-			}
+			    printf( "if ( document.getElementById('MonitorRefreshEnabled') != null ) {" );
+                printf( "  document.getElementById('MonitorRefreshEnabled').checked = true;" );
+                printf( "}" );
+            }
 			?>
 		}
 		
 		function homeTimer()
 		{
 		    var progressBar = document.getElementById('refresh-progress-bar');
+		    var monitorBar = document.getElementById('monitor-refresh-progress-bar');
 		    var refreshCheck = document.getElementById('RefreshEnabled');
+		    var monitorCheck = document.getElementById('MonitorRefreshEnabled');
 		    var cameraRefresh = document.getElementById('CameraRefresh');
 			if ( refreshCheck != null && progressBar != null ) {
 			  if ( refreshCheck.checked ) { 
@@ -298,6 +336,14 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
                 progressBar.innerHTML = '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' + (counter < 10 ? '&nbsp;' : '') + (30-counter);
               }
 			}
+			else if ( monitorCheck != null && monitorBar != null ) {
+			  if ( monitorCheck.checked ) { 
+    	        counter = counter + 1;
+                monitorBar.innerHTML = '<span class="spinner-border spinner-border-sm"></span>&nbsp;&nbsp;' + (counter < 10 ? '&nbsp;' : '') + (<?php echo $_SESSION['MonitorRefreshPeriod'];?>-counter);
+			  } else {
+                monitorBar.innerHTML = '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' + (counter < 10 ? '&nbsp;' : '') + (<?php echo $_SESSION['MonitorRefreshPeriod'];?>-counter);
+              }
+			}
 			else if ( cameraRefresh != null ) {
 				counter = counter + 1;
 			}
@@ -305,8 +351,20 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
     		<?php
     		if ( $display_mode == "Monitor" )
     		{
-    		    printf( "   document.getElementById('MonitorRefreshEnabled').checked = true;" );
-    		    printf( "   setTimeout( 'refreshTimer()', %d );", $_SESSION['MonitorRefreshPeriod'] * 1000 );
+                if ( $_SESSION['MonitorDate'] == "" && $_SESSION['MonitorTime'] == "" )
+                {
+        		    printf( "   document.getElementById('MonitorRefreshEnabled').checked = true;" );
+                }
+
+                ?>
+                if ( counter >= <?php echo $_SESSION['MonitorRefreshPeriod'];?> ) {
+                    counter = 0;
+                    if ( document.getElementById('MonitorRefreshEnabled').checked ) {
+                      window.location.href = "<?php printf("%s?PageMode=Monitor%d&MonitorRefreshEnabled", $_SERVER['PHP_SELF'], $monitor_page ); ?>"; 
+                    }
+                }
+    		    setTimeout( 'homeTimer()', 1000 );
+                <?php
     		}
     		else if ( $display_mode == "Camera" )
     		{
@@ -322,7 +380,7 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
     			    if ( counter >= 30 ) {
         			  counter = 0;
     			      if ( document.getElementById('RefreshEnabled').checked ) {
-    				    window.location.href = '<?php echo $_SERVER['PHP_SELF']; ?>?RefreshEnabled'; 
+    				    window.location.href = "<?php echo $_SERVER['PHP_SELF']; ?>?RefreshEnabled"; 
     				  }
     				} else {
             			var all = document.getElementsByClassName('timestamp');
@@ -580,9 +638,24 @@ else if ( $display_mode == "Monitor" )
         printf( "&nbsp;&nbsp;&nbsp;" );
         printf( "Refresh Interval <input type='text' name='MonitorRefreshPeriod' id='MonitorRefreshPeriod' size='3' value='%d'> sec", $_SESSION['MonitorRefreshPeriod'] );
         printf( "&nbsp;&nbsp;&nbsp;" );
+        printf( "<button class='btn btn-outline-primary btn-sm' id='monitor-refresh-progress-bar' name='monitor-refresh-progress-bar' disabled>" );
+        printf( "<span class='spinner-border spinner-border-sm'></span>" );
+        printf( "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" );
+        printf( "</button>" );
         printf( "<input type='checkbox' name='MonitorRefreshEnabled' id='MonitorRefreshEnabled' value='MonitorRefreshEnabled' %s>", ($_SESSION['MonitorRefreshEnabled'] ? "checked" : "") );
         printf( "<label for='MonitorRefreshEnabled'>Refresh Enabled</label>" );
-        printf( "<div id='MonitorRefreshCount'></div>" );
+        printf( "&nbsp;&nbsp;&nbsp;" );
+
+        $disabled = "";
+        if ( $_SESSION['MonitorRefreshPeriod'] <= 2 )
+            $disabled = "disabled";
+        printf( "<input type='submit' name='MonitorFaster' value='Faster' %s>", $disabled );
+        printf( "&nbsp;&nbsp;&nbsp;" );
+
+        $disabled = "";
+        if ( $_SESSION['MonitorRefreshPeriod'] >= 30 )
+            $disabled = "disabled";
+        printf( "<input type='submit' name='MonitorSlower' value='Slower' %s>", $disabled );
         printf( "</td>" );
     }
     

@@ -35,7 +35,7 @@ function func_find_monitor_device( $de_no, $ch )
 if ( !isset($_SESSION['MonitorDevices']) )
     $_SESSION['MonitorDevices'] = array();
 if ( !isset($_SESSION['MonitorPeriod']) )
-    $_SESSION['MonitorPeriod'] = 0.5;
+    $_SESSION['MonitorPeriod'] = 1.0;
 if ( !isset($_SESSION['MonitorDate']) )
     $_SESSION['MonitorDate'] = "";
 if ( !isset($_SESSION['MonitorTime']) )
@@ -44,7 +44,7 @@ if ( !isset($_SESSION['MonitorTime']) )
 
 $error_msg = "";
 $info_msg = "";
-$monitor_period = 0.5;
+$monitor_period = 1.0;
 $monitor_date = "";
 $monitor_time = "";
 $monitor_page = 1;
@@ -63,7 +63,15 @@ $monitor_period = $_SESSION['MonitorPeriod'];
 $monitor_date = $_SESSION['MonitorDate'];
 $monitor_time = $_SESSION['MonitorTime'];
 
-    
+if ( $monitor_date != "" && $monitor_time == "" )
+{
+    $monitor_time = date("H:i");
+}
+if ( $monitor_date == "" && $monitor_time != "" )
+{
+    $monitor_date = sprintf( "%02d/%02d/%d", date("d/m/Y"));
+}
+
 $datetime = time();
 if ( $monitor_date != "" && $monitor_time != "" )
 {
@@ -96,12 +104,12 @@ if ( $monitor_date != "" && $monitor_time != "" )
 
 $temperatures = $db->GetLatestTemperatures( $monitor_period, $datetime ); // previous 2 hours data
 $voltages = $db->GetLatestVoltages( $monitor_period, $datetime ); // previous 2 hours data
-$levels = $db->GetLatestLevels( $_SESSION['GraphHours'], $datetime );
-$currents = $db->GetLatestCurrents( $_SESSION['GraphHours'], $datetime );
-$powers = $db->GetLatestPowers( $_SESSION['GraphHours'], $datetime );
-$frequencies = $db->GetLatestFrequencies( $_SESSION['GraphHours'], $datetime );
-$torques = $db->GetLatestTorques( $_SESSION['GraphHours'], $datetime );
-$rpmspeeds = $db->GetLatestRpmSpeeds( $_SESSION['GraphHours'], $datetime );
+$levels = $db->GetLatestLevels( $monitor_period, $datetime );
+$currents = $db->GetLatestCurrents( $monitor_period, $datetime );
+$powers = $db->GetLatestPowers( $monitor_period, $datetime );
+$frequencies = $db->GetLatestFrequencies( $monitor_period, $datetime );
+$torques = $db->GetLatestTorques( $monitor_period, $datetime );
+$rpmspeeds = $db->GetLatestRpmSpeeds( $monitor_period, $datetime );
 
 
 $f1_devices = $db->GetMonitorDevices( sprintf( "%dF1", $monitor_page ) );
