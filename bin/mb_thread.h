@@ -210,7 +210,7 @@ private:
 	int m_Sockfd;
 	char m_szComBuffer[100];
 	char m_szMyComPort[MAX_COMPORT_LEN+1];
-	char m_szEspResponseMsg[ESP_MSG_SIZE+1];
+	char m_szEspResponseMsg[ESP_MSG_SIZE];
 	char m_szClientEspName[MAX_TCPIP_SOCKETS][MAX_DEVICE_NAME_LEN+1];
 	time_t m_tClientLastMsg[MAX_TCPIP_SOCKETS];
 	time_t m_tConfigTime;
@@ -283,6 +283,7 @@ public:
 	void HandleChannelThresholds( CMysql& myDB, const int idx, const int iChannel, const double dDiff, const E_EVENT_TYPE eEventType, const E_IO_TYPE eIOTypeL, const E_IO_TYPE eIOTypeH,
 			const E_IO_TYPE eIOTypeHL, const char* szName, const char* szDesc, const char* szUnits, const double dValNew, const double dValOld );
 
+	void PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew );
 	void websocket_init();
 	void websocket_process( const char* szMsg );
 	void websocket_destroy();

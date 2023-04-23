@@ -293,6 +293,12 @@ void ws_log_message( int iLvl, const char* szMsg )
 //	LogMessage( E_MSG_INFO, "ws %d: %s", iLvl, szBuf );
 }
 
+// if you are using LetsEncrypt certs run these commands
+// cd /home/nimrod
+// sudo setfacl -R -m u:nimrod:rX /etc/letsencrypt/{live,archive}/flatcatit.co.nz
+// sudo setfacl -m u:nimrod:rX /etc/letsencrypt/{live,archive}
+// sudo ln -s /etc/letsencrypt/live/flatcatit.co.nz/fullchain.pem nimrod-cert.pem
+// sudo ln -s /etc/letsencrypt/live/flatcatit.co.nz/privkey.pem nimrod-cert.key
 void CThread::websocket_init()
 {
 	const char* pszCertFile = "/home/nimrod/nimrod-cert.pem";

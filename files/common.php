@@ -3074,6 +3074,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
     {
         $atype = "V";
         $gname = "?";
+		$gid="unknown";
         $gvoltage = false;
         
         $found = false;
@@ -3085,6 +3086,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                 $atype = "T";
                 $myarray = $tt;
                 $gname = $tt['di_IOName'];
+				$gid = sprintf( "TT_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                 break;
             }
         }
@@ -3099,6 +3101,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $myarray = $tt;
                     $gname = $tt['di_IOName'];
                     $atype = $tt['di_AnalogType'];  // V or A
+					$gid = sprintf( "VV_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                     break;
                 }
             }
@@ -3114,6 +3117,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $myarray = $tt;
                     $gname = $tt['di_IOName'];
                     $atype = "L";
+					$gid = sprintf( "LL_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                     break;
                 }
             }
@@ -3129,6 +3133,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $myarray = $tt;
                     $gname = $tt['di_IOName'];
                     $atype = "A";
+					$gid = sprintf( "VV_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                     break;
                 }
             }
@@ -3239,7 +3244,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
             }
             
             $data[] = array( 'data'=>$myarray['data'], 'name'=>$gname, 'voltage'=>$gvoltage, 'atype'=>$atype, 'alert'=>$alert, 'di_MonitorLo'=>$myarray['di_MonitorLo'], 'di_MonitorHi'=>$myarray['di_MonitorHi'],
-                'di_ValueRangeLo'=>$myarray['di_ValueRangeLo'], 'di_ValueRangeHi'=>$myarray['di_ValueRangeHi'], 'SeqNo'=>0 );
+                'di_ValueRangeLo'=>$myarray['di_ValueRangeLo'], 'di_ValueRangeHi'=>$myarray['di_ValueRangeHi'], 'SeqNo'=>0, 'id'=>$gid );
             
         }
     }
@@ -3533,23 +3538,23 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
             }
             if ( $dat['atype'] == "T" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>&#8451</div></%s></td></tr></table>",
-                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_temperature($val), $hh );
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b><span id='%s'>%s</span></b>&#8451</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], $dat['id'], func_calc_temperature($val), $hh );
             }
             else if ( $dat['atype'] == "V" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>V</div></%s></td></tr></table>",
-                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_voltage($val,"V"), $hh );
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b><span id='%s'>%s</span></b>V</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], $dat['id'], func_calc_voltage($val,"V"), $hh );
             }
             else if ( $dat['atype'] == "A" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>A</div></%s></td></tr></table>",
-                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_current($val), $hh );
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b><span id='%s'>%s</span></b>A</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], $dat['id'], func_calc_current($val), $hh );
             }
             else if ( $dat['atype'] == "L" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
-                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_level($val), $hh );
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b><span id='%s'>%s</span></b>%%</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], $dat['id'], func_calc_level($val), $hh );
             }
             else if ( $dat['atype'] == "W" )
             {

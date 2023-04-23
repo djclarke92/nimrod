@@ -75,7 +75,7 @@ int main( int argc, char *argv[] )
     pid_t pid;
 	pid_t pidChild;
 	pthread_t threadId[MAX_THREADS];
-	char szBuf[256];
+	char szBuf[512];
 	char szComPortList[MAX_DEVICES][MAX_COMPORT_LEN+1];
 	CDeviceList myDevices;
 	CInOutLinks myIOLinks;

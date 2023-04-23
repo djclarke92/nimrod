@@ -25,7 +25,7 @@ extern bool gbDebug;
 extern time_t gtTarFileTimestamp;
 extern char gszLogDir[256];
 extern char gszProgName[256];
-extern char gszTarFileName[256];
+extern char gszTarFileName[512];
 
 
 void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... );

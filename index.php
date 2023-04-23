@@ -250,7 +250,7 @@ if ( $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL_NONE )
 $fs_redirect_timeout = AUTO_REFRESH_LOGOUT;
 $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
 $fs_autologin_username = "";
-if ( defined("AUTOLOGIN_USERNAME") && $_SERVER['REMOTE_ADDR'] == "127.0.0.1" )
+if ( defined("AUTOLOGIN_USERNAME") && ($_SERVER['REMOTE_ADDR'] == "127.0.0.1" || $_SERVER['REMOTE_ADDR'] == "10.166.1.119") )
 {
     $fs_autologin_username = AUTOLOGIN_USERNAME;
 }
@@ -305,8 +305,19 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
   
   <script language="javascript">
 		var counter = 0;
+        var monRefreshChecked = false;
 
-		function firstTime()
+        function monitorRefreshClicked() {
+            var elem = document.getElementById('MonitorRefreshEnabled');
+            if ( elem != null ) {
+                if ( elem.checked )
+                    monRefreshChecked = true;
+                else
+                    monRefreshChecked = false;
+            }
+        }
+
+            function firstTime()
 		{
 			<?php
 			if ( $new_login || $from_refresh )
@@ -316,6 +327,7 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 			    printf( "}" );
 			    printf( "if ( document.getElementById('MonitorRefreshEnabled') != null ) {" );
                 printf( "  document.getElementById('MonitorRefreshEnabled').checked = true;" );
+                printf( "  monRefreshChecked = true;" );
                 printf( "}" );
             }
 			?>
@@ -353,7 +365,9 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
     		{
                 if ( $_SESSION['MonitorDate'] == "" && $_SESSION['MonitorTime'] == "" )
                 {
-        		    printf( "   document.getElementById('MonitorRefreshEnabled').checked = true;" );
+                    printf( "if ( document.getElementById('MonitorRefreshEnabled') != null && monRefreshChecked ) {" );
+                    printf( "   document.getElementById('MonitorRefreshEnabled').checked = true;" );
+                    printf( "}" );
                 }
 
                 ?>
@@ -468,48 +482,53 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	  	function update(msg) { 
 		  	if ( msg.length > 0 ) 
 		  	{
-    		  	document.getElementById("ws_message").innerHTML = msg;
-    
-    		  	var select = document.getElementById('ws_list');
-    
-    		  	var date = new Date();
-    
-    		  	var dateStr =
-    		  	  ("00" + (date.getMonth() + 1)).slice(-2) + "/" +
-    		  	  ("00" + date.getDate()).slice(-2) + "/" +
-    		  	  date.getFullYear() + " " +
-    		  	  ("00" + date.getHours()).slice(-2) + ":" +
-    		  	  ("00" + date.getMinutes()).slice(-2) + ":" +
-    		  	  ("00" + date.getSeconds()).slice(-2);
-    
-    		  	var msg2 = dateStr + ': ' + msg;
-    		  	
-    	  	    var opt = document.createElement('option');
-    	  	    opt.value = msg2;
-    	  	    opt.innerHTML = msg2;
-    	  	    select.add(opt,0)
-    	  	    
-    	  	    // only allow 20 items in the list
-    	  	    if ( select.length >= 20 )
-    	  	    {
-    		  	    select.removeChild( select.options[20] );
-    	  	    }
-    
-    	  	    //select.scrollTo( 0, select.length - 4 ); 
-    
-    			var stateName = '<?php echo $_SESSION['plc_StateName'];?>';
-    			
-    			if ( msg.substring(0,6) == 'State:' ) {
-    				if ( msg.substring(6) != stateName && stateName != '' ) {
-    				  window.location.replace('index.php?PageMode=PlcState');
-    				}
-    	  	    } else if ( msg == "Refresh" ) {
-    	  	    	window.location.replace('index.php?PageMode=PlcState'); 
-    	  	    } else if ( msg == "wss closed" ) {
-    	  	    	setTimeout( 'plcTimer()', 1000 );   
-    	  	    } else {
-        	  	    plcCounter  = 0;
-    	  	    }
+                if ( msg.substr(2,1) != '_' && msg.substr(5,1) != '_' && msg.substr(8,1) != ':') {
+                    var wsm = document.getElementById("ws_message");
+                    if ( wsm != null ) {
+                        wsm.innerHTML = msg;
+                    }
+        
+                    var select = document.getElementById('ws_list');
+        
+                    var date = new Date();
+        
+                    var dateStr =
+                    ("00" + (date.getMonth() + 1)).slice(-2) + "/" +
+                    ("00" + date.getDate()).slice(-2) + "/" +
+                    date.getFullYear() + " " +
+                    ("00" + date.getHours()).slice(-2) + ":" +
+                    ("00" + date.getMinutes()).slice(-2) + ":" +
+                    ("00" + date.getSeconds()).slice(-2);
+        
+                    var msg2 = dateStr + ': ' + msg;
+                    
+                    var opt = document.createElement('option');
+                    opt.value = msg2;
+                    opt.innerHTML = msg2;
+                    select.add(opt,0)
+                    
+                    // only allow 20 items in the list
+                    if ( select.length >= 20 )
+                    {
+                        select.removeChild( select.options[20] );
+                    }
+        
+                    //select.scrollTo( 0, select.length - 4 ); 
+        
+                    var stateName = '<?php echo $_SESSION['plc_StateName'];?>';
+                    
+                    if ( msg.substring(0,6) == 'State:' ) {
+                        if ( msg.substring(6) != stateName && stateName != '' ) {
+                        window.location.replace('index.php?PageMode=PlcState');
+                        }
+                    } else if ( msg == "Refresh" ) {
+                        window.location.replace('index.php?PageMode=PlcState'); 
+                    } else if ( msg == "wss closed" ) {
+                        setTimeout( 'plcTimer()', 1000 );   
+                    } else {
+                        plcCounter  = 0;
+                    }
+                }
 		  	}
 		}
 		
@@ -519,7 +538,161 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	  	socket.error = function(error){ console.log( "socket error: :" + error.message); update(error.message); }    
 	  	</script>
 	<?php 
-	}
+	} else if ( $display_mode == "" && $_SESSION['page_mode'] == "Home" ) {
+        ?>
+		<script type = "text/javascript">
+		var wshost = "<?php printf( "%s://%s:%d", (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != "" ? "wss" : "ws"), ($_SERVER['SERVER_PORT'] == 8080 ? "127.0.0.1" : $_SERVER['SERVER_NAME']), ($_SERVER['SERVER_PORT'] == 8080 ? 8081 : 8000) ); ?>";
+  	  	var socket = new WebSocket( wshost, "nimrod-protocol" );
+        var wssCounter = 0;
+        var wssConnected = 0;
+
+        setTimeout( 'wssTimer()', 1000 );   
+        setupWebSocket();
+
+        function wssTimer() {
+            wssCounter += 1;
+
+            if ( wssCounter >= 5 ) {
+                //window.location.replace('index.php?PageMode=Home'); 
+                wssCounter = 0;
+
+                if ( wssConnected == 0 ) {
+                    socket = null;
+                    socket = new WebSocket( wshost, "nimrod-protocol" );
+                    setupWebSocket();
+                } else {
+
+                }
+            }
+
+            setTimeout( 'wssTimer()', 1000 );   
+        }
+
+        function update(msg) {
+            if ( msg.length > 0) {
+                // format of update messages
+                // cc = {VV|TT}, nn = DeviceNo, xx = IOChannel
+                // 01234567890
+                // cc_nn_xx:value
+                if ( (msg.substr(2,1) == '_' && msg.substr(5,1) == '_' && msg.substr(8,1) == ':') || msg.substr(0,3) == 'wss') {
+                    var wsm = document.getElementById("ws_message");
+                    if ( wsm != null ) {
+                        wsm.innerHTML = msg;
+                    }
+
+                    var date = new Date();
+    
+                    var dateStr =
+                        ("00" + date.getHours()).slice(-2) + ":" +
+                        ("00" + date.getMinutes()).slice(-2) + " " +
+                        ("00" + date.getDate()).slice(-2) + "/" +
+                        ("00" + (date.getMonth() + 1)).slice(-2);
+
+                    if ( msg.substr(0,2) == 'VV' || msg.substr(0,2) == 'TT' || msg.substr(0,2) == 'LL' ) {
+                        // voltages
+                        var val = document.getElementById(msg.substr(0,8));
+                        if ( val != null ) {
+                            val.innerHTML = msg.substr(9);
+                        } else {
+                            console.log("element not found '"+msg.substr(9)+"'");
+                        }
+
+                        var dd = document.getElementById(msg.substr(0,8)+'_DT');
+                        if ( dd != null ) {
+                            dd.innerHTML = dateStr;
+                        }
+                    } else if ( msg.substr(0,2) == 'ST' ) {
+                        var val = document.getElementById(msg.substr(0,8));
+                        if ( val != null ) {
+                            if ( msg.substr(9) == '1' )
+                                val.src = './images/green_tick.png';
+                            else
+                                val.src = './images/dead_robot.png';
+                        } else {
+                            console.log("element not found '"+msg.substr(9)+"'");
+                        }
+                    }
+                }
+            }
+        }
+
+        function setupWebSocket() {
+            socket.onopen = function() { console.log("socket open"); update("wss open"); wssConnected = 1; }
+            socket.onclose = function() { console.log("socket close"); update("wss closed"); wssConnected = 0; }
+            socket.onmessage = function(msg) { console.log("socket message: '" + msg.data + "'"); update(msg.data); }
+            socket.error = function(error){ console.log( "socket error: :" + error.message); update(error.message); wssConnected = 0; }    
+        }
+        </script>
+	<?php 
+	} else if ( $display_mode == "Monitor" ) {
+        ?>
+		<script type = "text/javascript">
+		var wshost = "<?php printf( "%s://%s:%d", (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != "" ? "wss" : "ws"), ($_SERVER['SERVER_PORT'] == 8080 ? "127.0.0.1" : $_SERVER['SERVER_NAME']), ($_SERVER['SERVER_PORT'] == 8080 ? 8081 : 8000) ); ?>";
+  	  	var socket = new WebSocket( wshost, "nimrod-protocol" );
+        var monCounter = 0;
+        var monConnected = 0;
+
+        setTimeout( 'monTimer()', 1000 );   
+        setupWebSocket();
+
+        function monTimer() {
+            monCounter += 1;
+
+            if ( monCounter >= 5 ) {
+                //window.location.replace('index.php?PageMode=Home'); 
+                monCounter = 0;
+
+                if ( monConnected == 0 ) {
+                    socket = null;
+                    socket = new WebSocket( wshost, "nimrod-protocol" );
+                    setupWebSocket();
+                } else {
+
+                }
+            }
+
+            setTimeout( 'monTimer()', 1000 );   
+        }
+
+        function update(msg) {
+            if ( msg.length > 0) {
+                // format of update messages
+                // cc = {VV|TT|LL}, nn = DeviceNo, xx = IOChannel
+                // 01234567890
+                // cc_nn_xx:value
+                if ( (msg.substr(2,1) == '_' && msg.substr(5,1) == '_' && msg.substr(8,1) == ':') || msg.substr(0,3) == 'wss') {
+                    var wsm = document.getElementById("ws_message");
+                    if ( wsm != null ) {
+                        wsm.innerHTML = msg;
+                    }
+
+                    if ( msg.substr(0,2) == 'VV' || msg.substr(0,2) == 'TT' || msg.substr(0,2) == 'LL' ) {
+                        // voltages
+                        var val = document.getElementById(msg.substr(0,8));
+                        if ( val != null ) {
+                            val.innerHTML = msg.substr(9);
+                        } else {
+                            console.log("element not found '"+msg.substr(9)+"'");
+                        }
+
+//                        var dd = document.getElementById(msg.substr(0,8)+'_DT');
+//                        if ( dd != null ) {
+//                            dd.innerHTML = dateStr;
+//                        }
+                    }
+                }
+            }
+        }
+
+        function setupWebSocket() {
+            socket.onopen = function() { console.log("socket open"); update("wss open"); monConnected = 1; }
+            socket.onclose = function() { console.log("socket close"); update("wss closed"); monConnected = 0; }
+            socket.onmessage = function(msg) { console.log("socket message: '" + msg.data + "'"); update(msg.data); }
+            socket.error = function(error){ console.log( "socket error: :" + error.message); update(error.message); monConnected = 0; }    
+        }
+        </script>
+        <?php
+    }
 	?>      
 </head>
 
@@ -642,7 +815,7 @@ else if ( $display_mode == "Monitor" )
         printf( "<span class='spinner-border spinner-border-sm'></span>" );
         printf( "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" );
         printf( "</button>" );
-        printf( "<input type='checkbox' name='MonitorRefreshEnabled' id='MonitorRefreshEnabled' value='MonitorRefreshEnabled' %s>", ($_SESSION['MonitorRefreshEnabled'] ? "checked" : "") );
+        printf( "<input type='checkbox' name='MonitorRefreshEnabled' id='MonitorRefreshEnabled' value='MonitorRefreshEnabled' onclick='monitorRefreshClicked();'%s>", ($_SESSION['MonitorRefreshEnabled'] ? "checked" : "") );
         printf( "<label for='MonitorRefreshEnabled'>Refresh Enabled</label>" );
         printf( "&nbsp;&nbsp;&nbsp;" );
 
@@ -656,6 +829,7 @@ else if ( $display_mode == "Monitor" )
         if ( $_SESSION['MonitorRefreshPeriod'] >= 30 )
             $disabled = "disabled";
         printf( "<input type='submit' name='MonitorSlower' value='Slower' %s>", $disabled );
+        printf( "&nbsp;%s: <span id='ws_message'></span>", ($_SERVER['HTTPS'] != "" ? "wss" : "ws") );
         printf( "</td>" );
     }
     

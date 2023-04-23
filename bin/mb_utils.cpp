@@ -30,7 +30,7 @@ bool gbRestartNow = false;
 time_t gtTarFileTimestamp = 0;
 char gszLogDir[256] = {""};
 char gszProgName[256] = {""};
-char gszTarFileName[256] = {""};
+char gszTarFileName[512] = {""};
 time_t gtLastUpgradeMsgTime = 0;
 
 
@@ -57,9 +57,9 @@ void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... )
 	int i;
 	char szClass[10];
 	char szBuf[4096];
-	char szLogFile[256];
-	char szLogFile1[256];
-	char szLogFile2[256];
+	char szLogFile[512];
+	char szLogFile1[512+20];
+	char szLogFile2[512+40];
 	time_t timenow;
 	struct tm* tmptr;
 	struct stat statbuf;
@@ -281,7 +281,7 @@ bool CheckForUpgrade()
 	DIR *d;
 	struct stat statbuf;
 	struct dirent *dir;
-	char szDirList[MAX_DIR_LIST][100];
+	char szDirList[MAX_DIR_LIST][300];
 
 	if ( stat( "./no.upgrade", &statbuf ) == 0 || gbTerminateNow )
 	{
@@ -296,8 +296,8 @@ bool CheckForUpgrade()
 	    {
 			if ( dir->d_type == DT_REG && strstr( dir->d_name, ".tgz" ) != NULL && strncmp( dir->d_name, "nimrod", 6 ) == 0 )
 			{
-				char szSrc[256];
-				char szDest[256];
+				char szSrc[512];
+				char szDest[512];
 				snprintf( szSrc, sizeof(szSrc), "/var/www/html/uploads/%s", dir->d_name );
 				snprintf( szDest, sizeof(szDest), "/var/www/html/%s", dir->d_name );
 
@@ -386,7 +386,7 @@ bool CheckForUpgrade()
 					{	// found a tar file
 						// move the tar file to our local directory
 						int rc;
-						char szCmd[512];
+						char szCmd[4096];
 
 						snprintf( szCmd, sizeof(szCmd), "cp %s/%s .; rm %s/%s; sync; umount %s", szDirList[idx], gszTarFileName, szDirList[idx], gszTarFileName, szDirList[idx] );
 						rc = system( szCmd );
@@ -445,7 +445,7 @@ bool CheckForUpgrade()
 bool CreateRestartScript( const char* szTar )
 {
 	bool bRc = true;
-	char szBuf[256];
+	char szBuf[512];
 	FILE* pFile = NULL;
 
 	// create upgrade script

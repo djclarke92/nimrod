@@ -491,7 +491,7 @@ void CThread::Worker()
 #if LIBMODBUS_VERSION_CHECK(3,1,0)
 						response_to_tv.tv_sec = 0;
 						response_to_tv.tv_usec = 300000;
-						modbus_set_response_timeout(ctx, (uint32_t)&response_to_tv.tv_sec, (uint32_t)&response_to_tv.tv_usec );
+						modbus_set_response_timeout(ctx, (uint32_t)response_to_tv.tv_sec, (uint32_t)response_to_tv.tv_usec );
 
 						modbus_get_response_timeout( ctx, (uint32_t*)&old_response_to_tv.tv_sec, (uint32_t*)&old_response_to_tv.tv_usec );
 						LogMessage( E_MSG_INFO, "Response timeout ctx %p is %u.%06u usec", ctx, old_response_to_tv.tv_sec, old_response_to_tv.tv_usec );
@@ -1526,7 +1526,7 @@ void CThread::AcceptTcpipClient()
 void CThread::SendEspMessage()
 {
 	int fdx;
-	char szEspResponseMsg[ESP_MSG_SIZE+1];
+	char szEspResponseMsg[ESP_MSG_SIZE];
 	char szEspName[MAX_DEVICE_NAME_LEN+1];
 	NIMROD_MSGBUF_TYPE replyBuf;
 
@@ -2093,6 +2093,7 @@ void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 				}
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
 				{
@@ -2131,6 +2132,7 @@ void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 			}
 
 			// check each output bit
@@ -2205,6 +2207,7 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 				}
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
 				{
@@ -2242,6 +2245,7 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 			}
 
 			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
@@ -2338,6 +2342,7 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2375,6 +2380,7 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 			}
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
@@ -2443,6 +2449,7 @@ void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int 
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2480,6 +2487,7 @@ void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int 
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 			}
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
@@ -2560,6 +2568,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 			}
 
 			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2600,6 +2609,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 				}
 			}
 
@@ -2736,6 +2746,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 			}
 
 			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2779,6 +2790,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 				}
 			}
 
@@ -2912,6 +2924,7 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 			}
 
 			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2955,6 +2968,7 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 				}
 			}
 
@@ -3063,6 +3077,7 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -3100,6 +3115,7 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 			}
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
@@ -3154,6 +3170,7 @@ void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -3191,6 +3208,7 @@ void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 			}
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
@@ -3248,6 +3266,7 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -3285,6 +3304,7 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
 			}
 
 			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
@@ -3410,6 +3430,9 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 
 			m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
 			m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
+
+			// post to the websocket
+			PostToWebSocket( eEventType, idx, iChannel, dValNew );
 		}
 
 		if ( bLogit )
@@ -3529,12 +3552,61 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 		else
 			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 				dValNew, szUnits );
+
+		PostToWebSocket( eEventType, idx, iChannel, dValNew );
 	}
 
 	//LogMessage( E_MSG_INFO, "SetLastData %d %d %.1f", idx, iChannel, m_pmyDevices->GetNewData(idx,iChannel) );
 	m_pmyDevices->GetLastData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
 }
 
+void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew )
+{
+	int iPrec = 1;
+	char szMsg[100];
+	char szType[3] = "";
+	switch ( eEventType )
+	{
+	default:
+		break;
+	case E_ET_VOLTAGE:
+		strcpy( szType, "VV");
+		if ( dValNew > 99 )
+			iPrec = 0;
+		break;
+	case E_ET_CURRENT:
+		iPrec = 2;
+		strcpy( szType, "VV");
+		break;
+	case E_ET_FREQUENCY:
+		iPrec = 2;
+		strcpy( szType, "VV");
+		break;
+	case E_ET_TEMPERATURE:
+		strcpy( szType, "TT");
+		break;
+	case E_ET_LEVEL:
+		strcpy( szType, "LL");
+		break;
+	case E_ET_DEVICE_OK:
+		iPrec = 0;
+		strcpy( szType, "ST" );
+		break;
+	case E_ET_DEVICE_NG:
+		iPrec = 0;
+		strcpy( szType, "ST" );
+		break;
+	}
+	if ( strlen(szType) > 0 )
+	{
+		snprintf( szMsg, sizeof(szMsg), "%s_%02d_%02d:%.*f", szType, m_pmyDevices->GetDeviceNo(idx), iChannel, iPrec, dValNew );
+		gThreadMsg.PutMessage( szMsg );
+	}
+	else
+	{
+		LogMessage( E_MSG_INFO, "Unhandled websocket msg for type %d", eEventType);
+	}
+}
 
 void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t uState, const enum E_EVENT_TYPE eEvent )
 {
