@@ -23,6 +23,7 @@ function func_clear_il_array( &$il_array )
 	$il_array['il_OutChannel'] = "";
 	$il_array['il_EventType'] = "";
 	$il_array['il_OnPeriod'] = "";
+	$il_array['il_VsdFrequency'] = "";
 	$il_array['co_ConditionNo'] = 0;
 	$il_array['co_LinkDeviceNo'] = "";
 	$il_array['co_LinkChannel'] = "";
@@ -65,6 +66,11 @@ function func_check_il_array( &$il_array )
 	else if ( $il_array['il_OnPeriod'] < 0 )
 	{
 		$il_array['error_msg'] = "The On Period must be >= zero.";
+		return false;
+	}
+	else if ( $il_array['il_VsdFrequency'] < -50 || $il_array['il_VsdFrequency'] > 50 )
+	{
+		$il_array['error_msg'] = "The Vsd Frequency must be between -50 and 50 Hz.";
 		return false;
 	}
 	else if ( $il_array['co_LinkDeviceNo'] == 0 && ($il_array['co_LinkTest'] != "" || $il_array['co_LinkValue'] != "") )
@@ -140,6 +146,8 @@ if ( isset( $_POST['il_EventType']) )
 	$il_array['il_EventType'] = func_get_eventtype($_POST['il_EventType']);
 if ( isset( $_POST['il_OnPeriod']) )
 	$il_array['il_OnPeriod'] = func_get_duration( $_POST['il_OnPeriod'] );
+if ( isset( $_POST['il_VsdFrequency']) )
+	$il_array['il_VsdFrequency'] = $_POST['il_VsdFrequency'];
 if ( isset( $_POST['co_LinkDeviceNo']) && strlen($_POST['co_LinkDeviceNo']) > 0 )
 {
 	$il_array['co_LinkDeviceNo'] = intval($_POST['co_LinkDeviceNo']);
@@ -158,7 +166,7 @@ if ( isset($_GET['LinkNo']) )
     {
         $new_iolink = true;
     }
-	else if ( ($line=$db->GetFields( 'iolinks', 'il_LinkNo', $il_array['il_LinkNo'], "il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod" )) !== false )
+	else if ( ($line=$db->GetFields( 'iolinks', 'il_LinkNo', $il_array['il_LinkNo'], "il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,il_VsdFrequency" )) !== false )
 	{	// success
 		$il_array['il_InDeviceNo'] = $line[0];
 		$il_array['il_InChannel'] = $line[1];
@@ -166,6 +174,7 @@ if ( isset($_GET['LinkNo']) )
 		$il_array['il_OutChannel'] = $line[3];
 		$il_array['il_EventType'] = $line[4];
 		$il_array['il_OnPeriod'] = $line[5];
+		$il_array['il_VsdFrequency'] = $line[6];
 
 		$il_array['co_ConditionNo'] = 0;
 		$il_array['co_LinkDeviceNo'] = "";
@@ -250,7 +259,7 @@ else if ( isset($_POST['NewIOLink']) || isset($_POST['UpdateIOLink']) )
 	if ( func_check_il_array( $il_array ) )
 	{
 		if ( $db->UpdateIOLinksTable( $il_array['il_LinkNo'], $il_array['il_InDeviceNo'], $il_array['il_InChannel'], $il_array['il_OutDeviceNo'],
-			$il_array['il_OutChannel'], $il_array['il_EventType'], $il_array['il_OnPeriod'] ) )
+			$il_array['il_OutChannel'], $il_array['il_EventType'], $il_array['il_OnPeriod'], $il_array['il_VsdFrequency'] ) )
 		{	// success
 		    if ( $new_iolink )
     		    $il_array['info_msg'] = "New iolink saved successfully.";
@@ -371,6 +380,7 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
               <tr>
               <th>Output Name</th>
               <th>On Period</th>
+			  <th>Frequency</th>
               <th>Event Type</th>
               <th>Input Name</th>
               </tr>
@@ -383,6 +393,7 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
             	
             	printf( "<td><a href='?LinkNo=%d'>%s</a></td>", $info['il_LinkNo'], func_get_ioname( $ddo_list, $info['il_OutDeviceNo'], $info['il_OutChannel'], false ) );
             	printf( "<td><a href='?LinkNo=%d'>%s</a></td>", $info['il_LinkNo'], func_get_on_period( $info['il_OnPeriod'] ) );
+            	printf( "<td><a href='?LinkNo=%d'>%s</a></td>", $info['il_LinkNo'], $info['il_VsdFrequency'] );
             	printf( "<td><a href='?LinkNo=%d'>%s</a></td>", $info['il_LinkNo'], func_get_eventtype_desc( $info['il_EventType'] ) );
             	printf( "<td><a href='?LinkNo=%d'>%s</a></td>", $info['il_LinkNo'], func_get_ioname( $ddi_list, $info['il_InDeviceNo'], $info['il_InChannel'], true ) );
             
@@ -474,6 +485,15 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		printf( "<input type='text' class='form-control' size='6' name='il_OnPeriod' id='il_OnPeriod' value='%s'> (xx s, xx.x m, xx.x h)", func_get_on_period($il_array['il_OnPeriod']) );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-2'>" );
+    		printf( "<label for='il_VsdFrequency'>Vsd Frequency: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' size='6' name='il_VsdFrequency' id='il_VsdFrequency' value='%.1f'> (Hz, negative for backward)", $il_array['il_VsdFrequency'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		

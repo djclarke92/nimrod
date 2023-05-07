@@ -888,7 +888,7 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 
 		usleep( iSleep );
 
-		// status
+		// status 
 		iLen = 1;
 		addr = 0x3000;
 

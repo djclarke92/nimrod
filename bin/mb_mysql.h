@@ -38,6 +38,7 @@ public:
 	int SetNextPlcState( const char* szOperation, const char* szNextStateName, const char* szStateName, const time_t tTimenow );
 	bool WebClickEvent( const int iDeviceNo, const int iIOChannel );
 	void CleanupEventsTable();
+	bool UpdatePlcStateRuntimeValue( const char* szOperation, const char* szStateName, const int iDeviceNo, const int iIOChannel, const double dNewVal );
 };
 
 

@@ -318,6 +318,22 @@ int CMysql::SetNextPlcState( const char* szOperation, const char* szNextStateNam
 	return rc;
 }
 
+bool CMysql::UpdatePlcStateRuntimeValue( const char* szOperation, const char* szStateName, const int iDeviceNo, const int iIOChannel, const double dNewVal )
+{
+	int rc = 0;
+
+	LogMessage( E_MSG_INFO, "UpdatePlcStateRuntimeValue() '%s' '%s' %d,%d", szOperation, szStateName, iDeviceNo, iIOChannel );
+
+	if ( RunQuery( "update plcstates set pl_RuntimeValue=%.1f where pl_Operation='%s' and pl_StateName='%s' and pl_DeviceNo=%d and pl_IOChannel=%d", 
+			dNewVal, szOperation, szStateName, iDeviceNo, iIOChannel ) )
+	{	// error
+		rc = 1;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+
+	return rc;
+}
+
 bool CMysql::WebClickEvent( const int iDeviceNo, const int iIOChannel )
 {
 	bool bRet = false;

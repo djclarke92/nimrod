@@ -35,7 +35,8 @@ bool gbTerminateNow = false;
 bool gbReadConfig = false;
 char gszHostname[HOST_NAME_MAX+1] = "";
 RS485_CONNECTION_TYPE gRS485 = { 9600, 'N', 8, 1 };
-CThreadMsg gThreadMsg;
+CThreadMsg gThreadMsgToWS;
+CThreadMsg gThreadMsgFromWS;
 
 
 void InitSSL(void);

@@ -56,6 +56,7 @@ void CPlcState::Init()
 	m_iDeviceNo = 0;
 	m_iIOChannel = 0;
 	m_dValue = 0.0;
+	m_dRuntimeValue = 0.0;
 	m_szTest[0] = '\0';
 	m_szNextStateName[0] = '\0';
 	m_iOrder = 0;
@@ -106,6 +107,11 @@ void CPlcState::SetIOChannel( const int iIOChannel )
 void CPlcState::SetValue( const double iValue )
 {
 	m_dValue = iValue;
+}
+
+void CPlcState::SetRuntimeValue( const double iValue )
+{
+	m_dRuntimeValue = iValue;
 }
 
 void CPlcState::SetTest( const char* szTest )
@@ -173,6 +179,41 @@ CPlcState& CPlcStates::GetState( const int idx )
 	LogMessage( E_MSG_ERROR, "PlcState idx %d out of range", idx );
 
 	return m_State[0];
+}
+
+const int CPlcStates::GetVsdStateIdx( const int iStartIdx, const int iDeviceNo, const int iIOChannel )
+{
+	int idx = -1;
+
+	if ( iStartIdx >= 0 && iStartIdx < MAX_PLC_STATES )
+	{
+		for ( int i = iStartIdx; idx < MAX_PLC_STATES; i++ )
+		{
+			if ( strcmp( m_State[iStartIdx].GetOperation(), m_State[i].GetOperation() ) == 0 && strcmp( m_State[iStartIdx].GetStateName(), m_State[i].GetStateName() ) == 0 )
+			{
+				if ( m_State[i].GetDeviceNo() == iDeviceNo && m_State[i].GetIOChannel() == iIOChannel )
+				{
+					idx = i;
+					break;
+				}
+			}
+			else
+			{
+				break;
+			}
+		}
+	}
+	else
+	{
+		LogMessage( E_MSG_ERROR, "GetVsdStateIdx(): PlcState idx %d out of range", idx );
+	}
+
+	if ( idx < 0 )
+	{
+		LogMessage( E_MSG_ERROR, "GetVsdStateIdx(): failed to find device %d,%d", iDeviceNo, iIOChannel );
+	}
+
+	return idx;
 }
 
 const int CPlcStates::GetStateCount()

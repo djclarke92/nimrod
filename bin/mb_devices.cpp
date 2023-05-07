@@ -2846,6 +2846,7 @@ void CInOutLinks::Init()
 		SetOutChannel( i, 0 );
 		SetEventType( i, E_ET_CLICK );
 		SetOnPeriod( i, 0 );
+		SetVsdFrequency( i, 0.0 );
 
 		for ( cn = 0; cn < MAX_CONDITIONS; cn++ )
 		{
@@ -2929,6 +2930,14 @@ void CInOutLinks::SetOnPeriod( const int idx, const int iVal )
 	}
 }
 
+void CInOutLinks::SetVsdFrequency( const int idx, const double dVal )
+{
+	if ( idx >= 0 && idx < MAX_IO_LINKS )
+	{
+		m_dVsdFrequency[idx] = dVal;
+	}
+}
+
 void CInOutLinks::SetLinkDeviceNo( const int idx, const int cn, const int iVal )
 {
 	if ( idx >= 0 && idx < MAX_IO_LINKS && cn >= 0 && cn < MAX_CONDITIONS )
@@ -3009,7 +3018,7 @@ const double CInOutLinks::GetLinkValue( const int idx, const int cn )
 
 
 
-bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, int& iOutDeviceNo, int& iOutChannel, int& iOnPeriod, bool& bLinkTestPassed, bool& bInvertState, CDeviceList* m_pmyDevices )
+bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, int& iOutDeviceNo, int& iOutChannel, int& iOnPeriod, double& dVsdFrequency, bool& bLinkTestPassed, bool& bInvertState, CDeviceList* m_pmyDevices )
 {
 	bool bRet = false;
 	int cn;
@@ -3017,6 +3026,7 @@ bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, i
 	iOutDeviceNo = 0;
 	iOutChannel = 0;
 	iOnPeriod = 0;
+	dVsdFrequency = 0.0;
 	bLinkTestPassed = true;
 	bInvertState = false;
 
@@ -3032,6 +3042,7 @@ bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, i
 				iOutDeviceNo = m_iOutDeviceNo[idx];
 				iOutChannel = m_iOutChannel[idx];
 				iOnPeriod = m_iOnPeriod[idx];
+				dVsdFrequency = m_dVsdFrequency[idx];
 
 				// check if the link test passes all conditions
 				for ( cn = 0; cn < MAX_CONDITIONS; cn++ )
@@ -3106,8 +3117,8 @@ bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 	Init();
 
 	// read from mysql
-	//                          0         1             2            3              4             5            6
-	if ( myDB.RunQuery( "SELECT il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod "
+	//                          0         1             2            3              4             5            6           7
+	if ( myDB.RunQuery( "SELECT il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,il_VsdFrequency "
 			"FROM iolinks order by il_InDeviceNo,il_InChannel") != 0 )
 	{
 		bRet = false;
@@ -3125,9 +3136,10 @@ bool CInOutLinks::ReadIOLinks( CMysql& myDB )
 			SetOutChannel( i, atoi( (const char*)row[4] ) );
 			SetEventType( i, (E_EVENT_TYPE)atoi( (const char*)row[5] ) );
 			SetOnPeriod( i, atoi( (const char*)row[6] ) );
+			SetVsdFrequency( i, atof( (const char*)row[7] ) );
 
-			LogMessage( E_MSG_INFO, "IOLinkNo:%d, InDeviceNo:%d, InChannel:%d, OutDeviceNo:%d, OutChannel:%d, EventType:%d, OnPeriod:%d", GetLinkNo(i),
-					GetInDeviceNo(i), GetInChannel(i), GetOutDeviceNo(i), GetOutChannel(i), GetEventType(i), GetOnPeriod(i) );
+			LogMessage( E_MSG_INFO, "IOLinkNo:%d, InDeviceNo:%d, InChannel:%d, OutDeviceNo:%d, OutChannel:%d, EventType:%d, OnPeriod:%d, VsdFreq:%.1f", GetLinkNo(i),
+					GetInDeviceNo(i), GetInChannel(i), GetOutDeviceNo(i), GetOutChannel(i), GetEventType(i), GetOnPeriod(i), GetVsdFrequency(i) );
 
 			i += 1;
 		}

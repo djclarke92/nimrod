@@ -151,7 +151,7 @@ else if ( isset($_POST['PlcCopyOperation']) )
     }
     else
     {
-        $newop_msg = sprintf( "You must select the existing Operatioin and enter the new Operation Name" );
+        $newop_msg = sprintf( "You must select the existing Operation and enter the new Operation Name" );
     }
 }
 else if ( isset($_POST['PlcRenameOperation']) )
@@ -190,7 +190,7 @@ else if ( isset($_POST['PlcRenameOperation']) )
     }
     else
     {
-        $newop_msg = sprintf( "You must select the existing Operatioin and enter the new Operation Name" );
+        $newop_msg = sprintf( "You must select the existing Operation and enter the new Operation Name" );
     }
 }
 else if ( isset($_POST['SetPlcDelay']) )
@@ -422,19 +422,59 @@ if ( $_SESSION['plc_Operation'] != "" )
     {   
         // print the Init actions
         printf( "<td>" );
+        $vsd_output = "";
+        $vsd_id = "";
         $header = false;
         $count = 1;
         foreach ( $state_list as $state )
         {
             if ( $state['pl_StateName'] == $state_name && $state['pl_RuleType'] == "I" )
             {
+                foreach ( $di_list as $di )
+                {
+                    if ( $state['pl_DeviceNo'] == $di['di_DeviceNo'] && $state['pl_IOChannel'] == $di['di_IOChannel'] && $di['di_IOType'] == E_IO_OUTPUT )
+                    {
+                        if ( $di['de_Type'] == E_DT_VSD_NFLIXEN && $state['pl_Value'] != 0 )
+                        {
+                            $vsd_output = sprintf( "VSDF_%02d_%02d", $di['di_DeviceNo'], $di['di_IOChannel'] );
+                            $vsd_id = sprintf( "VVO_%02d_%02d", $di['di_DeviceNo'], $di['di_IOChannel'] );
+                        }
+                        break;
+                    }
+                }
                 if ( !$header )
                 {
                     printf( "<b>Initial Actions:</b>&nbsp;<br><br>" );
                     $header = true;
                 }
                 $name = func_find_deviceinfo_name( $di_list, $state['pl_DeviceNo'], $state['pl_IOChannel'], $state['pl_RuleType'] );
-                printf( "%d: %s = %.1f<br>", $count, $name, $state['pl_Value'] );
+                if ( $vsd_output == "" )
+                    printf( "%d: %s = %.1f<br>", $count, $name, $state['pl_Value'] );
+                else
+                    printf( "%d: %s = <span id='%s'>%.1f</span> Hz (%s)<br>", $count, $name, $vsd_id, abs($state['pl_RuntimeValue']), ($state['pl_RuntimeValue'] >=0 ? "Forward" : "Backward") );
+
+                if ( $vsd_output != "" )
+                {
+                    printf( "<table border='0'>" );
+                    printf( "<tr><td colspan='3'><div class='d-grid'><button type='button' class='btn btn-info btn-sm btn-block' disabled>Slower</button></div></td>" );
+                    printf( "<td>&nbsp;</td>" );
+                    printf( "<td colspan='3'><div class='d-grid'><button type='button' class='btn btn-info btn-sm btn-block' disabled>Faster</button></div></td></tr>" );
+                    printf( "<tr>" );
+                    $values = array( -5, -1, -0.3, 0, 0.3, 1, 5 );
+                    if ( $state['pl_Value'] <= 10 )
+                        $values = array( -3, -0.7, -0.2, 0, 0.2, 0.7, 3 );
+                    foreach ( $values as $vv )
+                    {
+                        if ( $vv != 0)
+                            printf( "<td><button type='button' class='btn btn-success' onclick=\"plcButtonVsdFreq('%s','%.1f')\">&nbsp;&nbsp;&nbsp;%s%.1f&nbsp;&nbsp;&nbsp;</button></td>", $vsd_output, $vv, ($vv > 0 ? "+" : ""), $vv);
+                        else
+                            printf( "<td>&nbsp;</td>" );
+                    }
+                    printf( "</tr>" );
+                    printf( "</table>" );
+                    printf( "<br>" );
+                    $vsd_output = "";
+                }
                 $count += 1;
             }
         }

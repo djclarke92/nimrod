@@ -8,6 +8,8 @@
 #include "mb_main.h"
 
 
+extern CThreadMsg gThreadMsgFromWS;
+
 
 #define NIMROD_RX_BUFFER_BYTES (100)
 struct payload
@@ -204,6 +206,10 @@ static int callback_nimrod( struct lws *wsi, enum lws_callback_reasons reason, v
 		LogMessage( E_MSG_INFO, "ws receive: len %d", len );
 		memcpy( &received_payload.data[LWS_SEND_BUFFER_PRE_PADDING], in, len );
 		received_payload.len = len;
+		received_payload.data[LWS_SEND_BUFFER_PRE_PADDING+len] = '\0';
+		LogMessage( E_MSG_INFO, "ws receive: '%s'", &received_payload.data[LWS_SEND_BUFFER_PRE_PADDING] );
+
+		gThreadMsgFromWS.PutMessage( (const char*)&received_payload.data[LWS_SEND_BUFFER_PRE_PADDING] );
 		//lws_callback_on_writable_all_protocol( lws_get_context( wsi ), lws_get_protocol( wsi ) );
 		break;
 

@@ -58,7 +58,8 @@ private:
 	char m_szRuleType[2];
 	int m_iDeviceNo;
 	int m_iIOChannel;
-	int m_dValue;
+	double m_dValue;
+	double m_dRuntimeValue;
 	char m_szTest[6];
 	char m_szNextStateName[51];
 	int m_iOrder;
@@ -79,6 +80,7 @@ public:
 	const int GetDeviceNo(){ return m_iDeviceNo; }
 	const int GetIOChannel(){ return m_iIOChannel; }
 	const double GetValue(){ return m_dValue; }
+	const double GetRuntimeValue(){ return m_dRuntimeValue; }
 	const char* GetTest(){ return m_szTest; }
 	const char* GetNextStateName(){ return m_szNextStateName; }
 	const int GetOrder(){ return m_iOrder; }
@@ -94,6 +96,7 @@ public:
 	void SetDeviceNo( const int iDeviceNo );
 	void SetIOChannel( const int iIOChannel );
 	void SetValue( const double dValue );
+	void SetRuntimeValue( const double dValue );
 	void SetTest( const char* szTest );
 	void SetNextStateName( const char* szNextStateName );
 	void SetOrder( const int iOrder );
@@ -131,6 +134,7 @@ public:
 	const int ReadInputEvent( int& iDeviceNo, int& iIOChannel, double& dValue );
 	void SetNextStateActive( const int idx, const double dTimenowMS );
 	const int GetNextStateIdx( const char* szOperation, const char* szNextStateName );
+	const int GetVsdStateIdx( const int i, const int iDeviceNo, const int IOChannel );
 
 };
 
@@ -238,7 +242,7 @@ public:
 	void Worker();
 	void ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t iState, const enum E_EVENT_TYPE eEvent );
 	void ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel, const uint8_t uState,
-			const enum E_IO_TYPE eSwType, int iOutOnPeriod );
+			const enum E_IO_TYPE eSwType, int iOutOnPeriod, const double dOutVsdFrequency );
 	const bool ClickFileExists( CMysql& myDB, const int iDeviceNo, const int iChannel );
 	const bool IsComPortThread();
 	const bool IsTimerThread();
@@ -257,7 +261,7 @@ public:
 	void ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB );
 	size_t ReadTcpipMsgBytes( SSL* ssl, const int newfd, NIMROD_MSGBUF_TYPE& msgBuf, const bool bBlock );
 	bool SendTcpipChangeOutputToHost( const char* szHostname, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel,
-			const uint8_t uState, const enum E_IO_TYPE eSwType, const int iOutOnPeriod );
+			const uint8_t uState, const enum E_IO_TYPE eSwType, const int iOutOnPeriod, const double dOutVsdFrequency );
 	void HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
@@ -283,7 +287,7 @@ public:
 	void HandleChannelThresholds( CMysql& myDB, const int idx, const int iChannel, const double dDiff, const E_EVENT_TYPE eEventType, const E_IO_TYPE eIOTypeL, const E_IO_TYPE eIOTypeH,
 			const E_IO_TYPE eIOTypeHL, const char* szName, const char* szDesc, const char* szUnits, const double dValNew, const double dValOld );
 
-	void PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew );
+	void PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew, const bool bInput );
 	void websocket_init();
 	void websocket_process( const char* szMsg );
 	void websocket_destroy();

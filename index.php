@@ -478,43 +478,57 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 
   	  	  	setTimeout( 'plcTimer()', 1000 );   
   	  	}
+
+        function plcChangeVsdFrequency( msg ) {
+            console.log(msg);
+            socket.send( msg );
+        }
+
+        function plcButtonVsdFreq( msg, val ) {
+            console.log(msg);
+            msg += '_';
+            msg += val;
+            plcChangeVsdFrequency( msg );
+        }
   	  	
 	  	function update(msg) { 
 		  	if ( msg.length > 0 ) 
-		  	{
-                if ( msg.substr(2,1) != '_' && msg.substr(5,1) != '_' && msg.substr(8,1) != ':') {
+		  	{   // 01234567890123
+                // VVc_dd_ii:nnnn
+                if ( msg.substr(3,1) != '_' && msg.substr(6,1) != '_' && msg.substr(9,1) != ':') {
                     var wsm = document.getElementById("ws_message");
                     if ( wsm != null ) {
                         wsm.innerHTML = msg;
                     }
         
                     var select = document.getElementById('ws_list');
-        
-                    var date = new Date();
-        
-                    var dateStr =
-                    ("00" + (date.getMonth() + 1)).slice(-2) + "/" +
-                    ("00" + date.getDate()).slice(-2) + "/" +
-                    date.getFullYear() + " " +
-                    ("00" + date.getHours()).slice(-2) + ":" +
-                    ("00" + date.getMinutes()).slice(-2) + ":" +
-                    ("00" + date.getSeconds()).slice(-2);
-        
-                    var msg2 = dateStr + ': ' + msg;
-                    
-                    var opt = document.createElement('option');
-                    opt.value = msg2;
-                    opt.innerHTML = msg2;
-                    select.add(opt,0)
-                    
-                    // only allow 20 items in the list
-                    if ( select.length >= 20 )
-                    {
-                        select.removeChild( select.options[20] );
+                    if ( select != null ) {
+                        var date = new Date();
+            
+                        var dateStr =
+                        ("00" + (date.getMonth() + 1)).slice(-2) + "/" +
+                        ("00" + date.getDate()).slice(-2) + "/" +
+                        date.getFullYear() + " " +
+                        ("00" + date.getHours()).slice(-2) + ":" +
+                        ("00" + date.getMinutes()).slice(-2) + ":" +
+                        ("00" + date.getSeconds()).slice(-2);
+            
+                        var msg2 = dateStr + ': ' + msg;
+                        
+                        var opt = document.createElement('option');
+                        opt.value = msg2;
+                        opt.innerHTML = msg2;
+                        select.add(opt,0)
+                        
+                        // only allow 20 items in the list
+                        if ( select.length >= 20 )
+                        {
+                            select.removeChild( select.options[20] );
+                        }
+            
+                        //select.scrollTo( 0, select.length - 4 ); 
                     }
-        
-                    //select.scrollTo( 0, select.length - 4 ); 
-        
+
                     var stateName = '<?php echo $_SESSION['plc_StateName'];?>';
                     
                     if ( msg.substring(0,6) == 'State:' ) {
@@ -528,8 +542,17 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
                     } else {
                         plcCounter  = 0;
                     }
+    		  	} else if ( msg.substr(3,1) == '_' && msg.substr(6,1) == '_' && msg.substr(9,1) == ':') {
+
+                    //console.log(msg);
+                    var elem = document.getElementById(msg.substr(0,9));
+                    if ( elem != null ) {
+                        elem.innerHTML = msg.substr(10);
+                    } else {
+                        //console.log("element not found '"+msg.substr(0.9)+"'");
+                    }
                 }
-		  	}
+            }
 		}
 		
 	  	socket.onopen = function() { console.log("socket open"); update("wss open"); }
@@ -573,8 +596,8 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
                 // format of update messages
                 // cc = {VV|TT}, nn = DeviceNo, xx = IOChannel
                 // 01234567890
-                // cc_nn_xx:value
-                if ( (msg.substr(2,1) == '_' && msg.substr(5,1) == '_' && msg.substr(8,1) == ':') || msg.substr(0,3) == 'wss') {
+                // CCc_nn_xx:value
+                if ( (msg.substr(3,1) == '_' && msg.substr(6,1) == '_' && msg.substr(9,1) == ':') || msg.substr(0,3) == 'wss') {
                     var wsm = document.getElementById("ws_message");
                     if ( wsm != null ) {
                         wsm.innerHTML = msg;
@@ -590,26 +613,26 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 
                     if ( msg.substr(0,2) == 'VV' || msg.substr(0,2) == 'TT' || msg.substr(0,2) == 'LL' ) {
                         // voltages
-                        var val = document.getElementById(msg.substr(0,8));
+                        var val = document.getElementById(msg.substr(0,9));
                         if ( val != null ) {
-                            val.innerHTML = msg.substr(9);
+                            val.innerHTML = msg.substr(10);
                         } else {
-                            console.log("element not found '"+msg.substr(9)+"'");
+                            //console.log("element not found '"+msg.substr(0,9)+"'");
                         }
 
-                        var dd = document.getElementById(msg.substr(0,8)+'_DT');
+                        var dd = document.getElementById(msg.substr(0,9)+'_DT');
                         if ( dd != null ) {
                             dd.innerHTML = dateStr;
                         }
-                    } else if ( msg.substr(0,2) == 'ST' ) {
-                        var val = document.getElementById(msg.substr(0,8));
+                    } else if ( msg.substr(0,3) == 'STT' ) {
+                        var val = document.getElementById(msg.substr(0,9));
                         if ( val != null ) {
-                            if ( msg.substr(9) == '1' )
+                            if ( msg.substr(10) == '1' )
                                 val.src = './images/green_tick.png';
                             else
                                 val.src = './images/dead_robot.png';
                         } else {
-                            console.log("element not found '"+msg.substr(9)+"'");
+                            //console.log("element not found '"+msg.substr(0,9)+"'");
                         }
                     }
                 }
@@ -659,8 +682,8 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
                 // format of update messages
                 // cc = {VV|TT|LL}, nn = DeviceNo, xx = IOChannel
                 // 01234567890
-                // cc_nn_xx:value
-                if ( (msg.substr(2,1) == '_' && msg.substr(5,1) == '_' && msg.substr(8,1) == ':') || msg.substr(0,3) == 'wss') {
+                // CCc_nn_xx:value
+                if ( (msg.substr(3,1) == '_' && msg.substr(6,1) == '_' && msg.substr(9,1) == ':') || msg.substr(0,3) == 'wss') {
                     var wsm = document.getElementById("ws_message");
                     if ( wsm != null ) {
                         wsm.innerHTML = msg;
@@ -668,17 +691,12 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 
                     if ( msg.substr(0,2) == 'VV' || msg.substr(0,2) == 'TT' || msg.substr(0,2) == 'LL' ) {
                         // voltages
-                        var val = document.getElementById(msg.substr(0,8));
+                        var val = document.getElementById(msg.substr(0,9));
                         if ( val != null ) {
-                            val.innerHTML = msg.substr(9);
+                            val.innerHTML = msg.substr(10);
                         } else {
-                            console.log("element not found '"+msg.substr(9)+"'");
+                            console.log("element not found '"+msg.substr(0,9)+"'");
                         }
-
-//                        var dd = document.getElementById(msg.substr(0,8)+'_DT');
-//                        if ( dd != null ) {
-//                            dd.innerHTML = dateStr;
-//                        }
                     }
                 }
             }

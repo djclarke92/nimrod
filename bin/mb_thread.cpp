@@ -35,7 +35,8 @@
 
 
 extern bool gbPlcIsActive;
-extern CThreadMsg gThreadMsg;
+extern CThreadMsg gThreadMsgToWS;
+extern CThreadMsg gThreadMsgFromWS;
 
 pthread_mutex_t mutexLock[E_LT_MAX_LOCKS];
 
@@ -305,7 +306,7 @@ void CThread::Worker()
 		{
 			char szMsg[100] = "";
 
-			gThreadMsg.GetMessage( szMsg, sizeof(szMsg) );
+			gThreadMsgToWS.GetMessage( szMsg, sizeof(szMsg) );
 
 			websocket_process( szMsg );
 
@@ -490,14 +491,14 @@ void CThread::Worker()
 						bPrintedTO = true;
 #if LIBMODBUS_VERSION_CHECK(3,1,0)
 						response_to_tv.tv_sec = 0;
-						response_to_tv.tv_usec = 300000;
+						response_to_tv.tv_usec = 500000;
 						modbus_set_response_timeout(ctx, (uint32_t)response_to_tv.tv_sec, (uint32_t)response_to_tv.tv_usec );
 
 						modbus_get_response_timeout( ctx, (uint32_t*)&old_response_to_tv.tv_sec, (uint32_t*)&old_response_to_tv.tv_usec );
 						LogMessage( E_MSG_INFO, "Response timeout ctx %p is %u.%06u usec", ctx, old_response_to_tv.tv_sec, old_response_to_tv.tv_usec );
 #else
 						response_to_tv.tv_sec = 0;
-						response_to_tv.tv_usec = 300000;
+						response_to_tv.tv_usec = 500000;
 						modbus_set_response_timeout(ctx, &response_to_tv);
 
 						modbus_get_response_timeout( ctx, &old_response_to_tv );
@@ -631,7 +632,7 @@ void CThread::Worker()
 				}
 				else if ( tAllDeadStart != 0 && tAllDeadStart + iAllDeadCheckPeriod < time(NULL) )
 				{	// give up after 10 seconds
-					LogMessage( E_MSG_ERROR, "%s: All devices are dead, com port issue", CThread::GetThreadType(m_eThreadType) );
+					LogMessage( E_MSG_ERROR, "%s: All devices are dead, '%s' com port issue", m_szMyComPort, CThread::GetThreadType(m_eThreadType) );
 
 					iAllDeadCheckPeriod = 60;
 					tAllDeadStart = 0;
@@ -1655,13 +1656,13 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 					{	// check config has not changed
 						pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
 
-						LogMessage( E_MSG_INFO, "TCP Output change for '%s' (0x%x->%d,%d), new state %u (%d), on %s", m_pmyDevices->GetOutIOName(msgBuf.msg.changeOutput.iOutIdx, msgBuf.msg.changeOutput.iOutChannel),
+						LogMessage( E_MSG_INFO, "TCP Output change for '%s' (0x%x->%d,%d), new state %u (%d,%.1f), on %s", m_pmyDevices->GetOutIOName(msgBuf.msg.changeOutput.iOutIdx, msgBuf.msg.changeOutput.iOutChannel),
 								msgBuf.msg.changeOutput.iOutAddress, msgBuf.msg.changeOutput.iOutIdx, msgBuf.msg.changeOutput.iOutChannel+1, msgBuf.msg.changeOutput.uState, msgBuf.msg.changeOutput.iOutOnPeriod,
-								m_pmyDevices->GetDeviceHostname( msgBuf.msg.changeOutput.iOutIdx ) );
+								msgBuf.msg.changeOutput.dVsdFrequency, m_pmyDevices->GetDeviceHostname( msgBuf.msg.changeOutput.iOutIdx ) );
 
 						ChangeOutputState( myDB, msgBuf.msg.changeOutput.iInIdx, msgBuf.msg.changeOutput.iInAddress, msgBuf.msg.changeOutput.iInChannel,
 								msgBuf.msg.changeOutput.iOutIdx, msgBuf.msg.changeOutput.iOutAddress, msgBuf.msg.changeOutput.iOutChannel, msgBuf.msg.changeOutput.uState,
-								msgBuf.msg.changeOutput.eSwType, msgBuf.msg.changeOutput.iOutOnPeriod );
+								msgBuf.msg.changeOutput.eSwType, msgBuf.msg.changeOutput.iOutOnPeriod, msgBuf.msg.changeOutput.dVsdFrequency );
 
 						pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
 					}
@@ -1928,7 +1929,7 @@ void CThread::ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int
 }
 
 bool CThread::SendTcpipChangeOutputToHost( const char* szHostname, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress,
-		const int iOutChannel, const uint8_t uState, const enum E_IO_TYPE eSwType, const int iOutOnPeriod )
+		const int iOutChannel, const uint8_t uState, const enum E_IO_TYPE eSwType, const int iOutOnPeriod, const double dVsdFrequency )
 {
 	bool bRc = false;
 	int rc;
@@ -1953,6 +1954,7 @@ bool CThread::SendTcpipChangeOutputToHost( const char* szHostname, const int iIn
 	msgBuf.msg.changeOutput.uState = uState;
 	msgBuf.msg.changeOutput.eSwType = eSwType;
 	msgBuf.msg.changeOutput.iOutOnPeriod = iOutOnPeriod;
+	msgBuf.msg.changeOutput.dVsdFrequency = dVsdFrequency;
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if ( sockfd < 0 )
@@ -2039,8 +2041,26 @@ void CThread::HandleVSDOutputDevice( CMysql& myDB, const int idx, const int iCha
 {
 	int rc;
 	int addr;
+	int iLoop = 2;
+	int iVsdOp = 6;	// speed down stop
+
+	if ( dVsdFreq > 0 )
+	{
+		iVsdOp = 1;	// forward
+	}
+	else if ( dVsdFreq < 0 )
+	{
+		iVsdOp = 2;	// backward
+	}
 
 	modbus_t* ctx = m_pmyDevices->GetContext(idx);
+
+	if ( modbus_set_slave( ctx, m_pmyDevices->GetAddress(idx) ) == -1 )
+	{
+		LogMessage( E_MSG_ERROR, "modbus_set_slave(%p) %d failed: %s", ctx, idx, modbus_strerror(errno) );
+	}
+
+	usleep( 30000 );
 
 	switch ( m_pmyDevices->GetDeviceType(idx) )
 	{
@@ -2048,24 +2068,64 @@ void CThread::HandleVSDOutputDevice( CMysql& myDB, const int idx, const int iCha
 		LogMessage( E_MSG_ERROR, "HandleVSDOutputDevice: unhandled device type %d", m_pmyDevices->GetDeviceType(idx) );
 		break;
 	case E_DT_VSD_NFLIXEN:
-		// value is % * 100 of max frequency (50Hz)
 
-		addr = 0x1000;
+			// status
+		int iLen = 1;
+		addr = 0x3000;
+		uint16_t uiInputs[1];
 
-		int val = 10000 * (dVsdFreq / 50);
-		if ( val > 10000 )
-			val = 10000;
-
-		rc = modbus_write_register( ctx, addr, val );
+		rc = modbus_read_registers( ctx, addr, iLen, uiInputs );
 		if ( rc == -1 )
 		{
-			LogMessage( E_MSG_ERROR, "HandleVSDOutputDevice: modbus_write_register() failed: %s\n", modbus_strerror(errno) );
+			LogMessage( E_MSG_WARN, "Error: modbus_read_registers() failed: %s", modbus_strerror(errno) );
 		}
 		else
 		{
-			LogMessage( E_MSG_INFO, "VSD frequency set to %.1f Hz -> %d\n", dVsdFreq, val );
+			LogMessage( E_MSG_INFO, "VSD status: %u", uiInputs[0] );
 		}
 
+		usleep( 50000 );
+
+		// turn the vsd on or off
+		addr = 0x2000;
+		while ( iLoop > 0 )
+		{
+			rc = modbus_write_register( ctx, addr, iVsdOp );
+			if ( rc == -1 )
+			{
+				iLoop -= 1;
+				LogMessage( E_MSG_ERROR, "HandleVsdOutputDevice() modbus_write_register() failed: %s", modbus_strerror(errno) );
+			}
+			else
+			{
+				iLoop = 0;
+				LogMessage( E_MSG_INFO, "HandleVsdOutputDevice() VSD operation set to %d", iVsdOp );
+			}
+		}
+
+		usleep( 50000 );
+
+		iLoop = 2;
+		while ( iLoop > 0 )
+		{	// value is % * 100 of max frequency (50Hz)
+			addr = 0x1000;
+
+			int val = 10000 * (fabs(dVsdFreq) / 50);
+			if ( val > 10000 )
+				val = 10000;
+
+			rc = modbus_write_register( ctx, addr, val );
+			if ( rc == -1 )
+			{
+				iLoop -= 1;
+				LogMessage( E_MSG_ERROR, "HandleVSDOutputDevice() modbus_write_register() failed: %s", modbus_strerror(errno) );
+			}
+			else
+			{
+				iLoop = 0;
+				LogMessage( E_MSG_INFO, "HandleVsdOutputDevice() VSD frequency set to %.1f Hz -> %d", dVsdFreq, val );
+			}
+		}
 		break;
 	}
 }
@@ -2093,7 +2153,7 @@ void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 				}
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
 				{
@@ -2132,7 +2192,7 @@ void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 			}
 
 			// check each output bit
@@ -2207,7 +2267,7 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 				}
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
 				{
@@ -2245,7 +2305,7 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 			}
 
 			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
@@ -2342,7 +2402,7 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2380,7 +2440,7 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 			}
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
@@ -2449,7 +2509,7 @@ void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int 
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2487,7 +2547,7 @@ void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int 
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 			}
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
@@ -2568,7 +2628,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 			}
 
 			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2609,7 +2669,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 				}
 			}
 
@@ -2710,7 +2770,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 		int count = 10;
 		uint16_t uiVal[10];
 
-		// VIPF devices may not respond as they are powered by the 230VAC they are monitoring
+		// VSD devices may not respond as they are powered by the 230VAC they are monitoring
 		if ( m_pmyDevices->GetDeviceStatus(idx) != E_DS_ALIVE )
 		{
 			iCheckAgain = 0;
@@ -2724,6 +2784,10 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 		if ( iCheckAgain != 0 )
 		{
 			rc = modbus_read_registers( ctx, addr, count, uiVal );
+			if ( rc == -1 )
+			{
+				rc = modbus_read_registers( ctx, addr, count, uiVal );
+			}
 		}
 		else
 		{
@@ -2746,7 +2810,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 			}
 
 			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2790,7 +2854,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 				}
 			}
 
@@ -2852,7 +2916,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 					eIOTypeHL = E_IO_FREQ_HIGHLOW;
 					break;
 				case 4:		// torque %
-					dDiff = 1;	//
+					dDiff = 2;	//
 					eEventType = E_ET_TORQUE;
 					strcpy( szUnits, "T%" );
 					strcpy( szDesc, "Torque Percent" );
@@ -2924,7 +2988,7 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_BURIED, true ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+				PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 			}
 
 			if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -2968,7 +3032,7 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 				}
 			}
 
@@ -3077,7 +3141,7 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -3115,7 +3179,7 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 			}
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
@@ -3170,7 +3234,7 @@ void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -3208,7 +3272,7 @@ void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 			}
 
 			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
@@ -3266,7 +3330,7 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
 				{
 					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0 );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
 				}
 
 				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
@@ -3304,7 +3368,7 @@ void CThread::HandleTemperatureDevice( CMysql& myDB, modbus_t* ctx, const int id
 			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
 			{
 				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
-				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1 );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
 			}
 
 			for ( i = 0; i < m_pmyDevices->GetNumInputs(idx); i++ )
@@ -3432,7 +3496,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
 
 			// post to the websocket
-			PostToWebSocket( eEventType, idx, iChannel, dValNew );
+			PostToWebSocket( eEventType, idx, iChannel, dValNew, true );
 		}
 
 		if ( bLogit )
@@ -3553,54 +3617,60 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 				dValNew, szUnits );
 
-		PostToWebSocket( eEventType, idx, iChannel, dValNew );
+		PostToWebSocket( eEventType, idx, iChannel, dValNew, true );
 	}
 
 	//LogMessage( E_MSG_INFO, "SetLastData %d %d %.1f", idx, iChannel, m_pmyDevices->GetNewData(idx,iChannel) );
 	m_pmyDevices->GetLastData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
 }
 
-void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew )
+void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew, const bool bInput )
 {
 	int iPrec = 1;
 	char szMsg[100];
-	char szType[3] = "";
+	char szType[4] = "";
 	switch ( eEventType )
 	{
 	default:
 		break;
 	case E_ET_VOLTAGE:
-		strcpy( szType, "VV");
+		snprintf( szType, sizeof(szType), "VV%s", (bInput ? "I" : "O"));
 		if ( dValNew > 99 )
 			iPrec = 0;
 		break;
 	case E_ET_CURRENT:
 		iPrec = 2;
-		strcpy( szType, "VV");
+		snprintf( szType, sizeof(szType), "VV%s", (bInput ? "I" : "O"));
 		break;
 	case E_ET_FREQUENCY:
 		iPrec = 2;
-		strcpy( szType, "VV");
+		snprintf( szType, sizeof(szType), "VV%s", (bInput ? "I" : "O"));
+		break;
+	case E_ET_POWER:
+		snprintf( szType, sizeof(szType), "VV%s", (bInput ? "I" : "O"));
+		break;
+	case E_ET_TORQUE:
+		snprintf( szType, sizeof(szType), "VV%s", (bInput ? "I" : "O"));
 		break;
 	case E_ET_TEMPERATURE:
-		strcpy( szType, "TT");
+		snprintf( szType, sizeof(szType), "TT%s", (bInput ? "I" : "O"));
 		break;
 	case E_ET_LEVEL:
-		strcpy( szType, "LL");
+		snprintf( szType, sizeof(szType), "LL%s", (bInput ? "I" : "O"));
 		break;
 	case E_ET_DEVICE_OK:
 		iPrec = 0;
-		strcpy( szType, "ST" );
+		snprintf( szType, sizeof(szType), "STT" );
 		break;
 	case E_ET_DEVICE_NG:
 		iPrec = 0;
-		strcpy( szType, "ST" );
+		snprintf( szType, sizeof(szType), "STT" );
 		break;
 	}
 	if ( strlen(szType) > 0 )
 	{
 		snprintf( szMsg, sizeof(szMsg), "%s_%02d_%02d:%.*f", szType, m_pmyDevices->GetDeviceNo(idx), iChannel, iPrec, dValNew );
-		gThreadMsg.PutMessage( szMsg );
+		gThreadMsgToWS.PutMessage( szMsg );
 	}
 	else
 	{
@@ -3621,6 +3691,7 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 	int iInIdx;
 	int iInDeviceNo;
 	int iOutDeviceNo;
+	double dOutVsdFrequency = 0.0;
 	uint8_t uLinkState;
 	char szOutDeviceName[MAX_DEVICE_NAME_LEN+1];
 	char szOutHostname[HOST_NAME_MAX+1] = "";
@@ -3634,7 +3705,7 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 	//LogMessage( E_MSG_INFO, "ChangeOutput %d %d %d %d", iInIdx, eSwType, iInAddress, iInDeviceNo );
 
 	idx = 0;
-	while ( m_pmyIOLinks->Find( iInDeviceNo, iInChannel, idx, iOutDeviceNo, iOutChannel, iOutOnPeriod, bLinkTestPassed, bInvertState, m_pmyDevices ) )
+	while ( m_pmyIOLinks->Find( iInDeviceNo, iInChannel, idx, iOutDeviceNo, iOutChannel, iOutOnPeriod, dOutVsdFrequency, bLinkTestPassed, bInvertState, m_pmyDevices ) )
 	{	// loop through all linked devices/channels
 		count += 1;
 
@@ -3651,24 +3722,24 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 
 		if ( !bLinkTestPassed )
 		{
-			LogMessage( E_MSG_INFO, "Skipped output change for '%s' (0x%x->%d,%d), new state %u (%d)", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
-					iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod );
+			LogMessage( E_MSG_INFO, "Skipped output change for '%s' (0x%x->%d,%d), new state %u (%d,%.1f)", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
+					iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod, dOutVsdFrequency );
 
 			continue;
 		}
 
-		LogMessage( E_MSG_INFO, "Output change for '%s' (0x%x->%d,%d), new state %u (%d), on %s", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
-				iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod, szOutHostname );
+		LogMessage( E_MSG_INFO, "Output change for '%s' (0x%x->%d,%d), new state %u (%d,%.1f), on %s", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
+				iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod, dOutVsdFrequency, szOutHostname );
 
 		if ( iOutIdx >= 0 )
 		{
 			if ( !IsMyHostname( szOutHostname ) )
 			{	// output device is on another host
-				SendTcpipChangeOutputToHost( szOutHostname, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
+				SendTcpipChangeOutputToHost( szOutHostname, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod, dOutVsdFrequency);
 			}
 			else
 			{
-				ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
+				ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod, dOutVsdFrequency );
 
 				if ( m_szEspResponseMsg[0] != '\0' && !IsTcpipThread() )
 				{	// send msg to esp device via the tcpip thread
@@ -3694,7 +3765,7 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 }
 
 void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel,
-		const uint8_t uState, const enum E_IO_TYPE eSwType, int iOutOnPeriod )
+		const uint8_t uState, const enum E_IO_TYPE eSwType, int iOutOnPeriod, const double dOutVsdFrequency )
 {
 	bool bIsEsp = false;
 	bool bState;
@@ -3755,7 +3826,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						{
 						case E_DT_VSD_NFLIXEN:
 						case E_DT_VSD_PWRELECT:
-							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, 50.0 );
+							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, dOutVsdFrequency );
 							break;
 						default:
 							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, uState ) )
@@ -3770,7 +3841,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 					if ( !bError )
 					{	// success
-						LogMessage( E_MSG_INFO, "Output state set to %d, period %d sec", uState, iOutOnPeriod );
+						LogMessage( E_MSG_INFO, "Output state set to %d, period %d sec, %.1f Hz", uState, iOutOnPeriod, dOutVsdFrequency );
 
 						if ( m_pmyDevices->GetOutOnStartTime(iOutIdx,iOutChannel) == 0 )
 						{
@@ -3819,7 +3890,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 							{
 							case E_DT_VSD_NFLIXEN:
 							case E_DT_VSD_PWRELECT:
-								HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, 50.0 );
+								HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, dOutVsdFrequency );
 								break;
 							default:
 								if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, true ) )
@@ -3834,7 +3905,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 						if ( !bError )
 						{	// success
-							LogMessage( E_MSG_INFO, "Output state set to %d, period %d sec", true, iOutOnPeriod );
+							LogMessage( E_MSG_INFO, "Output state set to %d, period %d sec, %.1f Hz", true, iOutOnPeriod, dOutVsdFrequency );
 
 							m_pmyDevices->SetOutOnStartTime( iOutIdx, iOutChannel, tStart );
 							m_pmyDevices->SetOutOnPeriod( iOutIdx, iOutChannel, iOutOnPeriod );
@@ -3862,7 +3933,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						{
 						case E_DT_VSD_NFLIXEN:
 						case E_DT_VSD_PWRELECT:
-							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, (bState ? 50.0 : 0.0) );
+							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, (bState ? dOutVsdFrequency : 0.0) );
 							break;
 						default:
 							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, bState ) )
@@ -3880,7 +3951,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 					if ( !bError )
 					{	// success
-						LogMessage( E_MSG_INFO, "Output state set to %d, period %d sec", bState, iOutOnPeriod );
+						LogMessage( E_MSG_INFO, "Output state set to %d, period %d sec, %.1f Hz", bState, iOutOnPeriod, dOutVsdFrequency );
 
 						if ( bState )
 						{
@@ -3919,7 +3990,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 						{
 						case E_DT_VSD_NFLIXEN:
 						case E_DT_VSD_PWRELECT:
-							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, (bState ? 50.0 : 0.0) );
+							HandleVSDOutputDevice( myDB, iOutIdx, iOutChannel, (bState ? dOutVsdFrequency : 0.0) );
 							break;
 						default:
 							if ( !m_pmyDevices->WriteOutputBit( iOutIdx, iOutChannel, bState ) )
@@ -3934,7 +4005,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 					if ( !bError )
 					{	// success
-						LogMessage( E_MSG_INFO, "Output set to %d, period %d sec", bState, iOutOnPeriod );
+						LogMessage( E_MSG_INFO, "Output set to %d, period %d sec, %.1f Hz", bState, iOutOnPeriod, dOutVsdFrequency );
 
 						if ( bState )
 						{	// turn on
@@ -4198,8 +4269,8 @@ void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 		// read from mysql
 		//                          0          1            2            3                               4                  5
 		if ( myDB.RunQuery( "SELECT pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,unix_timestamp(pl_StateTimestamp),pl_RuleType,"
-			//   6           7            8        9       10               11       12           13
-				"pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues "
+			//   6           7            8        9       10               11       12           13             14
+				"pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_RuntimeValue "
 				"FROM plcstates where pl_Operation='%s' order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_StateNo", szOperation) != 0 )
 		{
 			LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
@@ -4224,6 +4295,7 @@ void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 				pPlcStates->GetState(i).SetOrder( (const int)atoi((const char*)row[11]) );
 				pPlcStates->GetState(i).SetDelayTime( (const double)atof((const char*)row[12]) );
 				pPlcStates->GetState(i).SetTimerValues( (const char*)row[13] );
+				pPlcStates->GetState(i).SetRuntimeValue( (const double)atof((const char*)row[14]) );
 				pPlcStates->AddState();
 
 				if ( pPlcStates->GetState(i).GetStateIsActive() )
@@ -4231,11 +4303,11 @@ void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 					pPlcStates->SetActiveStateIdx( i );
 				}
 
-				LogMessage( E_MSG_INFO, "%d: StateNo:%d, Op:%s, State:%s, Active:%d, RuleType:%s, DeviceNo:%d, IOChannel:%d, Value:%.1f, Test:'%s', NextState:%s, Order:%d, Delay:%.1f, TValues:%s",
+				LogMessage( E_MSG_INFO, "%d: StateNo:%d, Op:%s, State:%s, Active:%d, RuleType:%s, DeviceNo:%d, IOChannel:%d, Value:%.1f, Test:'%s', NextState:%s, Order:%d, Delay:%.1f, TValues:%s, RTVal:%.1f",
 						i, pPlcStates->GetState(i).GetStateNo(), pPlcStates->GetState(i).GetOperation(), pPlcStates->GetState(i).GetStateName(),
 						pPlcStates->GetState(i).GetStateIsActive(), pPlcStates->GetState(i).GetRuleType(), pPlcStates->GetState(i).GetDeviceNo(), pPlcStates->GetState(i).GetIOChannel(),
 						pPlcStates->GetState(i).GetValue(), pPlcStates->GetState(i).GetTest(), pPlcStates->GetState(i).GetNextStateName(), pPlcStates->GetState(i).GetOrder(),
-						pPlcStates->GetState(i).GetDelayTime(), pPlcStates->GetState(i).GetTimerValues() );
+						pPlcStates->GetState(i).GetDelayTime(), pPlcStates->GetState(i).GetTimerValues(), pPlcStates->GetState(i).GetRuntimeValue() );
 
 				i += 1;
 			}
@@ -4324,10 +4396,66 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 		int iIOChannel = 0;
 		double dValue = 0;
 		char szEventName[50] = "?";
+		char szWsMsg[50];
 
 		if ( !gbPlcIsActive )
-			LogMessage( E_MSG_INFO, "PLC is active" );
+			LogMessage( E_MSG_INFO, "PLC is active (state idx %d)", pPlcStates->GetActiveStateIdx() );
 		gbPlcIsActive = true;
+
+		if ( gThreadMsgFromWS.GetMessage( szWsMsg, sizeof(szWsMsg)) )
+		{
+			LogMessage( E_MSG_INFO, "PLC WS event: %s", szWsMsg );
+
+			// change to VSD frequency
+			if ( strncmp( szWsMsg, "VSDF", 4 ) == 0 )
+			{	// 012345678901234
+				// VSDF_xx_xx_nn
+				double dVal = atof( &szWsMsg[11] );
+				iDeviceNo = atoi( &szWsMsg[5] );
+				iIOChannel = atoi( &szWsMsg[8] );
+
+				int iOutAddress = m_pmyDevices->GetAddressForDeviceNo( iDeviceNo );
+				int iOutIdx = m_pmyDevices->GetIdxForAddr(iOutAddress);
+
+				int iVsdStateIdx = pPlcStates->GetVsdStateIdx(pPlcStates->GetActiveStateIdx(), iDeviceNo, iIOChannel);
+
+				double dNewVal = pPlcStates->GetState(iVsdStateIdx).GetRuntimeValue();
+				if ( dNewVal >= 0 )
+				{	// forward
+					dNewVal += dVal;
+				}
+				else if ( dVal < 0 )
+				{	// backward, go slower
+					dNewVal += fabs(dVal);
+				}
+				else
+				{	// backward, go faster
+					dNewVal -= fabs(dVal);
+				}
+				if ( dNewVal < -50 )
+					dNewVal = -50;
+				else if ( dNewVal > 50 )
+					dNewVal = 50;
+
+				pPlcStates->GetState(iVsdStateIdx).SetRuntimeValue( dNewVal );
+				LogMessage( E_MSG_INFO, "Setting VSD frequency for %d,%d to %.1f (%.1f) %.1f", iDeviceNo, iIOChannel, dNewVal, pPlcStates->GetState(iVsdStateIdx).GetRuntimeValue(), dVal );
+
+				// send value change to VSD
+				pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
+				HandleVSDOutputDevice( myDB, iOutIdx, iIOChannel, pPlcStates->GetState(iVsdStateIdx).GetRuntimeValue() );
+				pthread_mutex_unlock( &mutexLock[E_LT_MODBUS] );
+
+				// update database with new value
+				myDB.UpdatePlcStateRuntimeValue( pPlcStates->GetState(iVsdStateIdx).GetOperation(), pPlcStates->GetState(iVsdStateIdx).GetStateName(), iDeviceNo, iIOChannel, dNewVal );
+
+				// post new value back to web page
+				PostToWebSocket( E_ET_FREQUENCY, iOutIdx, iIOChannel, dNewVal, false );
+			}
+			else
+			{
+				LogMessage( E_MSG_WARN, "unhandled ws message '%s'", szWsMsg );
+			}
+		}
 
 		iStateNo = myDB.ReadPlcStatesScreenButton();
 		if ( iStateNo == 0 )
@@ -4345,7 +4473,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 			else if ( iDeviceNo != 0 )
 			{
 				LogMessage( E_MSG_WARN, "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
-				gThreadMsg.PutMessage( "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
+				gThreadMsgToWS.PutMessage( "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
 				myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC invalid input event %d,%d,%.1f for state %s", iDeviceNo, iIOChannel, dValue, pPlcStates->GetState(pPlcStates->GetActiveStateIdx()).GetStateName() );
 			}
 		}
@@ -4507,7 +4635,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 			double dDelay = pPlcStates->GetState(idx).GetDelayTime();
 
 			LogMessage( E_MSG_INFO, "%s, StateNo %d, idx %d, goto state '%s', delay %.1f sec", szEventName, iStateNo, idx, pPlcStates->GetState(idx).GetNextStateName(), dDelay );
-			gThreadMsg.PutMessage( "%s, StateNo %d, idx %d, goto state '%s', delay %.1f sec", szEventName, iStateNo, idx, pPlcStates->GetState(idx).GetNextStateName(), dDelay );
+			gThreadMsgToWS.PutMessage( "%s, StateNo %d, idx %d, goto state '%s', delay %.1f sec", szEventName, iStateNo, idx, pPlcStates->GetState(idx).GetNextStateName(), dDelay );
 			myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "%s, StateNo %d, idx %d, goto state '%s', delay %.1f sec", szEventName, iStateNo, idx, pPlcStates->GetState(idx).GetNextStateName(), dDelay );
 
 			// check if this event should be delayed
@@ -4518,7 +4646,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 				{
 					bProcess = false;
 					LogMessage( E_MSG_INFO, "PLC: Event is disabled for another %.1f seconds", pPlcStates->GetActiveState().GetStateTimestampMS() + dDelay - dTimenowMS );
-					gThreadMsg.PutMessage( "PLC: Event is disabled for another %.1f seconds", pPlcStates->GetActiveState().GetStateTimestampMS() + dDelay - dTimenowMS );
+					gThreadMsgToWS.PutMessage( "PLC: Event is disabled for another %.1f seconds", pPlcStates->GetActiveState().GetStateTimestampMS() + dDelay - dTimenowMS );
 					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: Event is disabled for another %.1f seconds", pPlcStates->GetActiveState().GetStateTimestampMS() + dDelay - dTimenowMS );
 				}
 			}
@@ -4578,13 +4706,13 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 					}
 
 					LogMessage( E_MSG_INFO, "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
-					gThreadMsg.PutMessage( "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
+					gThreadMsgToWS.PutMessage( "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
 					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC State %d, Test '%s' %.1f vs %.1f: %s", iStateNo, myState.GetTest(), dValue, myState.GetValue(), (bProcess ? "action" : "skip") );
 				}
 				else
 				{
 					LogMessage( E_MSG_INFO, "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
-					gThreadMsg.PutMessage( "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
+					gThreadMsgToWS.PutMessage( "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
 					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC State %d, No Test: %s", iStateNo, (bProcess ? "action" : "skip") );
 				}
 			}
@@ -4644,14 +4772,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 								bProcess = false;
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition EQ exception (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition EQ exception (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition EQ exception (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition EQ exception (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition EQ passed (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition EQ passed (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition EQ passed (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition EQ passed (%.1f == %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
@@ -4662,14 +4790,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 								bProcess = false;
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition NE exception (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition NE exception (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition NE exception (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition NE exception (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition NE passed (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition NE passed (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition NE passed (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition NE passed (%.1f != %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
@@ -4680,14 +4808,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 								bProcess = false;
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition GE exception (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition GE exception (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition GE exception (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition GE exception (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition GE passed (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition GE passed (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition GE passed (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition GE passed (%.1f >= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
@@ -4698,14 +4826,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 								bProcess = false;
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition GT exception (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition GT exception (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition GT exception (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition GT exception (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition GT passed (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition GT passed (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition GT passed (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition GT passed (%.1f > %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
@@ -4716,14 +4844,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 								bProcess = false;
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition LT exception (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition LT exception (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition LT exception (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition LT exception (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition LT passed (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition LT passed (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition LT passed (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition LT passed (%.1f < %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
@@ -4734,14 +4862,14 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 								bProcess = false;
 
 								LogMessage( E_MSG_INFO, "PLC: initial condition LE exception (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition LE exception (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition LE exception (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition LE exception (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								break;
 							}
 							else
 							{
 								LogMessage( E_MSG_INFO, "PLC: initial condition LE passed (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-								gThreadMsg.PutMessage( "PLC: initial condition LE passed (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+								gThreadMsgToWS.PutMessage( "PLC: initial condition LE passed (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 								myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition LE passed (%.1f <= %.1f), StateNo %d '%s'", pPlcStates->GetState(idx2).GetValue(), dVal, iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							}
 						}
@@ -4750,7 +4878,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 							bProcess = false;
 
 							LogMessage( E_MSG_WARN, "PLC: initial condition unhandled '%s' exception, StateNo %d '%s'", pPlcStates->GetState(idx2).GetTest(), iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
-							gThreadMsg.PutMessage( "PLC: initial condition unhandled '%s' exception, StateNo %d '%s'", pPlcStates->GetState(idx2).GetTest(), iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
+							gThreadMsgToWS.PutMessage( "PLC: initial condition unhandled '%s' exception, StateNo %d '%s'", pPlcStates->GetState(idx2).GetTest(), iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "PLC: initial condition unhandled '%s' exception, StateNo %d '%s'", pPlcStates->GetState(idx2).GetTest(), iStateNo, m_pmyDevices->GetInIOName( iInIdx, iInChannel ) );
 							break;
 						}
@@ -4768,7 +4896,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 				{
 					LogMessage( E_MSG_INFO, "Operation %s: Changed active state from '%s' to '%s'", pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetStateName(),
 							pPlcStates->GetState(idx).GetNextStateName() );
-					gThreadMsg.PutMessage( "Operation %s: Changed active state from '%s' to '%s'", pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetStateName(),
+					gThreadMsgToWS.PutMessage( "Operation %s: Changed active state from '%s' to '%s'", pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetStateName(),
 							pPlcStates->GetState(idx).GetNextStateName() );
 					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "Operation %s: Changed active state from '%s' to '%s'", pPlcStates->GetState(idx).GetOperation(), pPlcStates->GetState(idx).GetStateName(),
 							pPlcStates->GetState(idx).GetNextStateName() );
@@ -4777,7 +4905,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 				{	// error
 					LogMessage( E_MSG_ERROR, "Operation %s: Failed to change active state from '%s' to '%s', rc %d", pPlcStates->GetState(idx).GetOperation(),
 							pPlcStates->GetState(idx).GetStateName(), pPlcStates->GetState(idx).GetNextStateName(), rc );
-					gThreadMsg.PutMessage( "Operation %s: Failed to change active state from '%s' to '%s', rc %d", pPlcStates->GetState(idx).GetOperation(),
+					gThreadMsgToWS.PutMessage( "Operation %s: Failed to change active state from '%s' to '%s', rc %d", pPlcStates->GetState(idx).GetOperation(),
 							pPlcStates->GetState(idx).GetStateName(), pPlcStates->GetState(idx).GetNextStateName(), rc );
 					myDB.LogEvent( -7, 0, E_ET_PLCEVENT, 0, "Operation %s: Failed to change active state from '%s' to '%s', rc %d", pPlcStates->GetState(idx).GetOperation(),
 							pPlcStates->GetState(idx).GetStateName(), pPlcStates->GetState(idx).GetNextStateName(), rc );
@@ -4787,7 +4915,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 
 				// tell the browser to refresh
 				LogMessage( E_MSG_INFO, "ws Refresh" );
-				gThreadMsg.PutMessage( "Refresh" );
+				gThreadMsgToWS.PutMessage( "Refresh" );
 
 				int iInAddress = m_pmyDevices->GetAddressForDeviceNo( pPlcStates->GetState(idx).GetDeviceNo() );
 				int iInIdx = m_pmyDevices->GetIdxForAddr(iInAddress);
@@ -4819,6 +4947,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 						int iOutIdx = m_pmyDevices->GetIdxForAddr(iOutAddress);
 						int iOutChannel = pPlcStates->GetState(idx).GetIOChannel();
 						int iOutOnPeriod = 0;
+						double dVsdFrequency = 0.0;
 
 						enum E_IO_TYPE eSwType = m_pmyDevices->GetInChannelType( iInIdx, iInChannel );
 						if ( eSwType == E_IO_UNUSED )
@@ -4834,8 +4963,8 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 						strcpy( szOutHostname, m_pmyDevices->GetDeviceHostname( iOutIdx ) );
 						strcpy( szOutDeviceName, m_pmyDevices->GetDeviceName( iOutIdx ) );
 
-						LogMessage( E_MSG_INFO, "Operation Output change for '%s' (0x%x->%d,%d), new state %u (%d), on %s", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
-								iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod, szOutHostname );
+						LogMessage( E_MSG_INFO, "Operation Output change for '%s' (0x%x->%d,%d), new state %u (%d,%.1f), on %s", m_pmyDevices->GetOutIOName(iOutIdx, iOutChannel),
+								iOutAddress, iOutIdx, iOutChannel+1, uLinkState, iOutOnPeriod, dVsdFrequency, szOutHostname );
 
 						pthread_mutex_lock( &mutexLock[E_LT_MODBUS] );
 
@@ -4844,7 +4973,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 						default:
 							// TODO: handle ESP devices
 							// TODO: handle sending to another pi
-							ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod );
+							ChangeOutputState( myDB, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod, dVsdFrequency );
 							break;
 
 						case E_DT_VSD_NFLIXEN:
@@ -4875,7 +5004,7 @@ void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )
 			if ( dLastStateWSTime + 0.2 < TimeNowMS() )
 			{
 				int idx = pPlcStates->GetActiveStateIdx();
-				gThreadMsg.PutMessage( "State:%s", pPlcStates->GetState(idx).GetStateName() );
+				gThreadMsgToWS.PutMessage( "State:%s", pPlcStates->GetState(idx).GetStateName() );
 
 				dLastStateWSTime = TimeNowMS();
 			}

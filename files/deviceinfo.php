@@ -985,7 +985,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<input type='text' class='form-control' name='di_MonitorPos2' id='di_MonitorPos2' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
     		    $di_array['di_MonitorPos2'], $tip );
     		printf( "<input type='text' class='form-control' name='di_MonitorPos3' id='di_MonitorPos3' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
-    		    $di_array['di_MonitorPos3']. $tip );
+    		    $di_array['di_MonitorPos3'], $tip );
     		printf( "<input type='text' class='form-control' name='di_MonitorPos4' id='di_MonitorPos4' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
     		    $di_array['di_MonitorPos4'], $tip );
     		printf( "<input type='text' class='form-control' name='di_MonitorPos5' id='di_MonitorPos5' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 

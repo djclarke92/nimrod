@@ -39,6 +39,7 @@ typedef struct {
 	uint8_t uState;
 	enum E_IO_TYPE eSwType;
 	int iOutOnPeriod;
+	double dVsdFrequency;
 } MSG_CHANGE_OUTPUT;
 
 

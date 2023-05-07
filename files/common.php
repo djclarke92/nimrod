@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 120 );
+define( "THIS_DATABASE_VERSION", 122 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -687,6 +687,32 @@ function func_check_database( $db )
         
         $version = func_update_database_version( $db, 120 );
     }
+    
+    if ( $version === false || $version < 121 )
+    {   // we have some work to do
+        $query = "alter table plcstates add pl_RuntimeValue decimal(8,2) not null default 0";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table plcstates", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 121 );
+    }
+
+    if ( $version === false || $version < 122 )
+    {   // we have some work to do
+        $query = "alter table iolinks add il_VsdFrequency decimal(6,1) not null default 0.0";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table iolinks", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 122 );
+    }
 }
 
 function func_db_warning_count( $db )
@@ -1117,7 +1143,7 @@ class MySQLDB
 		$query = sprintf( "select di_DeviceInfoNo,di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,
 				di_Hysteresis,di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,
                 di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo,
-                de_Address,de_Hostname from 
+                de_Address,de_Hostname,de_Type from 
 				deviceinfo,devices where di_DeviceNo=de_DeviceNo order by de_Address,di_IOChannel" ); 
 		$result = $this->RunQuery( $query );
 		while ( $line = mysqli_fetch_row($result) )
@@ -1130,7 +1156,7 @@ class MySQLDB
 							'di_CalcFactor'=>$line[12], 'di_Offset'=>$line[13], 
 							'di_MonitorPos'=>$line[14], 'di_MonitorHi'=>$line[15], 'di_MonitorLo'=>$line[16],
 			                'di_ValueRangeHi'=>$line[17], 'di_ValueRangeLo'=>$line[18],
-			                'de_Address'=>$line[19], 'de_Hostname'=>$line[20] );
+			                'de_Address'=>$line[19], 'de_Hostname'=>$line[20], 'de_Type'=>$line[21] );
 		}
 
 		$this->FreeQuery($result);
@@ -1310,7 +1336,7 @@ class MySQLDB
 	function ReadIOLinksTable()
 	{
 		$info = array();
-		$query = sprintf( "select il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,
+		$query = sprintf( "select il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,il_VsdFrequency,
 				di_IOName,di_OutOnStartTime,di_OutOnPeriod from 
 				iolinks,deviceinfo where il_OutDeviceNo=di_DeviceNo and il_OutChannel=di_IOChannel and di_IOType=%d order by il_OutDeviceNo,il_OutChannel", E_IO_OUTPUT );
 				 
@@ -1319,8 +1345,8 @@ class MySQLDB
 		{
 			$info[] = array( 'il_LinkNo'=>$line[0], 'il_InDeviceNo'=>$line[1], 'il_InChannel'=>$line[2],
 							'il_OutDeviceNo'=>$line[3], 'il_OutChannel'=>$line[4], 'il_EventType'=>$line[5],
-							'il_OnPeriod'=>$line[6], 'di_IOName'=>$line[7],
-			                 'di_OutOnStartTime'=>$line[8], 'di_OutOnPeriod'=>$line[9] );
+							'il_OnPeriod'=>$line[6], 'il_VsdFrequency'=>$line[7], 'di_IOName'=>$line[8], 
+			                 'di_OutOnStartTime'=>$line[9], 'di_OutOnPeriod'=>$line[10] );
 		}
 
 		$this->FreeQuery($result);
@@ -1331,7 +1357,7 @@ class MySQLDB
 	function ReadIOLinks( $de_no )
 	{
 		$info = false;
-		$query = sprintf( "select il_LinkNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod
+		$query = sprintf( "select il_LinkNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,il_VsdFrequency
 				from iolinks where il_InDeviceNo=%d", $de_no );
 
 		$result = $this->RunQuery( $query );
@@ -1339,7 +1365,7 @@ class MySQLDB
 		{
 			$info[] = array( 'il_LinkNo'=>$line[0], 'il_InDeviceNo'=>$line[1], 'il_InChannel'=>$line[2], 
 							'il_OutDeviceNo'=>$line[3], 'il_OutChannel'=>$line[4], 'il_EventType'=>$line[5],
-							'il_OnPeriod'=>$line[6] );
+							'il_OnPeriod'=>$line[6], 'il_VsdFrequency'=>$line[7] );
 		}
 
 		$this->FreeQuery($result);
@@ -1347,19 +1373,19 @@ class MySQLDB
 		return $info;
 	}
 
-	function UpdateIOLinksTable( $il_no, $inde_no, $inch, $outde_no, $outch, $ev, $op )
+	function UpdateIOLinksTable( $il_no, $inde_no, $inch, $outde_no, $outch, $ev, $op, $vf )
 	{
 		if ( $il_no == 0 )
 		{	// insert
-			$query = sprintf( "insert into iolinks (il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod)
-					values(%d,%d,%d,%d,%d,%d)",
-					$inde_no, $inch, $outde_no, $outch, $ev, $op );
+			$query = sprintf( "insert into iolinks (il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,il_VsdFrequency)
+					values(%d,%d,%d,%d,%d,%d,%.1f)",
+					$inde_no, $inch, $outde_no, $outch, $ev, $op, $vf );
 		}
 		else
 		{
 			$query = sprintf( "update iolinks set il_InDeviceNo=%d,il_InChannel=%d,il_OutDeviceNo=%d,il_OutChannel=%d,
-					il_EventType=%d,il_OnPeriod=%d where il_LinkNo=%d",
-					$inde_no, $inch, $outde_no, $outch, $ev, $op, $il_no );
+					il_EventType=%d,il_OnPeriod=%d,il_VsdFrequency=%.1f where il_LinkNo=%d",
+					$inde_no, $inch, $outde_no, $outch, $ev, $op, $vf, $il_no );
 		}
 		$result = $this->RunQuery( $query );
 		if ( mysqli_affected_rows($this->db_link) >= 0 )
@@ -1711,11 +1737,11 @@ class MySQLDB
 	        $list = array();
 	        $query = sprintf( "select ev_Value,ev_Timestamp,unix_timestamp(ev_Timestamp),di_IOName,di_DeviceNo,di_IOChannel,di_AnalogType,
                     di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo from events,deviceinfo
-					where ev_DeviceNo=di_DeviceNo and ev_IOChannel=di_IOChannel and ev_EventType=%d and
+					where ev_DeviceNo=di_DeviceNo and ev_IOChannel=di_IOChannel and di_IOType!=%d and ev_EventType=%d and
 					ev_DeviceNo=%d and ev_IOChannel=%d and
 					ev_Timestamp>=date_sub(from_unixtime(%d), interval %d minute) and ev_Timestamp<=from_unixtime(%d)
 					order by ev_Timestamp",
-	            $event_type, $dd['di_DeviceNo'], $dd['di_IOChannel'], $datetime, 60*$hours, $datetime );
+	            E_IO_OUTPUT, $event_type, $dd['di_DeviceNo'], $dd['di_IOChannel'], $datetime, 60*$hours, $datetime );
 	        
 	        
 	        //echo $query;
@@ -2139,14 +2165,14 @@ class MySQLDB
 	        {  // all operations
         	    $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
         	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder,pl_DelayKey,
-                    pl_InitialState   
+                    pl_InitialState,pl_RuntimeValue   
         	        from plcstates order by pl_Operation,pl_StateName,pl_RuleType desc,pl_Order,pl_NextStateName" );
 	        }
 	        else
 	        {
 	            $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
         	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder,pl_DelayKey,
-                    pl_InitialState  
+                    pl_InitialState,pl_RuntimeValue  
         	        from plcstates where pl_Operation='%s' order by pl_Operation,pl_StateName,pl_RuleType desc,pl_Order,pl_NextStateName",
 	                addslashes($op) );
 	        }
@@ -2155,7 +2181,7 @@ class MySQLDB
 	    {
 	        $query = sprintf( "select pl_StateNo,pl_Operation,pl_StateName,pl_StateIsActive,pl_StateTimestamp,
     	        pl_RuleType,pl_DeviceNo,pl_IOChannel,pl_Value,pl_Test,pl_NextStateName,pl_Order,pl_DelayTime,pl_TimerValues,pl_PrintOrder,pl_DelayKey,
-                pl_InitialState 
+                pl_InitialState,pl_RuntimeValue 
     	        from plcstates where pl_StateNo=%d", $state_no );
 	    }
     	    
@@ -2166,7 +2192,7 @@ class MySQLDB
 	               'pl_StateIsActive'=>$line[3], 'pl_StateTimestamp'=>$line[4], 'pl_RuleType'=>$line[5], 'pl_DeviceNo'=>$line[6],
 	               'pl_IOChannel'=>$line[7], 'pl_Value'=>$line[8], 'pl_Test'=>$line[9], 'pl_NextStateName'=>$line[10], 'pl_Order'=>$line[11],
 	               'pl_DelayTime'=>$line[12], 'pl_TimerValues'=>$line[13], 'pl_PrintOrder'=>$line[14], 'pl_DelayKey'=>$line[15],
-	               'pl_InitialState'=>$line[16] );
+	               'pl_InitialState'=>$line[16], 'pl_RuntimeValue'=>$line[17] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -2242,12 +2268,30 @@ class MySQLDB
 	    
 	    return false;
 	}
+
+	function PlcStateUpdateRuntimeValue( $op, $state, $de_no, $ch_no, $newval )
+	{
+		$query = sprintf( "update plcstates set pl_RuntimeValue=%.1f where pl_Operation='%s' and pl_StateName='%s' and pl_DeviceNo=%d and pl_IOChannel=%d", $newval, addslashes($op), addslashes($state), $de_no, $ch_no );
+		$result = $this->RunQuery( $query );
+		if ( mysqli_affected_rows($this->db_link) >= 0 )
+		{	// success
+			return true;
+		}
+
+		return false;
+	}
 	
 	function PlcSetActiveState( $op )
 	{
 	    $name = $this->PlcGetActiveStateName( $op );
 	    if ( $name === false )
 	    {
+			$query = sprintf( "update plcstates set pl_RuntimeValue=pl_Value where pl_Operation='%s'", addslashes($op) );
+    	    $result = $this->RunQuery( $query );
+    	    if ( mysqli_affected_rows($this->db_link) >= 0 )
+    	    {	// success
+			}
+
     	    $query = sprintf( "update plcstates set pl_StateIsActive='Y' where pl_Operation='%s' and pl_InitialState='Y'", addslashes($op) );
     	
     	    $result = $this->RunQuery( $query );
@@ -3086,7 +3130,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                 $atype = "T";
                 $myarray = $tt;
                 $gname = $tt['di_IOName'];
-				$gid = sprintf( "TT_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
+				$gid = sprintf( "TTI_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                 break;
             }
         }
@@ -3101,7 +3145,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $myarray = $tt;
                     $gname = $tt['di_IOName'];
                     $atype = $tt['di_AnalogType'];  // V or A
-					$gid = sprintf( "VV_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
+					$gid = sprintf( "VVI_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                     break;
                 }
             }
@@ -3117,7 +3161,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $myarray = $tt;
                     $gname = $tt['di_IOName'];
                     $atype = "L";
-					$gid = sprintf( "LL_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
+					$gid = sprintf( "LLI_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                     break;
                 }
             }
@@ -3133,7 +3177,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $myarray = $tt;
                     $gname = $tt['di_IOName'];
                     $atype = "A";
-					$gid = sprintf( "VV_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
+					$gid = sprintf( "VVI_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                     break;
                 }
             }
@@ -3164,6 +3208,7 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $myarray = $tt;
                     $gname = $tt['di_IOName'];
                     $atype = "F";
+					$gid = sprintf( "VVI_%02d_%02d", $gg['di_DeviceNo'], $gg['di_IOChannel'] );
                     break;
                 }
             }
@@ -3563,8 +3608,8 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
             }
             else if ( $dat['atype'] == "F" )
             {
-                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>Hz</div></%s></td></tr></table>",
-                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_frequency($val), $hh );
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b><span id='%s'>%s</span></b>Hz</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], $dat['id'], func_calc_frequency($val), $hh );
             }
             else if ( $dat['atype'] == "Q" )
             {

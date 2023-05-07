@@ -497,11 +497,11 @@ foreach ( $camera_list as $camera )
                 
                 printf( "<tr>" );
                 printf( "<td><b>%s (%d)</b></td>", $dd['de_Name'], $dd['de_Address'] );
-                printf( "<td><img id='ST_%02d_00' src='%s' height='25px'> <img src='%s' height='25px'></td>", $dd['de_DeviceNo'], func_get_device_status_img( $dd['de_Status'] ),
+                printf( "<td><img id='STT_%02d_00' src='%s' height='25px'> <img src='%s' height='25px'></td>", $dd['de_DeviceNo'], func_get_device_status_img( $dd['de_Status'] ),
                     func_get_device_failures_img( $failures ) );
                 printf( "</tr>" );
             }
-            printf( "<tr><td colspan='2' class='small'>%s: <span id='ws_message'></span></td></tr>", ($_SERVER['HTTPS'] != "" ? "wss" : "ws") );
+            printf( "<tr><td colspan='2' class='small'>%s: <span id='ws_message'></span></td></tr>", (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != "" ? "wss" : "ws") );
             ?>
             </table>
             
@@ -536,7 +536,7 @@ foreach ( $camera_list as $camera )
             </thead>
     
     		<?php
-    		$datalist = array( $voltages, $currents, $powers, $frequencies );
+    		$datalist = array( $voltages, $currents, $powers, $frequencies, $torques );
     		foreach ( $datalist as $dtype )
     		{
     		    if ( count($dtype) > 0 )
@@ -564,6 +564,10 @@ foreach ( $camera_list as $camera )
                                 $units = "Hz";
                                 $val = func_calc_frequency( $tt['data'][count($tt['data'])-1]['ev_Value'] );
                                 break;
+                            case 'Q':
+                                $units = "%";
+                                $val = func_calc_torque( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                                break;
                             }
                         }
                         $class = "";
@@ -571,9 +575,9 @@ foreach ( $camera_list as $camera )
                             $class = "table-danger";
                         printf( "<tr class='%s'>", $class );
                     	printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-                    	printf( "<td><span id='VV_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, $units );
+                    	printf( "<td><span id='VVI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, $units );
                     	if ( count($tt['data']) > 0 )
-                        	printf( "<td><div class='timestamp text-nowrap' id='VV_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+                        	printf( "<td><div class='timestamp text-nowrap' id='VVI_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
                     	else
                     	    printf( "<td><div class='timestamp text-nowrap'>?</div></td>" );
                     	
@@ -621,9 +625,9 @@ foreach ( $camera_list as $camera )
                     $class = "table-danger";
                 printf( "<tr class='%s'>", $class );
             	printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-            	printf( "<td><spa. id='LL_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, "%" );
+            	printf( "<td><spa. id='LLI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, "%" );
             	if ( count($tt['data']) > 0 )
-                	printf( "<td><div class='timestamp text-nowrap' id='LL_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+                	printf( "<td><div class='timestamp text-nowrap' id='LLI_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
             	else
             	    printf( "<td><div class='timestamp text-nowrap'>?</div></td>" );
             	
@@ -675,8 +679,8 @@ foreach ( $camera_list as $camera )
             	if ( isset($tt['data'][count($tt['data'])-1]) )
             	{
             		printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-            		printf( "<td><span id='TT_%02d_%02d'>%s</span>&#8451</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val );
-            		printf( "<td><div class='timestamp text-nowrap' id='TT_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+            		printf( "<td><span id='TTI_%02d_%02d'>%s</span>&#8451</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val );
+            		printf( "<td><div class='timestamp text-nowrap' id='TTI_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
             	}
             	else
             	{

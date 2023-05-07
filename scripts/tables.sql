@@ -65,6 +65,7 @@ create TABLE IF NOT EXISTS `iolinks` (
 	`il_OutChannel` int(10) NOT NULL default '0',				# output channel address
 	`il_EventType` int(10) NOT NULL default '0',				# event type: click, dbl click, long press
 	`il_OnPeriod` int(10) NOT NULL default '0',					# output on period if timer triggered
+	`il_VsdFrequency` decimal(6,1) NOT NULL default 0.0,		# vsd frequency in Hz, negative for backward
 	PRIMARY KEY (`il_LinkNo`),
 	KEY `il_link_index` (`il_InDeviceNo`,`il_InChannel`)
 ) ;
@@ -113,7 +114,7 @@ create TABLE IF NOT EXISTS `conditions` (
 	`co_LinkDeviceNo` int(10) NOT NULL default '0',
 	`co_LinkChannel` int(10) NOT NULL default '0',
 	`co_LinkTest` varchar(5) NOT NULL default ' ',				# LT, GT, LE, GE, EQ, NE
-	`co_LinkValue` decimal(6,1) NOT NULL default '0.0', 
+	`co_LinkValue` decimal(6,1) NOT NULL default 0.0, 
 	PRIMARY KEY (`co_ConditionNo`),
 	KEY `co_linkno_index` (`co_LinkNo`)
 ) ;
@@ -153,6 +154,7 @@ create table IF NOT EXISTS `plcstates` (
 	`pl_PrintOrder` int(10) NOT NULL default 0,						# print ordering
 	`pl_DelayKey` varchar(20) NOT NULL default '',					# key for updating DelayTime for multiple records
 	`pl_InitialState` char(1) NOT NULL default 'N',					# this is the starting state
+	`pl_RuntimeValue` decimal(8,2) NOT NULL default 0,				# runtime value which is changed by the plc web page
 	PRIMARY KEY (`pl_StateNo`),
 	KEY `pl_statename_index` (`pl_StateName`)
 ) ;
