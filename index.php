@@ -634,6 +634,16 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
                         } else {
                             //console.log("element not found '"+msg.substr(0,9)+"'");
                         }
+                    } else if ( msg.substr(0,3) == 'CNG' ) {
+                        var val = document.getElementById(msg.substr(0,9));
+                        if ( val != null ) {
+                            if ( msg.substr(10) == '1' )
+                                val.innerHTML = 'Certificate Error';
+                            else
+                                val.innerHTML = '';
+                        } else {
+                            console.log("element not found '"+msg.substr(0,9)+"'");
+                        }
                     }
                 }
             }

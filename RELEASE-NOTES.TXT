@@ -7,11 +7,20 @@
 Nimrod Release Notes and History
 
 
-Version 0.2.5		April 2023
+Version 0.2.5		May 2023
 1.	Bug fixes to the Monitor pages re reviewing past data
 2.	Improved PlcState buttons and layout
-3.	Add websocket realtime updates of monitored voltage, current, temperature and levels on the Home page and Monitor pages
-4.	
+3.	Add websocket realtime updates of monitored voltage, current, temperature and levels on the Home page, Monitor pages and PLC State page
+4.	Add NFlixen VSD control for iolinks and PLC states. VSD frequency can be adjusted during PLC operations
+5.	New column il_VsdFrequency added to the iolinks table to support operating a VSD
+6.	Use secure websockets with your LetsEncrypt certificates, run these commands to give the nimrod user access to the pem and key files.
+	You will need to rerun these commands every 3 months after the cert is renewed.
+	> sudo setfacl -R -m u:nimrod:rX /etc/letsencrypt/{live,archive}/<domain_name>.co.nz
+	> sudo setfacl -m u:nimrod:rX /etc/letsencrypt/{live,archive}
+7.	Add home page warning if the SSL certificate has expired or cannot be loaded.
+8.	When using Letsencrypt certificates and certbot but the nimrod server is not accessible from the internet, manually get the cet using dns-01 challenge
+	sudo certbot -d www.<domain_name>.co.nz --manual --preferred-challenges dns certonly
+9.	
 
 
 Version 0.2.4		February 2023

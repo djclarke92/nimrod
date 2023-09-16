@@ -27,7 +27,7 @@ extern char gszLogDir[256];
 extern char gszProgName[256];
 extern char gszTarFileName[512];
 
-
+const double TimeNowMS();
 void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... );
 bool ReadSiteConfig( const char* szName, char* szValue, size_t uLen );
 time_t ReadDeviceConfig( CMysql& myDB, CDeviceList* pDeviceList, CInOutLinks* pIOLinks, bool bInit );

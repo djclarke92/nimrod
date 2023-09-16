@@ -17,6 +17,7 @@ typedef struct {
 extern RS485_CONNECTION_TYPE gRS485;
 
 extern bool gbTerminateNow;
+extern bool gbCertificateError;
 extern char gszHostname[HOST_NAME_MAX+1];
 
 

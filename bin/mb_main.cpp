@@ -33,6 +33,7 @@ bool gbDebug = false;
 bool gbPlcIsActive = false;
 bool gbTerminateNow = false;
 bool gbReadConfig = false;
+bool gbCertificateError = false;
 char gszHostname[HOST_NAME_MAX+1] = "";
 RS485_CONNECTION_TYPE gRS485 = { 9600, 'N', 8, 1 };
 CThreadMsg gThreadMsgToWS;
@@ -250,6 +251,7 @@ int main( int argc, char *argv[] )
 
 			iCount += 1;
 		}
+
 
 		if ( bRun )
 		{

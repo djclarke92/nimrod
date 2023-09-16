@@ -83,6 +83,7 @@ void CMyDevice::Init()
 		SetCalcFactor( j, 0.0 );
 		SetOffset( j, 0.0 );
 		SetMonitorPos( j, "   " );
+		GetConditionTriggered( j ) = 0;
 		GetAlarmTriggered( j ) = 0;
 		GetHysteresis( j ) = 0;
 		GetMonitorValueLo( j ) = 0.0;
@@ -784,6 +785,8 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 {
 	bool bRc = false;
 	double dVal;
+	time_t timenow;
+	struct tm tmVal;
 
 	if ( iLinkChannel >= 0 && iLinkChannel < MAX_IO_PORTS )
 	{
@@ -791,6 +794,13 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 		{
 		default:
 			LogMessage( E_MSG_ERROR, "LinkTestPassed: unsupported m_eDeviceType" );
+			break;
+
+		case E_DT_TIMER:
+			timenow = time(NULL);
+			localtime_r( &timenow, &tmVal );
+			dVal = (double)(tmVal.tm_hour * 60 + tmVal.tm_min);	// time in minutes
+			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
 			break;
 
 		case E_DT_TEMPERATURE_DS:
@@ -806,11 +816,6 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 		case E_DT_DIGITAL_IO:
 			dVal = m_uNewInput[iLinkChannel];
 			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
-			break;
-
-		case E_DT_TIMER:
-			// TODO
-			LogMessage( E_MSG_WARN, "LinkTestPassed: E_DT_TIMER not implemeneted" );
 			break;
 
 		case E_DT_TEMPERATURE_K1:
@@ -1513,6 +1518,16 @@ uint16_t* CDeviceList::GetNewData( const int idx )
 	}
 
 	return m_Device[0].GetNewData();
+}
+
+bool& CDeviceList::GetConditionTriggered( const int idx, const int j )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetConditionTriggered(j);
+	}
+
+	return m_Device[0].GetConditionTriggered(j);
 }
 
 bool& CDeviceList::GetAlarmTriggered( const int idx, const int j )

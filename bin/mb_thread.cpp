@@ -58,6 +58,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_tLastConfigCheck = time(NULL);
 	m_tLastPlcStatesCheck = 0;
 	m_tLastCameraSnapshot = time(NULL);
+	m_tLastCertificateCheck = 0;
 	m_tCardReaderStart = 0;
 	m_iLevelMessage = 0;
 	m_bSecureWebSocket = true;
@@ -151,7 +152,7 @@ SSL_CTX* CThread::InitClientCTX(void)
     return ctx;
 }
 
-void CThread::LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char* szKeyFile )
+bool CThread::LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char* szKeyFile )
 {
 	bool bRc = true;
 
@@ -182,6 +183,8 @@ void CThread::LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char
     {
     	LogMessage( E_MSG_INFO, "SSL Certificates loaded" );
     }
+
+	return bRc;
 }
 
 void CThread::ShowCerts(SSL* ssl)
@@ -204,6 +207,47 @@ void CThread::ShowCerts(SSL* ssl)
     }
 }
 
+void CThread::CertErrorFlagFile( const bool bError )
+{
+	static bool bLastError = true;
+	char szDir[256] = "";
+	char szFile[512];
+	FILE* pFile = NULL;
+
+	if ( bLastError != bError )
+	{	// something to do
+		bLastError = bError;
+
+		if ( getcwd(szDir, sizeof(szDir)) != NULL )
+		{
+			snprintf( szFile, sizeof(szFile), "%s/nimrod.certng", szDir );
+			if ( bError )
+			{	// create flag file
+				pFile = fopen( szFile, "wt" );
+				if ( pFile != NULL )
+				{
+					fclose( pFile );
+					LogMessage( E_MSG_INFO, "Created '%s'", szFile );
+				}
+				else
+				{
+					LogMessage( E_MSG_WARN, "Failed to create '%s', errno %d", szFile, errno );
+				}
+			}
+			else
+			{	// remove flag file
+				if ( unlink( szFile ) == 0 )
+					LogMessage( E_MSG_INFO, "Removed '%s'", szFile );
+				else
+					LogMessage( E_MSG_WARN, "Failed to remove '%s', errno %d", szFile, errno );
+			}
+		}
+		else
+		{
+			LogMessage( E_MSG_ERROR, "Failed to getcwd(), errno %d", errno );
+		}
+	}
+}
 void CThread::Worker()
 {
 	bool bPrintedTO = false;
@@ -231,7 +275,6 @@ void CThread::Worker()
 
 	LogMessage( E_MSG_INFO, "Thread starting: type %s", CThread::GetThreadType(m_eThreadType) );
 
-
 	myDB.Connect();
 
 	// all threads need ssl clients
@@ -242,7 +285,10 @@ void CThread::Worker()
 		m_sslServerCtx = InitServerCTX();
 
 		// openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout nimrod-cert.key -out nimrod-cert.pem
-		LoadCertificates( m_sslServerCtx, pszCertFile, pszKeyFile );
+		if ( !LoadCertificates( m_sslServerCtx, pszCertFile, pszKeyFile ) )
+		{
+			gbCertificateError = true;
+		}
 
 		CreateListenerSocket();
 
@@ -322,6 +368,16 @@ void CThread::Worker()
 		}
 		else if ( IsTimerThread() )
 		{
+			if ( m_tLastCertificateCheck + 10 < tTimenow )
+			{
+				if ( gbCertificateError )
+				{	// send websocket msg to home page  - but websockets wont work if the cert wasn't loaded
+					PostToWebSocket( E_ET_CERTIFICATENG, 0, 0, 1, true );
+				}
+				CertErrorFlagFile( gbCertificateError );
+				m_tLastCertificateCheck = time(NULL);
+			}
+
 			if ( m_tLastPlcStatesCheck + 2 < tTimenow )
 			{	// load new plcstates settings in timer thread only
 				tUpdated = myDB.ReadPlcStatesUpdateTimeAll();
@@ -481,6 +537,10 @@ void CThread::Worker()
 						{
 							LogMessage( E_MSG_ERROR, "modbus_set_slave(%p) %d failed: %s", ctx, idx, modbus_strerror(errno) );
 						}
+						//else
+						//{
+						//	LogMessage( E_MSG_INFO, "modbus_set_slave(%p) slave is %d", ctx, idx);
+						//}
 						usleep( 15000 );	// was 20000
 
 						iLastAddress = m_pmyDevices->GetAddress(idx);
@@ -609,6 +669,7 @@ void CThread::Worker()
 							{
 								usleep( 10000 );
 							}
+
 							HandleOutputDevice( myDB, ctx, idx, bAllDead );
 
 							CheckForTimerOffTime( myDB, idx );
@@ -2198,6 +2259,11 @@ void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 			// check each output bit
 			for ( i = 0; i < m_pmyDevices->GetNumOutputs(idx); i++ )
 			{
+				if ( m_pmyDevices->GetNumInputs(idx) > 0 && m_pmyDevices->GetNumOutputs(idx) > 0 )
+				{	// read_input_bits() reads the input state not the output state !!
+					break;
+				}
+
 				int iState = 0;
 				if ( m_pmyDevices->GetOutOnStartTime(idx,i) != 0 )
 				{
@@ -2216,21 +2282,23 @@ void CThread::HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 					}
 					else if ( cData[i] != 0 )
 					{	// device bit is on but nimrod thinks it is off
-						LogMessage( E_MSG_INFO, "DIO device '%s' bit %d '%s' is on, nimrod state is %d", m_pmyDevices->GetDeviceName(idx), i, m_pmyDevices->GetOutIOName(idx,i) , iState );
+						LogMessage( E_MSG_INFO, "DIO device '%s' (idx %d) bit %d '%s' is on, nimrod state is %d (start %ld)", m_pmyDevices->GetDeviceName(idx), idx, i, m_pmyDevices->GetOutIOName(idx,i), iState, m_pmyDevices->GetOutOnStartTime(idx,i) );
 
+						usleep( 10000 );
 						if ( m_pmyDevices->WriteOutputBit( idx, i, iState ) )
 						{	// success
-							LogMessage( E_MSG_INFO, "DIO device '%s' channel '%s' state restored to OFF", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetOutIOName(idx,i) );
+							LogMessage( E_MSG_INFO, "DIO device '%s' channel '%s' state restored to OFF (%d,%d)", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetOutIOName(idx,i), idx, i );
 						}
 					}
 					else
 					{	// device bit is off but nimrod thinks it should be on
 						// device has been power cycled
-						LogMessage( E_MSG_INFO, "DIO device '%s' bit %d '%s' is off, nimrod state is %d", m_pmyDevices->GetDeviceName(idx), i, m_pmyDevices->GetOutIOName(idx,i), iState );
+						LogMessage( E_MSG_INFO, "DIO device '%s' (idx %d) bit %d '%s' is off, nimrod state is %d", m_pmyDevices->GetDeviceName(idx), idx, i, m_pmyDevices->GetOutIOName(idx,i), iState );
 
+						usleep( 10000 );
 						if ( m_pmyDevices->WriteOutputBit( idx, i, iState ) )
 						{	// success
-							LogMessage( E_MSG_INFO, "DIO device '%s' channel '%s' state restored to ON", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetOutIOName(idx,i) );
+							LogMessage( E_MSG_INFO, "DIO device '%s' channel '%s' state restored to ON (%d,%d)", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetOutIOName(idx,i), idx, i );
 						}
 					}
 				}
@@ -2452,13 +2520,14 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 				E_IO_TYPE eIOTypeL = E_IO_LEVEL_LOW;
 				E_IO_TYPE eIOTypeH = E_IO_LEVEL_HIGH;
 				E_IO_TYPE eIOTypeHL = E_IO_LEVEL_HIGHLOW;
+				E_IO_TYPE eIOTypeMon = E_IO_LEVEL_MONITOR;
 				char szUnits[10] = "%";
 				char szDesc[20] = "Level";
 				char szName[50] = "HDL Level";
 				double dValOld = m_pmyDevices->CalcLevel(idx,iChannel,false);
 				double dValNew = m_pmyDevices->CalcLevel(idx,iChannel,true);
 
-				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -2559,13 +2628,14 @@ void CThread::HandleRotaryEncoderDevice( CMysql& myDB, modbus_t* ctx, const int 
 				E_IO_TYPE eIOTypeL = E_IO_ROTENC_LOW;
 				E_IO_TYPE eIOTypeH = E_IO_ROTENC_HIGH;
 				E_IO_TYPE eIOTypeHL = E_IO_ROTENC_HIGHLOW;
+				E_IO_TYPE eIOTypeMon = E_IO_ROTENC_MONITOR;
 				char szUnits[10] = "mm";
 				char szDesc[20] = "Distance";
 				char szName[50] = "Rotary Encoder";
 				double dValOld = m_pmyDevices->CalcRotaryEncoderDistance(idx,iChannel,false);
 				double dValNew = m_pmyDevices->CalcRotaryEncoderDistance(idx,iChannel,true);
 
-				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -2685,6 +2755,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 				E_IO_TYPE eIOTypeL = E_IO_VOLT_MONITOR;
 				E_IO_TYPE eIOTypeH = E_IO_VOLT_MONITOR;
 				E_IO_TYPE eIOTypeHL = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeMon = E_IO_VOLT_MONITOR;
 
 				dValOld = m_pmyDevices->CalcVIPFValue(idx,iChannel,false);
 				dValNew = m_pmyDevices->CalcVIPFValue(idx,iChannel,true);
@@ -2702,24 +2773,27 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 					eIOTypeL = E_IO_VOLT_LOW;
 					eIOTypeH = E_IO_VOLT_HIGH;
 					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					eIOTypeMon = E_IO_VOLT_MONITOR;
 					break;
 				case 1:		// current
-					dDiff = 0.1;	// 100mA
+					dDiff = 0.05;	// 100mA
 					eEventType = E_ET_CURRENT;
 					strcpy( szUnits, "A" );
 					strcpy( szDesc, "Current" );
 					eIOTypeL = E_IO_CURRENT_LOW;
 					eIOTypeH = E_IO_CURRENT_HIGH;
 					eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+					eIOTypeMon = E_IO_CURRENT_MONITOR;
 					break;
 				case 2:		// power
 					dDiff = 20;	// 20 Watts
 					eEventType = E_ET_POWER;
 					strcpy( szUnits, "W" );
 					strcpy( szDesc, "Power" );
-					eIOTypeL = E_IO_VOLT_LOW;
-					eIOTypeH = E_IO_VOLT_HIGH;
-					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					eIOTypeL = E_IO_POWER_LOW;
+					eIOTypeH = E_IO_POWER_HIGH;
+					eIOTypeHL = E_IO_POWER_HIGHLOW;
+					eIOTypeMon = E_IO_POWER_MONITOR;
 					break;
 				case 3:		// energy
 					dDiff = 10;	// 10 Wh
@@ -2732,6 +2806,7 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 					eIOTypeL = E_IO_FREQ_LOW;
 					eIOTypeH = E_IO_FREQ_HIGH;
 					eIOTypeHL = E_IO_FREQ_HIGHLOW;
+					eIOTypeMon = E_IO_FREQ_MONITOR;
 					break;
 				case 5:		// power factor
 					dDiff = 0.55;	// 0.05 deg
@@ -2741,10 +2816,11 @@ void CThread::HandleVIPFDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 					eIOTypeL = E_IO_PWRFACT_MONITOR;
 					eIOTypeH = E_IO_PWRFACT_MONITOR;
 					eIOTypeHL = E_IO_PWRFACT_MONITOR;
+					eIOTypeMon = E_IO_PWRFACT_MONITOR;
 					break;
 				}
 
-				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -2870,6 +2946,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 				E_IO_TYPE eIOTypeL = E_IO_VOLT_MONITOR;
 				E_IO_TYPE eIOTypeH = E_IO_VOLT_MONITOR;
 				E_IO_TYPE eIOTypeHL = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeMon = E_IO_VOLT_MONITOR;
 
 				dValOld = m_pmyDevices->CalcVSDNFlixenValue(idx,iChannel,false);
 				dValNew = m_pmyDevices->CalcVSDNFlixenValue(idx,iChannel,true);
@@ -2887,6 +2964,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 					eIOTypeL = E_IO_VOLT_LOW;
 					eIOTypeH = E_IO_VOLT_HIGH;
 					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					eIOTypeMon = E_IO_VOLT_MONITOR;
 					break;
 				case 1:		// current
 					dDiff = 0.1;	// 100mA
@@ -2896,15 +2974,17 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 					eIOTypeL = E_IO_CURRENT_LOW;
 					eIOTypeH = E_IO_CURRENT_HIGH;
 					eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+					eIOTypeMon = E_IO_CURRENT_MONITOR;
 					break;
 				case 2:		// power
 					dDiff = 20;	// 20 Watts
 					eEventType = E_ET_POWER;
 					strcpy( szUnits, "W" );
 					strcpy( szDesc, "Power" );
-					eIOTypeL = E_IO_VOLT_LOW;
-					eIOTypeH = E_IO_VOLT_HIGH;
-					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					eIOTypeL = E_IO_POWER_LOW;
+					eIOTypeH = E_IO_POWER_HIGH;
+					eIOTypeHL = E_IO_POWER_HIGHLOW;
+					eIOTypeMon = E_IO_POWER_MONITOR;
 					break;
 				case 3:		// frequency
 					dDiff = 1;	// 1Hz
@@ -2914,6 +2994,7 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 					eIOTypeL = E_IO_FREQ_LOW;
 					eIOTypeH = E_IO_FREQ_HIGH;
 					eIOTypeHL = E_IO_FREQ_HIGHLOW;
+					eIOTypeMon = E_IO_FREQ_MONITOR;
 					break;
 				case 4:		// torque %
 					dDiff = 2;	//
@@ -2923,10 +3004,11 @@ void CThread::HandleVSDNFlixenDevice( CMysql& myDB, modbus_t* ctx, const int idx
 					eIOTypeL = E_IO_TORQUE_LOW;
 					eIOTypeH = E_IO_TORQUE_HIGH;
 					eIOTypeHL = E_IO_TORQUE_HIGHLOW;
+					eIOTypeMon = E_IO_TORQUE_MONITOR;
 					break;
 				}
 
-				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -3048,6 +3130,7 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 				E_IO_TYPE eIOTypeL = E_IO_VOLT_MONITOR;
 				E_IO_TYPE eIOTypeH = E_IO_VOLT_MONITOR;
 				E_IO_TYPE eIOTypeHL = E_IO_VOLT_MONITOR;
+				E_IO_TYPE eIOTypeMon = E_IO_VOLT_MONITOR;
 
 				dValOld = m_pmyDevices->CalcVSDPwrElectValue(idx,iChannel,false);
 				dValNew = m_pmyDevices->CalcVSDPwrElectValue(idx,iChannel,true);
@@ -3065,6 +3148,7 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 					eIOTypeL = E_IO_VOLT_LOW;
 					eIOTypeH = E_IO_VOLT_HIGH;
 					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					eIOTypeMon = E_IO_VOLT_MONITOR;
 					break;
 				case 1:		// current
 					dDiff = 0.1;	// 100mA
@@ -3074,15 +3158,17 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 					eIOTypeL = E_IO_CURRENT_LOW;
 					eIOTypeH = E_IO_CURRENT_HIGH;
 					eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+					eIOTypeMon = E_IO_CURRENT_MONITOR;
 					break;
 				case 2:		// power
 					dDiff = 20;	// 20 Watts
 					eEventType = E_ET_POWER;
 					strcpy( szUnits, "W" );
 					strcpy( szDesc, "Power" );
-					eIOTypeL = E_IO_VOLT_LOW;
-					eIOTypeH = E_IO_VOLT_HIGH;
-					eIOTypeHL = E_IO_VOLT_HIGHLOW;
+					eIOTypeL = E_IO_POWER_LOW;
+					eIOTypeH = E_IO_POWER_HIGH;
+					eIOTypeHL = E_IO_POWER_HIGHLOW;
+					eIOTypeMon = E_IO_POWER_MONITOR;
 					break;
 				case 3:		// frequency
 					dDiff = 1;	// 1Hz
@@ -3092,6 +3178,7 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 					eIOTypeL = E_IO_FREQ_LOW;
 					eIOTypeH = E_IO_FREQ_HIGH;
 					eIOTypeHL = E_IO_FREQ_HIGHLOW;
+					eIOTypeMon = E_IO_FREQ_MONITOR;
 					break;
 				case 4:		// torque %
 					dDiff = 1;	//
@@ -3101,10 +3188,11 @@ void CThread::HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int id
 					eIOTypeL = E_IO_TORQUE_LOW;
 					eIOTypeH = E_IO_TORQUE_HIGH;
 					eIOTypeHL = E_IO_TORQUE_HIGHLOW;
+					eIOTypeMon = E_IO_TORQUE_MONITOR;
 					break;
 				}
 
-				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -3191,13 +3279,14 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 				E_IO_TYPE eIOTypeL = E_IO_VOLT_LOW;
 				E_IO_TYPE eIOTypeH = E_IO_VOLT_HIGH;
 				E_IO_TYPE eIOTypeHL = E_IO_VOLT_HIGHLOW;
+				E_IO_TYPE eIOTypeMon = E_IO_VOLT_MONITOR;
 				char szUnits[10] = "V";
 				char szDesc[20] = "Voltage";
 				char szName[50] = "Voltage";
 				double dValOld = m_pmyDevices->CalcVoltage(idx,iChannel,false);
 				double dValNew = m_pmyDevices->CalcVoltage(idx,iChannel,true);
 
-				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -3284,13 +3373,14 @@ void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 				E_IO_TYPE eIOTypeL = E_IO_CURRENT_LOW;
 				E_IO_TYPE eIOTypeH = E_IO_CURRENT_HIGH;
 				E_IO_TYPE eIOTypeHL = E_IO_CURRENT_HIGHLOW;
+				E_IO_TYPE eIOTypeMon = E_IO_CURRENT_MONITOR;
 				char szUnits[10] = "A";
 				char szDesc[20] = "Current";
 				char szName[50] = "Current";
 				double dValOld = m_pmyDevices->CalcCurrent(idx,iChannel,false);
 				double dValNew = m_pmyDevices->CalcCurrent(idx,iChannel,true);
 
-				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
 			}	// end for loop
 
 			// break out of retry loop
@@ -3454,17 +3544,18 @@ void CThread::ProcessTemperatureData( CMysql& myDB, const int idx, const int iCh
 	E_IO_TYPE eIOTypeL = E_IO_TEMP_LOW;
 	E_IO_TYPE eIOTypeH = E_IO_TEMP_HIGH;
 	E_IO_TYPE eIOTypeHL = E_IO_TEMP_HIGHLOW;
+	E_IO_TYPE eIOTypeMon = E_IO_TEMP_MONITOR;
 	char szUnits[10] = "degC";
 	char szDesc[20] = "Temperature";
 	char szName[50] = "Temperature";
 	double dValOld = m_pmyDevices->CalcTemperature(idx,iChannel,false);
 	double dValNew = m_pmyDevices->CalcTemperature(idx,iChannel,true);
 
-	HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, szName, szDesc, szUnits, dValNew, dValOld );
+	HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
 }
 
 void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iChannel, const double dDiff, const E_EVENT_TYPE eEventType, const E_IO_TYPE eIOTypeL, const E_IO_TYPE eIOTypeH,
-			const E_IO_TYPE eIOTypeHL, const char* szName, const char* szDesc, const char* szUnits, const double dValNew, const double dValOld )
+			const E_IO_TYPE eIOTypeHL, const E_IO_TYPE eIOTypeMon, const char* szName, const char* szDesc, const char* szUnits, const double dValNew, const double dValOld )
 {
 	bool bLogit;
 
@@ -3532,7 +3623,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			{	// increasing and high trigger reached
 				if ( !m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
 				{	// trigger level reached
-					LogMessage( E_MSG_INFO, "Channel %d '%s' High %s %s %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+					LogMessage( E_MSG_INFO, "Channel %d '%s' High Alarm %s %s %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
 						szName, szDesc, m_pmyDevices->GetMonitorValueHi(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
 
 					m_pmyDevices->GetAlarmTriggered(idx,iChannel) = true;
@@ -3541,16 +3632,16 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 				}
 				else
 				{
-					LogMessage( E_MSG_INFO, "Channel %d '%s' %s %s %.1f %s on device %d already reached", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+					LogMessage( E_MSG_INFO, "Channel %d '%s' %s %s %.1f %s on device %d alarm already reached", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
 														szName, szDesc, m_pmyDevices->GetMonitorValueHi(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
 				}
 			}
 			else if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) &&
-					dValNew <= m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
-					dValOld > m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
+					dValNew < m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
+					dValOld >= m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
 					m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
 			{	// decreasing and hysteresis reached
-				LogMessage( E_MSG_INFO, "Channel %d '%s' High %s %s Hysteresis %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+				LogMessage( E_MSG_INFO, "Channel %d '%s' High Alarm %s %s Hysteresis %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
 						szName, szDesc, m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
 
 				m_pmyDevices->GetAlarmTriggered(idx,iChannel) = false;
@@ -3567,7 +3658,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			{	// decreasing and low trigger reached
 				if ( !m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
 				{	// low distance trigger reached
-					LogMessage( E_MSG_INFO, "Channel %d '%s' Low %s %s %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+					LogMessage( E_MSG_INFO, "Channel %d '%s' Low Alarm %s %s %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
 						szName, szDesc, m_pmyDevices->GetMonitorValueLo(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
 
 					m_pmyDevices->GetAlarmTriggered(idx,iChannel) = true;
@@ -3576,21 +3667,132 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 				}
 				else
 				{
-					LogMessage( E_MSG_INFO, "Channel %d '%s' Low %s %s %.1f %s on device %d already reached", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+					LogMessage( E_MSG_INFO, "Channel %d '%s' Low %s %s %.1f %s on device %d alarm already reached", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
 														szName, szDesc, m_pmyDevices->GetMonitorValueLo(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
 				}
 			}
 			else if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) &&
-					dValNew >= m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
-					dValOld < m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
+					dValNew > m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
+					dValOld <= m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
 					m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
 			{	// increasing and hysteresis reached
-				LogMessage( E_MSG_INFO, "Channel %d '%s' Low %s %s Hysteresis %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+				LogMessage( E_MSG_INFO, "Channel %d '%s' Low Alarm %s %s Hysteresis %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
 						szName, szDesc, m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
 
 				m_pmyDevices->GetAlarmTriggered(idx,iChannel) = false;
 
 				ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, false, eEventType );
+			}
+		}
+
+		// Monitor devices are used in io link conditions
+		if ( m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeMon || m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeMon )
+		{
+			bool bTrigger;
+			double dValue = 0.0;
+			int iFoundIdx = 0;
+			int iIolIdx = 0;
+			char szLinkTest[6];
+
+			// TODO: handle TimeOfDay
+			
+			while ( (iFoundIdx = GetConditionValue( iIolIdx, idx, iChannel, dValue, szLinkTest, sizeof(szLinkTest) )) >= 0 )
+			{
+				bTrigger = false;
+				if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) )
+				{	// increasing value
+					if ( strcmp( szLinkTest, "GE" ) == 0 && dValNew >= dValue && dValOld < dValue )
+					{	// increasing and high trigger reached
+						bTrigger = true;
+					}
+					else if ( strcmp( szLinkTest, "GT" ) == 0 && dValNew > dValue && dValOld <= dValue )
+					{	// increasing and high trigger reached
+						bTrigger = true;
+					}
+					else if ( strcmp( szLinkTest, "EQ" ) == 0 && dValNew == dValue && dValOld < dValue )
+					{	// increasing and high trigger reached
+						bTrigger = true;
+					}
+					else if ( strcmp( szLinkTest, "LE" ) == 0 && dValNew < dValue && dValOld >= dValue )
+					{	// increasing and low hysteresis reached
+						bTrigger = true;
+					}
+					else if ( strcmp( szLinkTest, "LT" ) == 0 && dValNew <= dValue && dValOld > dValue )
+					{	// increasing and low hysteresis reached
+						bTrigger = true;
+					}
+
+					if ( bTrigger )
+					{
+						if ( !m_pmyDevices->GetConditionTriggered(idx,iChannel) && (strcmp( szLinkTest, "GE" ) == 0 || strcmp( szLinkTest, "GT" ) == 0 || strcmp( szLinkTest, "EQ" ) == 0) )
+						{	// trigger level reached
+							LogMessage( E_MSG_INFO, "Channel %d '%s' High Condition %s %s %s %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+								szLinkTest, szName, szDesc, dValue, szUnits, m_pmyDevices->GetAddress(idx) );
+
+							if ( ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, true, eEventType ) )
+							{
+								m_pmyDevices->GetConditionTriggered(idx,iChannel) = true;
+							}
+						}
+						else if ( !m_pmyDevices->GetConditionTriggered(idx,iChannel) && (strcmp( szLinkTest, "LE" ) == 0 || strcmp( szLinkTest, "LT" ) == 0))
+						{	// condition now finished
+							LogMessage( E_MSG_INFO, "Channel %d '%s' Low Condition %s %s %s Hysteresis %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+									szLinkTest, szName, szDesc, dValue - m_pmyDevices->GetHysteresis(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
+
+							m_pmyDevices->GetConditionTriggered(idx,iChannel) = false;
+
+							//ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, false, eEventType );
+						}
+					}
+				}
+				else if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) )
+				{	// decreasing value
+					if ( strcmp( szLinkTest, "GE" ) == 0 && dValNew < dValue && dValOld >= dValue )
+					{	// decreasing and hysteresis reached
+						bTrigger = true;
+					}
+					else if ( strcmp( szLinkTest, "GT" ) == 0 && dValNew <= dValue && dValOld > dValue )
+					{	// decreasing and hysteresis reached
+						bTrigger = true;
+					}
+					else if ( strcmp( szLinkTest, "EQ" ) == 0 && dValNew < dValue && dValOld == dValue )
+					{	// decreasing and hysteresis reached
+						bTrigger = true;
+					}
+					else if ( strcmp( szLinkTest, "LE" ) == 0 && dValNew <= dValue && dValOld > dValue )
+					{	// decreasing and low trigger reached
+						bTrigger = true;
+					}
+					else if ( strcmp( szLinkTest, "LT" ) == 0 && dValNew < dValue && dValOld >= dValue )
+					{	// decreasing and low trigger reached
+						bTrigger = true;
+					}
+
+					if ( bTrigger )
+					{
+						if ( m_pmyDevices->GetConditionTriggered(idx,iChannel) && (strcmp( szLinkTest, "GE" ) == 0 || strcmp( szLinkTest, "GT" ) == 0 || strcmp( szLinkTest, "EQ" ) == 0))
+						{	// condition now finished
+							LogMessage( E_MSG_INFO, "Channel %d '%s' High Condition %s %s %s Hysteresis %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+									szLinkTest, szName, szDesc, dValue - m_pmyDevices->GetHysteresis(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
+
+							m_pmyDevices->GetConditionTriggered(idx,iChannel) = false;
+
+							//ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, false, eEventType );
+						}
+						else if ( !m_pmyDevices->GetConditionTriggered(idx,iChannel) && (strcmp( szLinkTest, "LE" ) == 0 || strcmp( szLinkTest, "LT" ) == 0))
+						{	// trigger level reached
+							LogMessage( E_MSG_INFO, "Channel %d '%s' Low Condition %s %s %s %.1f %s on device %d", iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel),
+								szLinkTest, szName, szDesc, dValue, szUnits, m_pmyDevices->GetAddress(idx) );
+
+							if ( ChangeOutput( myDB, m_pmyDevices->GetAddress(idx), iChannel, true, eEventType ) )
+							{
+								m_pmyDevices->GetConditionTriggered(idx,iChannel) = true;
+							}
+						}
+					}
+				}
+
+				iIolIdx = iFoundIdx+1;
 			}
 		}
 
@@ -3624,11 +3826,58 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 	m_pmyDevices->GetLastData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
 }
 
+// device can be used more than once
+const int CThread::GetConditionValue( const int iIolIdx, const int idx, const int iInChannel, double& dValue, char* szLinkTest, size_t uLinkTestLen )
+{
+	int iFoundIdx = -1;
+	int i;
+	int j;
+	int iInDeviceNo;
+	
+	dValue = 0.0;
+	szLinkTest[0] = '\0';
+
+	iInDeviceNo = m_pmyDevices->GetDeviceNo( idx );
+
+	// check if this device/channel is used in an iolink condition
+	for ( i = iIolIdx; i < MAX_IO_LINKS; i++ )
+	{
+		if ( m_pmyIOLinks->GetInDeviceNo(i) == iInDeviceNo && m_pmyIOLinks->GetInChannel(i) == iInChannel )
+		{
+			for ( j = 0; j < MAX_CONDITIONS; j++ )
+			{
+				if ( m_pmyIOLinks->GetLinkDeviceNo(i,j) == iInDeviceNo && m_pmyIOLinks->GetLinkChannel(i,j) == iInChannel )
+				{
+					iFoundIdx = i;
+					dValue = m_pmyIOLinks->GetLinkValue(i,j);
+					snprintf( szLinkTest, uLinkTestLen, "%s", m_pmyIOLinks->GetLinkTest(i,j));
+					//LogMessage( E_MSG_INFO, "GetConditionValue() for %s %d,%d %.1f", m_pmyDevices->GetInIOName(idx,j), iInDeviceNo, iInChannel+1, dValue );
+					break;
+				}
+				else if ( m_pmyIOLinks->GetLinkDeviceNo(i,j) == 0 )
+				{	// end of list
+					break;
+				}
+			}
+			break;
+		}
+		else if ( m_pmyIOLinks->GetInDeviceNo(i) == 0 )
+		{	// end of list
+			break;
+		}
+	}
+	
+	return iFoundIdx;
+}
+
 void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew, const bool bInput )
 {
 	int iPrec = 1;
+	int iDeviceNo;
 	char szMsg[100];
 	char szType[4] = "";
+
+	iDeviceNo = m_pmyDevices->GetDeviceNo(idx);
 	switch ( eEventType )
 	{
 	default:
@@ -3666,10 +3915,15 @@ void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int id
 		iPrec = 0;
 		snprintf( szType, sizeof(szType), "STT" );
 		break;
+	case E_ET_CERTIFICATENG:
+		iPrec = 0;
+		iDeviceNo = 0;
+		snprintf( szType, sizeof(szType), "CNG" );
+		break;
 	}
 	if ( strlen(szType) > 0 )
 	{
-		snprintf( szMsg, sizeof(szMsg), "%s_%02d_%02d:%.*f", szType, m_pmyDevices->GetDeviceNo(idx), iChannel, iPrec, dValNew );
+		snprintf( szMsg, sizeof(szMsg), "%s_%02d_%02d:%.*f", szType, iDeviceNo, iChannel, iPrec, dValNew );
 		gThreadMsgToWS.PutMessage( szMsg );
 	}
 	else
@@ -3678,8 +3932,9 @@ void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int id
 	}
 }
 
-void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t uState, const enum E_EVENT_TYPE eEvent )
+bool CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t uState, const enum E_EVENT_TYPE eEvent )
 {
+	bool bRc = false;
 	bool bInvertState = false;
 	bool bLinkTestPassed = false;
 	int idx;
@@ -3733,6 +3988,7 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 
 		if ( iOutIdx >= 0 )
 		{
+			bRc = true;
 			if ( !IsMyHostname( szOutHostname ) )
 			{	// output device is on another host
 				SendTcpipChangeOutputToHost( szOutHostname, iInIdx, iInAddress, iInChannel, iOutIdx, iOutAddress, iOutChannel, uLinkState, eSwType, iOutOnPeriod, dOutVsdFrequency);
@@ -3762,6 +4018,8 @@ void CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 
 		usleep( 10000 );	// was 20000
 	}
+
+	return bRc;
 }
 
 void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel,
@@ -3905,7 +4163,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 						if ( !bError )
 						{	// success
-							LogMessage( E_MSG_INFO, "Output state set to %d, period %d sec, %.1f Hz", true, iOutOnPeriod, dOutVsdFrequency );
+							LogMessage( E_MSG_INFO, "Output state set to %d, period %d sec, %.1f Hz (%d,%d)", true, iOutOnPeriod, dOutVsdFrequency, iOutIdx, iOutChannel );
 
 							m_pmyDevices->SetOutOnStartTime( iOutIdx, iOutChannel, tStart );
 							m_pmyDevices->SetOutOnPeriod( iOutIdx, iOutChannel, iOutOnPeriod );
@@ -4004,7 +4262,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 					}
 
 					if ( !bError )
-					{	// success
+					{
 						LogMessage( E_MSG_INFO, "Output set to %d, period %d sec, %.1f Hz", bState, iOutOnPeriod, dOutVsdFrequency );
 
 						if ( bState )

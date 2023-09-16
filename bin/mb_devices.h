@@ -16,7 +16,7 @@
 #define ESP_MSG_SIZE				22
 #define MAX_ESP_QUEUE				4
 #define MAX_DATA_BUFFER				10
-#define MAX_TEMPERATURE_DIFF		5.0		// max temperature value change between readings
+#define MAX_TEMPERATURE_DIFF		10.0		// max temperature value change between readings
 #define MAX_PIN_FAILURES			3
 
 
@@ -83,6 +83,7 @@ enum E_IO_TYPE {
 	E_IO_RPMSPEED_HIGH,		// 42:	torque too high
 	E_IO_RPMSPEED_LOW,		// 43:	torque too low
 	E_IO_RPMSPEED_HIGHLOW,	// 44:	torque too high or too low
+	E_IO_TIMEOFDAY,			// 45:	timeofday
 };
 
 enum E_EVENT_TYPE {
@@ -104,7 +105,8 @@ enum E_EVENT_TYPE {
 	E_ET_CARDREADER,		// 15: 	card reader
 	E_ET_PLCEVENT,			// 16:	plc events
 	E_ET_TORQUE,			// 17:	torque
-	E_ET_RPMSPEED			// 18:	rpm speed
+	E_ET_RPMSPEED,			// 18:	rpm speed
+	E_ET_CERTIFICATENG		// 19:	certificate error
 };
 
 enum E_DEVICE_STATUS {
@@ -229,6 +231,7 @@ private:
 	double m_dLastCheckedTimeMS;
 	enum E_DEVICE_STATUS m_eDeviceStatus;
 	enum E_DEVICE_TYPE m_eDeviceType;
+	bool m_bConditionTriggered[MAX_IO_PORTS];
 	bool m_bAlarmTriggered[MAX_IO_PORTS];
 	int m_iHysteresis[MAX_IO_PORTS];
 	double m_dMonitorHi[MAX_IO_PORTS];
@@ -296,6 +299,7 @@ public:
 	const int GetNumOutputs(){ return m_iNumOutputs; };
 	uint8_t* GetNewInput(){ return m_uNewInput; };
 	uint16_t* GetNewData(){ return m_uNewData; };
+	bool& GetConditionTriggered( const int i ){ return m_bConditionTriggered[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	bool& GetAlarmTriggered( const int i ){ return m_bAlarmTriggered[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	int& GetHysteresis( const int i ){ return m_iHysteresis[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	double& GetMonitorValueLo( const int i ){ return m_dMonitorLo[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
@@ -421,6 +425,7 @@ public:
 	const int GetNumOutputs( const int idx );
 	uint8_t* GetNewInput( const int idx );
 	uint16_t* GetNewData( const int idx );
+	bool& GetConditionTriggered( const int idx, const int j );
 	bool& GetAlarmTriggered( const int idx, const int j );
 	int& GetHysteresis( const int idx, const int j );
 	double& GetMonitorValueLo( const int idx, const int j );

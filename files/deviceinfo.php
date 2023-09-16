@@ -508,11 +508,11 @@ else if (isset($_POST['NewDeviceInfo']) || isset($_POST['UpdateDeviceInfo']))
     {
         $di_array['error_msg'] = sprintf("Device info already exists for address %d channel %d", $di_array['de_Address'], $di_array['di_IOChannel'] + 1);
     } 
-    else if ($device !== false && $di_array['di_IOChannel'] >= $device['de_NumInputs'] && func_get_dir($info['di_IOType'], $dir) == 0) 
+    else if ($device !== false && $di_array['di_IOChannel'] >= $device['de_NumInputs'] && func_get_dir($di_array['di_IOType'], $dir) == 0) 
     {
         $di_array['error_msg'] = sprintf("Device %s on address %d only has %d input channels", $device['de_Name'], $device['de_Address'], $device['de_NumInputs']);
     } 
-    else if ($device !== false && $di_array['di_IOChannel'] >= $device['de_NumOutputs'] && func_get_dir($info['di_IOType'], $dir) == 1) 
+    else if ($device !== false && $di_array['di_IOChannel'] >= $device['de_NumOutputs'] && func_get_dir($di_array['di_IOType'], $dir) == 1) 
     {
         $di_array['error_msg'] = sprintf("Device %s on address %d only has %d output channels", $device['de_Name'], $device['de_Address'], $device['de_NumInputs']);
     } 

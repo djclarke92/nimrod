@@ -225,6 +225,7 @@ private:
 	time_t m_tLastCameraSnapshot;
 	time_t m_tThreadStartTime;
 	time_t m_tCardReaderStart;
+	time_t m_tLastCertificateCheck;
 	struct in_addr m_xClientInAddr[MAX_TCPIP_SOCKETS];
 	SSL* m_xClientSSL[MAX_TCPIP_SOCKETS];
 	CDeviceList* m_pmyDevices;
@@ -240,7 +241,7 @@ public:
 	~CThread();
 
 	void Worker();
-	void ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t iState, const enum E_EVENT_TYPE eEvent );
+	bool ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t iState, const enum E_EVENT_TYPE eEvent );
 	void ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel, const uint8_t uState,
 			const enum E_IO_TYPE eSwType, int iOutOnPeriod, const double dOutVsdFrequency );
 	const bool ClickFileExists( CMysql& myDB, const int iDeviceNo, const int iChannel );
@@ -251,13 +252,14 @@ public:
 	const bool IsMyComPort( const char* szPort );
 	SSL_CTX* InitServerCTX(void);
 	SSL_CTX* InitClientCTX(void);
-	void LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char* szKeyFile );
+	bool LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char* szKeyFile );
 	void ShowCerts( SSL* ssl );
 	void LogSSLError();
 	void CreateListenerSocket();
 	void AcceptTcpipClient();
 	void CloseSocket( int& fd, const int fdx );
 	void SendEspMessage();
+	void CertErrorFlagFile( const bool bError );
 	void ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB );
 	size_t ReadTcpipMsgBytes( SSL* ssl, const int newfd, NIMROD_MSGBUF_TYPE& msgBuf, const bool bBlock );
 	bool SendTcpipChangeOutputToHost( const char* szHostname, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel,
@@ -285,7 +287,8 @@ public:
 	void ProcessTemperatureData( CMysql& myDB, const int idx, const int i );
 	void ProcessEspTemperatureEvent( CMysql& myDB, const char* szEspName, const int iChannel, const double dValue );
 	void HandleChannelThresholds( CMysql& myDB, const int idx, const int iChannel, const double dDiff, const E_EVENT_TYPE eEventType, const E_IO_TYPE eIOTypeL, const E_IO_TYPE eIOTypeH,
-			const E_IO_TYPE eIOTypeHL, const char* szName, const char* szDesc, const char* szUnits, const double dValNew, const double dValOld );
+			const E_IO_TYPE eIOTypeHL, const E_IO_TYPE eIOTypeMon, const char* szName, const char* szDesc, const char* szUnits, const double dValNew, const double dValOld );
+	const int GetConditionValue( const int iIoIdx, const int idx, const int iChannel, double& dValue, char* szLinkTest, size_t uLinkTestLen );
 
 	void PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew, const bool bInput );
 	void websocket_init();

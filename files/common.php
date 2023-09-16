@@ -108,6 +108,7 @@ define( "E_IO_RPMSPEED_MONITOR", 41 );  // 41:  rpm speed monitor only
 define( "E_IO_RPMSPEED_HIGH", 42 );     // 42:  rpm speed too high
 define( "E_IO_RPMSPEED_LOW", 43 );      // 43:  rpm speed too low
 define( "E_IO_RPMSPEED_HIGHLOW", 44 );  // 44:  rpm speed too high or too low
+define( "E_IO_TIMEOFDAY", 45 );  		// 45:  timeofday
 $_SESSION['E_IOD'] = array();
 $_SESSION['E_IOD'][] = "Unused";
 $_SESSION['E_IOD'][] = "Manual On Off Switch";
@@ -154,6 +155,7 @@ $_SESSION['E_IOD'][] = "RPM Speed Monitor Only";
 $_SESSION['E_IOD'][] = "RPM Speed Too High";
 $_SESSION['E_IOD'][] = "RPM Speed Too Low";
 $_SESSION['E_IOD'][] = "RPM Speed Too High or Low";
+$_SESSION['E_IOD'][] = "TimeOfDay";
 
 define( "E_ET_CLICK", 0 );			// 0: single click
 define( "E_ET_DBLCLICK", 1 );		// 1: double click
@@ -174,6 +176,7 @@ define( "E_ET_CARDREADER", 15 );    // 15: card reader
 define( "E_ET_PLCEVENT", 16 );      // 16: plc event
 define( "E_ET_TORQUE", 17 );        // 17: torque
 define( "E_ET_RPMSPEED", 18 );      // 18: rpm speed
+define( "E_ET_CERTIFICATENG", 19 ); // 19: certifgicate ng
 $_SESSION['E_ETD'] = array();
 $_SESSION['E_ETD'][] = "Click";
 $_SESSION['E_ETD'][] = "Dbl CLick";
@@ -194,6 +197,7 @@ $_SESSION['E_ETD'][] = "Card Reader";
 $_SESSION['E_ETD'][] = "PLC Event";
 $_SESSION['E_ETD'][] = "Torque %";
 $_SESSION['E_ETD'][] = "RPM Speed";
+$_SESSION['E_ETD'][] = "Certificate NG";
 
 define( "E_DS_ALIVE", 0 );			// 0:	alive
 define( "E_DSD_ALIVE", "Alive" );	
@@ -1451,7 +1455,21 @@ class MySQLDB
 	    
 	    return $info;
 	}
-	
+
+	function GetTimerDeviceNo()
+	{
+		$info = 0;
+
+		$query = sprintf( "select de_DeviceNo from devices where de_Name='TIMER'" );
+	    $result = $this->RunQuery( $query );
+	    if ( $line = mysqli_fetch_row($result) )
+	    {
+			$info = $line[0];
+		}
+
+		return $info;
+	}
+
 	function ConditionExists( $link_no, $device_no, $channel_no )
 	{
 	    $exists = false;

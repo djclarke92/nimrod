@@ -403,7 +403,7 @@ $done = false;
 foreach ( $devices as $device )
 {
     $dno = $device['de_DeviceNo'];
-    for ( $cno = 1; $cno <=16; $cno++ )
+    for ( $cno = 0; $cno <=15; $cno++ )
     {
         $wc = sprintf( "WebClick%02d%02d", $dno, $cno );
         if ( isset($_GET[$wc]) )
@@ -912,7 +912,13 @@ foreach ( $camera_list as $camera )
             	printf( "<td colspan='2'>No recent failures</td>" );
             	printf( "</tr>" );
             }
-            ?>
+            printf( "<tr>" );
+            $msg = "";
+            if ( file_exists("nimrod.certng") )
+                $msg = "Certificate Error";
+            printf( "<td colspan='2'><span id='CNG_00_00' class='text-danger'>%s&nbsp;</span></td>", $msg );
+            printf( "</tr>" );
+        ?>
             
             </table>
         </div>
