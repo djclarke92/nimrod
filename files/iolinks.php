@@ -431,7 +431,7 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     </div>
 
     <?php
-    if ( $il_array['il_LinkNo'] != "" || $new_iolink )
+    if ( $il_array['il_LinkNo'] != 0 || $new_iolink )
     {
     ?>
 

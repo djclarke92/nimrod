@@ -213,6 +213,7 @@ void CThread::CertErrorFlagFile( const bool bError )
 	char szDir[256] = "";
 	char szFile[512];
 	FILE* pFile = NULL;
+	struct stat statbuf;
 
 	if ( bLastError != bError )
 	{	// something to do
@@ -234,7 +235,7 @@ void CThread::CertErrorFlagFile( const bool bError )
 					LogMessage( E_MSG_WARN, "Failed to create '%s', errno %d", szFile, errno );
 				}
 			}
-			else
+			else if ( stat( szFile, &statbuf ) == 0 )
 			{	// remove flag file
 				if ( unlink( szFile ) == 0 )
 					LogMessage( E_MSG_INFO, "Removed '%s'", szFile );
@@ -248,6 +249,50 @@ void CThread::CertErrorFlagFile( const bool bError )
 		}
 	}
 }
+
+void CThread::CertAgingFlagFile( const bool bError )
+{
+	static bool bLastError = true;
+	char szDir[256] = "";
+	char szFile[512];
+	FILE* pFile = NULL;
+	struct stat statbuf;
+
+	if ( bLastError != bError )
+	{	// something to do
+		bLastError = bError;
+
+		if ( getcwd(szDir, sizeof(szDir)) != NULL )
+		{
+			snprintf( szFile, sizeof(szFile), "%s/nimrod.certag", szDir );
+			if ( bError )
+			{	// create flag file
+				pFile = fopen( szFile, "wt" );
+				if ( pFile != NULL )
+				{
+					fclose( pFile );
+					LogMessage( E_MSG_INFO, "Created '%s'", szFile );
+				}
+				else
+				{
+					LogMessage( E_MSG_WARN, "Failed to create '%s', errno %d", szFile, errno );
+				}
+			}
+			else if ( stat( szFile, &statbuf ) == 0 )
+			{	// remove flag file
+				if ( unlink( szFile ) == 0 )
+					LogMessage( E_MSG_INFO, "Removed '%s'", szFile );
+				else
+					LogMessage( E_MSG_WARN, "Failed to remove '%s', errno %d", szFile, errno );
+			}
+		}
+		else
+		{
+			LogMessage( E_MSG_ERROR, "Failed to getcwd(), errno %d", errno );
+		}
+	}
+}
+
 void CThread::Worker()
 {
 	bool bPrintedTO = false;
@@ -257,12 +302,14 @@ void CThread::Worker()
 	int iDayMinutes;
 	int iLastDayMinutes = -1;
 	int iAllDeadCheckPeriod = 10;
+	int iPlcStateReadCount = 0;
 	time_t tTimenow;
 	time_t tUpdated;
 	time_t tAllDeadStart = 0;
 	time_t tLastLevelK02Prompt = 0;
 	time_t tLastTimerDeviceCheck = 0;
 	time_t tLastCurlCheckTime = 0;
+	time_t tCertAgingStartTime = 0;
 	const char* pszCertFile = "/home/nimrod/nimrod-cert.pem";
 	const char* pszKeyFile = "/home/nimrod/nimrod-cert.key";
 	struct tm tm;
@@ -327,10 +374,11 @@ void CThread::Worker()
 		websocket_init();
 	}
 
+
 	while ( !gbTerminateNow )
 	{
 		bool bAllDead = true;
-		int iMax = MAX_DEVICES;
+	int iMax = MAX_DEVICES;
 
 		tTimenow = time(NULL);
 		localtime_r( &tTimenow, &tm );
@@ -349,12 +397,15 @@ void CThread::Worker()
 		}
 
 		if ( IsWebsocketThread() )
-		{
-			char szMsg[100] = "";
+		{	// the lws_service() function can block for a few seconds
+			char szMsg[256] = "";
 
-			gThreadMsgToWS.GetMessage( szMsg, sizeof(szMsg) );
-
-			websocket_process( szMsg );
+			if ( gThreadMsgToWS.GetMessage( szMsg, sizeof(szMsg) ) )
+			{
+				//LogMessage( E_MSG_INFO, "WS msg '%s'", szMsg );
+				websocket_addmessage( szMsg );
+			}
+			websocket_process();
 
 			usleep( 10000 );
 		}
@@ -371,15 +422,37 @@ void CThread::Worker()
 			if ( m_tLastCertificateCheck + 10 < tTimenow )
 			{
 				if ( gbCertificateError )
-				{	// send websocket msg to home page  - but websockets wont work if the cert wasn't loaded
+				{	// send websocket msg to home page - but websockets wont work if the cert wasn't loaded
 					PostToWebSocket( E_ET_CERTIFICATENG, 0, 0, 1, true );
 				}
 				CertErrorFlagFile( gbCertificateError );
+
+				if ( gbCertificateAging )
+				{
+					if ( tCertAgingStartTime == 0 )
+					{
+						tCertAgingStartTime =  time(NULL);
+					}
+					else if ( time(NULL) - tCertAgingStartTime >= 60*60*4 )
+					{	// clear this flag every 4 hours
+						gbCertificateAging = false;
+					}
+					PostToWebSocket( E_ET_CERTIFICATEAG, 0, 0, 1, gbCertificateAging );
+				}
+				CertAgingFlagFile( gbCertificateAging );
+
 				m_tLastCertificateCheck = time(NULL);
 			}
 
 			if ( m_tLastPlcStatesCheck + 2 < tTimenow )
 			{	// load new plcstates settings in timer thread only
+				if ( iPlcStateReadCount == 0 )
+				{	// first time after startup - clear the active state
+					LogMessage( E_MSG_INFO, "Clearing PlcActiveState at startup" );
+					ClearPlcActiveState( myDB );
+				}
+
+				iPlcStateReadCount += 1;
 				tUpdated = myDB.ReadPlcStatesUpdateTimeAll();
 				if ( tUpdated > m_tPlcStatesTimeAll )
 				{	// config has changed
@@ -387,7 +460,10 @@ void CThread::Worker()
 					m_tPlcStatesTimeAll = time(NULL);
 					m_tLastPlcStatesCheck = time(NULL);
 
-					ReadPlcStatesTableAll( myDB, m_pmyPlcStates );
+					if ( ReadPlcStatesTableAll( myDB, m_pmyPlcStates ) != 0 )
+					{	// plc state index is bad, clear everything
+						ClearPlcActiveState( myDB );
+					}
 				}
 
 				tUpdated = myDB.ReadPlcStatesUpdateTimeDelayTime();
@@ -483,6 +559,7 @@ void CThread::Worker()
 				tLastCurlCheckTime = time(NULL);
 			}
 
+
 			ProcessPlcStates( myDB, m_pmyPlcStates );
 
 			usleep( 100000 );	// 100 msec sleep
@@ -491,16 +568,23 @@ void CThread::Worker()
 		{	// com port thread (multiple threads !)
 			for ( idx = 0; idx < iMax && !gbTerminateNow; idx++ )
 			{
-				if ( !IsMyHostname( m_pmyDevices->GetDeviceHostname(idx) ) )
+				if ( strlen(m_pmyDevices->GetDeviceName(idx)) == 0  )
+				{	// end of list
+					break;
+				}
+				else if ( !IsMyHostname( m_pmyDevices->GetDeviceHostname(idx) ) )
 				{	// device is not on this host
+					//LogMessage( E_MSG_INFO, "Bad host %s", m_pmyDevices->GetDeviceName(idx));
 					continue;
 				}
-				else if ( !IsMyComPort( m_pmyDevices->GetComPort(idx) ) )
+				else if ( !IsMyComPort( m_pmyDevices->GetComPort(idx) ) && !IsVirtualComPort( m_pmyDevices->GetComPort(idx) ))
 				{	// not this thread's com port
+					//LogMessage( E_MSG_INFO, "Bad com port %s", m_pmyDevices->GetDeviceName(idx));
 					continue;
 				}
 				else if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED && (m_pmyDevices->GetTimeoutCount(idx) % 100) != 0 )
 				{	// skip this device
+					//LogMessage( E_MSG_INFO, "Bad dead %s", m_pmyDevices->GetDeviceName(idx));
 					m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD );
 					continue;
 				}
@@ -519,8 +603,9 @@ void CThread::Worker()
 				{
 					HandleCardReaderDevice( myDB, idx, bAllDead );
 				}
-				else if ( m_pmyDevices->GetContext(idx) == NULL )
+				else if ( m_pmyDevices->GetContext(idx) == NULL && !IsVirtualComPort(m_pmyDevices->GetComPort(idx)) )
 				{	// com port for this context does not exist
+					//LogMessage( E_MSG_INFO, "Bad ctx %s", m_pmyDevices->GetDeviceName(idx));
 					continue;
 				}
 				else if ( m_pmyDevices->GetAddress(idx) > 0 )
@@ -533,7 +618,7 @@ void CThread::Worker()
 					//LogMessage( E_MSG_INFO, "SetSlave to %d", m_pmyDevices->GetAddress(idx) );
 					if ( iLastAddress != m_pmyDevices->GetAddress(idx) )
 					{
-						if ( modbus_set_slave( ctx, m_pmyDevices->GetAddress(idx) ) == -1 )
+						if ( ctx != NULL && modbus_set_slave( ctx, m_pmyDevices->GetAddress(idx) ) == -1 )
 						{
 							LogMessage( E_MSG_ERROR, "modbus_set_slave(%p) %d failed: %s", ctx, idx, modbus_strerror(errno) );
 						}
@@ -656,6 +741,18 @@ void CThread::Worker()
 								bAllDead = false;
 						}
 					}
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_SHT40_TH )
+					{
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + SHT_CHECK_PERIOD <= TimeNowMS() )
+						{	// only check SHT devices every 1 seconds
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
+
+							HandleSHTDevice( myDB, ctx, idx, bAllDead );
+
+							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
+								bAllDead = false;
+						}
+					}
 					else
 					{
 						if ( m_pmyDevices->GetNumInputs(idx) > 0 )
@@ -713,6 +810,7 @@ void CThread::Worker()
 
 	if ( IsWebsocketThread() )
 	{
+		LogMessage( E_MSG_INFO, "websocket lws destroy");
 		websocket_destroy();
 	}
 
@@ -1282,6 +1380,13 @@ const bool CThread::IsMyComPort( const char* szPort )
 		return false;
 }
 
+const bool CThread::IsVirtualComPort( const char* szPort )
+{
+	if ( strcasecmp( szPort, "Virtual" ) == 0 )
+		return true;
+
+	return false;
+}
 void CThread::CreateListenerSocket()
 {
 	struct sockaddr_in serv_addr;
@@ -2320,7 +2425,11 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 	addr = 0;
 	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
 	{
-		rc = modbus_read_input_bits( ctx, addr, m_pmyDevices->GetNumInputs(idx), m_pmyDevices->GetNewInput(idx) );
+		rc = 0;
+		if ( ctx != NULL )
+		{
+			rc = modbus_read_input_bits( ctx, addr, m_pmyDevices->GetNumInputs(idx), m_pmyDevices->GetNewInput(idx) );
+		}
 		if ( rc == -1 )
 		{
 			err = errno;
@@ -2366,6 +2475,17 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 				LogMessage( E_MSG_INFO, "modbus_read_input_bits() retry successful, loop %d", iLoop );
 			}
 
+			if ( ctx == NULL && m_pmyDevices->GetDeviceStatus(idx) != E_DS_ALIVE )
+			{
+				LogMessage( E_MSG_INFO, "DIO device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
+				}
+			}
+
 			if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
 			{
 				LogMessage( E_MSG_INFO, "DIO device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
@@ -2387,9 +2507,12 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 				}
 
 				// check for click file from web gui
-				if ( ClickFileExists( myDB, m_pmyDevices->GetDeviceNo(idx), i ) )
+				bool bWebClick = false;
+				if ( WebClickExists( myDB, m_pmyDevices->GetDeviceNo(idx), i ) )
 				{
+					bWebClick = true;
 					m_pmyDevices->GetNewInput( idx, i ) = true;
+					LogMessage( E_MSG_INFO, "WebClick from %d,%d", idx, i );
 				}
 
 				if ( m_pmyDevices->GetNewInput( idx, i ) != m_pmyDevices->GetLastInput( idx, i ) )
@@ -2433,6 +2556,12 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 					if ( m_pmyDevices->GetNewInput( idx, i )  == true && m_pmyPlcStates->FindInputDevice( m_pmyDevices->GetDeviceNo(idx), i ) )
 					{	// only pass the switch down event not the release
 						m_pmyPlcStates->AddInputEvent( m_pmyDevices->GetDeviceNo(idx), i, 1 );
+					}
+
+					if ( bWebClick )
+					{
+						m_pmyDevices->GetNewInput( idx, i ) = false;
+//						m_pmyDevices->GetLastInput( idx, i ) = false;
 					}
 				}
 			}
@@ -3295,6 +3424,127 @@ void CThread::HandleVoltageDevice( CMysql& myDB, modbus_t* ctx, const int idx, b
 	}
 }
 
+void CThread::HandleSHTDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
+{
+	int iChannel;
+	int rc;
+	int err;
+	int addr;
+	int iLoop;
+	int iRetry = 3;
+
+	addr = 0x0001;
+	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
+	{
+		rc = modbus_read_input_registers( ctx, addr, m_pmyDevices->GetNumInputs(idx), m_pmyDevices->GetNewData(idx) );
+		if ( rc == -1 )
+		{	// failed
+			err = errno;
+			if ( iLoop+1 >= iRetry )
+			{	// give up
+				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
+				{	// device has just failed
+					LogMessage( E_MSG_INFO, "Temp/Humidity device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "Voltage device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+				}
+
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
+				}
+
+				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
+				{
+					LogMessage( E_MSG_WARN, "modbus_read_input_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+				}
+			}
+			else
+			{	// retry
+				LogMessage( E_MSG_WARN, "modbus_read_input_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d retry", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+
+				usleep( 10000 + (10000*iLoop) );
+
+				if ( modbus_set_slave( ctx, m_pmyDevices->GetAddress(idx) ) == -1 )
+				{
+					LogMessage( E_MSG_ERROR, "modbus_set_slave(%p) %d failed: %s", ctx, idx, modbus_strerror(errno) );
+				}
+
+				usleep( 10000 + (10000*iLoop) );
+			}
+		}
+		else
+		{	// success
+			bAllDead = false;
+			if ( iLoop > 0 )
+			{
+				LogMessage( E_MSG_INFO, "modbus_read_registers() retry successful, loop %d", iLoop );
+			}
+
+			if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+			{
+				LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			}
+
+			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+			{
+				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
+			}
+
+			for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
+			{
+				double dDiff;
+				double dValNew;
+				double dValOld;
+				char szUnits[10] = "degC";
+				char szDesc[20] = "?";
+				char szName[50] = "Temp/Humidity";
+				E_EVENT_TYPE eEventType = E_ET_TEMPERATURE;
+				E_IO_TYPE eIOTypeL = E_IO_TEMP_MONITOR;
+				E_IO_TYPE eIOTypeH = E_IO_TEMP_MONITOR;
+				E_IO_TYPE eIOTypeHL = E_IO_TEMP_MONITOR;
+				E_IO_TYPE eIOTypeMon = E_IO_TEMP_MONITOR;
+
+				dValOld = m_pmyDevices->CalcTHValue(idx,iChannel,false);
+				dValNew = m_pmyDevices->CalcTHValue(idx,iChannel,true);
+				switch ( iChannel )
+				{
+				default:
+					dDiff = 1;
+					dValNew = 0;
+					break;
+				case 0:		// temperature
+					dDiff = 0.5;	// 0.5 degC
+					eEventType = E_ET_TEMPERATURE;
+					strcpy( szUnits, "degC" );
+					strcpy( szDesc, "Temperature" );
+					eIOTypeL = E_IO_TEMP_LOW;
+					eIOTypeH = E_IO_TEMP_HIGH;
+					eIOTypeHL = E_IO_TEMP_HIGHLOW;
+					eIOTypeMon = E_IO_TEMP_MONITOR;
+					break;
+				case 1:		// humidity
+					dDiff = 0.5;	// percent
+					eEventType = E_ET_HUMIDITY;
+					strcpy( szUnits, "%" );
+					strcpy( szDesc, "Humidity" );
+					eIOTypeL = E_IO_HUMIDITY_LOW;
+					eIOTypeH = E_IO_HUMIDITY_HIGH;
+					eIOTypeHL = E_IO_HUMIDITY_HIGHLOW;
+					eIOTypeMon = E_IO_HUMIDITY_MONITOR;
+					break;
+				}
+
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
+			}	// end for loop
+
+			// break out of retry loop
+			break;
+		}
+	}
+}
+
 // HDHK 8Ch current meter
 void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
@@ -3904,6 +4154,9 @@ void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int id
 	case E_ET_TEMPERATURE:
 		snprintf( szType, sizeof(szType), "TT%s", (bInput ? "I" : "O"));
 		break;
+	case E_ET_HUMIDITY:
+		snprintf( szType, sizeof(szType), "TT%s", (bInput ? "I" : "O"));
+		break;
 	case E_ET_LEVEL:
 		snprintf( szType, sizeof(szType), "LL%s", (bInput ? "I" : "O"));
 		break;
@@ -3920,6 +4173,11 @@ void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int id
 		iDeviceNo = 0;
 		snprintf( szType, sizeof(szType), "CNG" );
 		break;
+	case E_ET_CERTIFICATEAG:
+		iPrec = 0;
+		iDeviceNo = 0;
+		snprintf( szType, sizeof(szType), "CAG" );
+		break;
 	}
 	if ( strlen(szType) > 0 )
 	{
@@ -3928,7 +4186,7 @@ void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int id
 	}
 	else
 	{
-		LogMessage( E_MSG_INFO, "Unhandled websocket msg for type %d", eEventType);
+		LogMessage( E_MSG_INFO, "Unhandled websocket msg for E_ET type %d", eEventType);
 	}
 }
 
@@ -4370,7 +4628,7 @@ void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAd
 
 }
 
-const bool CThread::ClickFileExists( CMysql& myDB, const int iDeviceNo, const int iChannel )
+const bool CThread::WebClickExists( CMysql& myDB, const int iDeviceNo, const int iChannel )
 {
 	bool bRc = false;
 
@@ -4493,10 +4751,22 @@ void CThread::ReadCameraRecords( CMysql& myDB, CCameraList& CameraList )
 	LogMessage( E_MSG_INFO, "Read %d cameras", CameraList.GetNumCameras() );
 }
 
+void CThread::ClearPlcActiveState( CMysql& myDB )
+{
+	if ( myDB.RunQuery( "update plcstates set pl_StateIsActive='N'") )
+	{
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	else
+	{
+		LogMessage( E_MSG_INFO, "PLC active state cleared" );
+	}
+}
 
-void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
+int CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 {
 	int i;
+	int iRet = 1;	// plc state error
 	int iOps = 0;
 	int iNumFields;
 	char szOperation[100] = "";
@@ -4558,6 +4828,7 @@ void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 
 				if ( pPlcStates->GetState(i).GetStateIsActive() )
 				{
+					iRet = 0;	// all ok
 					pPlcStates->SetActiveStateIdx( i );
 				}
 
@@ -4567,7 +4838,15 @@ void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 						pPlcStates->GetState(i).GetValue(), pPlcStates->GetState(i).GetTest(), pPlcStates->GetState(i).GetNextStateName(), pPlcStates->GetState(i).GetOrder(),
 						pPlcStates->GetState(i).GetDelayTime(), pPlcStates->GetState(i).GetTimerValues(), pPlcStates->GetState(i).GetRuntimeValue() );
 
-				i += 1;
+				if ( i+1 < MAX_PLC_STATES)
+				{
+					i += 1;
+				}
+				else
+				{
+					LogMessage( E_MSG_ERROR, "Too many plcstates in operation '%s', max is %d", szOperation, MAX_PLC_STATES );
+					break;
+				}
 			}
 		}
 	}
@@ -4582,7 +4861,9 @@ void CThread::ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pPlcStates )
 
 	myDB.FreeResult();
 
-	LogMessage( E_MSG_INFO, "Read %d plcstates, active idx %d", pPlcStates->GetStateCount(), pPlcStates->GetActiveStateIdx() );
+	LogMessage( E_MSG_INFO, "Read %d plcstates, active idx %d, iRet %d", pPlcStates->GetStateCount(), pPlcStates->GetActiveStateIdx(), iRet );
+
+	return iRet;
 }
 
 void CThread::ReadPlcStatesTableDelayTime( CMysql& myDB, CPlcStates* pPlcStates )
@@ -4616,7 +4897,7 @@ void CThread::ReadPlcStatesTableDelayTime( CMysql& myDB, CPlcStates* pPlcStates 
 		// read from mysql
 		//                          0          1
 		if ( myDB.RunQuery( "SELECT pl_StateNo,pl_DelayTime "
-				"FROM plcstates order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_StateNo") != 0 )
+				"FROM plcstates where pl_Operation='%s' order by pl_Operation,pl_StateName,pl_RuleType,pl_Order,pl_StateNo", szOperation) != 0 )
 		{
 			LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
 		}
@@ -4640,7 +4921,7 @@ void CThread::ReadPlcStatesTableDelayTime( CMysql& myDB, CPlcStates* pPlcStates 
 
 	myDB.FreeResult();
 
-	LogMessage( E_MSG_INFO, "Read plcstates DelatTime end" );
+	LogMessage( E_MSG_INFO, "Read plcstates DelayTime end" );
 }
 
 void CThread::ProcessPlcStates( CMysql& myDB, CPlcStates* pPlcStates )

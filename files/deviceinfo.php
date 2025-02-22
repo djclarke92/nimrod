@@ -102,7 +102,7 @@ function func_check_di_array(&$di_array)
     } else if ($di_array['de_Address'] == 0 && $di_array['di_StartTime'] == "") {
         $di_array['error_msg'] = "You must enter the start time for timer events.";
         return false;
-    } else if (func_convert_time($di_array['di_StartTime']) < 0 || func_convert_time($di_array['di_StartTime']) > 1439) {
+    } else if ($di_array['di_StartTime'] != "" && (func_convert_time($di_array['di_StartTime']) < 0 || func_convert_time($di_array['di_StartTime']) > 1439)) {
         $di_array['error_msg'] = "The start time must be from 00:00 to 11:59 pm.";
         return false;
     } else if (($di_array['di_IOType'] == E_IO_TEMP_HIGHLOW || $di_array['di_IOType'] == E_IO_TEMP_HIGH || $di_array['di_IOType'] == E_IO_TEMP_LOW) && $di_array['di_Hysteresis'] === "") {
@@ -305,7 +305,19 @@ function func_get_dir($type, &$sdir)
         case E_IO_RPMSPEED_HIGHLOW:
             $sdir = "Rpm.H/L";
             break;
-    }
+        case E_IO_HUMIDITY_MONITOR:
+            $sdir = "Humidity.Mon";
+            break;
+        case E_IO_HUMIDITY_HIGH:
+            $sdir = "Humifity.H";
+            break;
+        case E_IO_HUMIDITY_LOW:
+            $sdir = "Humidity.L";
+            break;
+        case E_IO_HUMIDITY_HIGHLOW:
+            $sdir = "Humidity.H/L";
+            break;
+        }
     
     return $dir;
 }
@@ -928,6 +940,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "Q" ? "selected" : ""), "Q. Torque");
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "R" ? "selected" : ""), "R. RPM Speed");
     		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "T" ? "selected" : ""), "T. Temperature");
+    		printf("<option %s>%s</option>", ($di_array['di_AnalogType'] == "H" ? "selected" : ""), "H. Humidity");
     		printf("</select>");
     		printf( "</div>" );
     		printf( "</div>" );

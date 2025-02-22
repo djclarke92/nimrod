@@ -250,7 +250,7 @@ if ( $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL_NONE )
 $fs_redirect_timeout = AUTO_REFRESH_LOGOUT;
 $fs_redirect_url = sprintf( "?Logout=1&PageMode=Home", $_SERVER['PHP_SELF'] );
 $fs_autologin_username = "";
-if ( defined("AUTOLOGIN_USERNAME") && ($_SERVER['REMOTE_ADDR'] == "127.0.0.1" || $_SERVER['REMOTE_ADDR'] == "10.166.1.119") )
+if ( defined("AUTOLOGIN_USERNAME") && ($_SERVER['REMOTE_ADDR'] == "127.0.0.1" || $_SERVER['REMOTE_ADDR'] == "10.166.1.229") )
 {
     $fs_autologin_username = AUTOLOGIN_USERNAME;
 }
@@ -463,6 +463,19 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	<?php 
 	if ( $display_mode == "PlcState" )
 	{
+        if ( $_SESSION['plc_Operation'] != "" )
+        {
+            $state_list = $db->ReadPlcStatesTable( 0, $_SESSION['plc_Operation'] );
+
+            foreach ( $state_list as $state )
+            {
+                if ( $state['pl_StateIsActive'] == 'Y' )
+                {
+                    $_SESSION['plc_StateName'] = $state['pl_StateName'];
+                    break;
+                }
+            }
+        }
     ?>
 		<script type = "text/javascript">
 		var wshost = "<?php printf( "%s://%s:%d", (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != "" ? "wss" : "ws"), ($_SERVER['SERVER_PORT'] == 8080 ? "127.0.0.1" : $_SERVER['SERVER_ADDR']), ($_SERVER['SERVER_PORT'] == 8080 ? 8081 : 8000) ); ?>";
@@ -521,7 +534,7 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
                         select.add(opt,0)
                         
                         // only allow 20 items in the list
-                        if ( select.length >= 20 )
+                        if ( select.length > 20 )
                         {
                             select.removeChild( select.options[20] );
                         }
@@ -533,12 +546,15 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
                     
                     if ( msg.substring(0,6) == 'State:' ) {
                         if ( msg.substring(6) != stateName && stateName != '' ) {
-                        window.location.replace('index.php?PageMode=PlcState');
+                            //console.log("ws state '" + msg.substring(6) + "|" + stateName + "'");
+                            window.location.replace('index.php?PageMode=PlcState');
                         }
                     } else if ( msg == "Refresh" ) {
+                        //console.log("ws Refresh");
                         window.location.replace('index.php?PageMode=PlcState'); 
                     } else if ( msg == "wss closed" ) {
                         setTimeout( 'plcTimer()', 1000 );   
+                        //console.log("wss closed");
                     } else {
                         plcCounter  = 0;
                     }
@@ -639,6 +655,16 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
                         if ( val != null ) {
                             if ( msg.substr(10) == '1' )
                                 val.innerHTML = 'Certificate Error';
+                            else
+                                val.innerHTML = '';
+                        } else {
+                            console.log("element not found '"+msg.substr(0,9)+"'");
+                        }
+                    } else if ( msg.substr(0,3) == 'CAG' ) {
+                        var val = document.getElementById(msg.substr(0,9));
+                        if ( val != null ) {
+                            if ( msg.substr(10) == '1' )
+                                val.innerHTML = 'Certificate Aging';
                             else
                                 val.innerHTML = '';
                         } else {

@@ -1,9 +1,9 @@
-CC=c++
+CC=g++
 CFLAGS=-c -Wall -g -I/usr/include/modbus -I/usr/include/mariadb -I/usr/include/openssl \
 	-fmessage-length=0 -grecord-gcc-switches -D_FORTIFY_SOURCE=2 -fstack-protector -funwind-tables -fasynchronous-unwind-tables \
 	-DOPENSSL_LOAD_CONF -DPIC -fPIC -fno-strict-aliasing -g -O -DNDEBUG -MMD -MP
 CPPFLAGS += -MD -MP
-LDFLAGS=-L/usr/lib64 -lmodbus -lmariadbclient -lpthread -lz -lm -lssl -lcrypto -ldl -lrt -lwebsockets
+LDFLAGS=-L /usr/lib -lmodbus -lmariadbclient -lpthread -lz -lm -lssl -lcrypto -ldl -lrt -lwebsockets
 EXE=nimrod
 SAEXE=set-address
 CLEXE=nimrod-msg
@@ -22,20 +22,20 @@ CLDEP=$(CLSRCS:%.cpp=$(OBJDIR)/%.d)
 
 all: $(OBJS) $(SAOBJS) $(CLOBJS) $(EXE) $(SAEXE) $(CLEXE)
 
-include $(DEP)
+#include $(DEP)
 -include $(SADEP)
 -include $(CLDEP)
 
 $(EXE): $(OBJS)
 	bash -c "../scripts/build-num.sh"
 	$(CC) $(CFLAGS) -c build-number.c -o $(OBJDIR)/build-number.o
-	$(CC) $(LDFLAGS) $(OBJS) $(OBJDIR)/build-number.o -o $(EXE) 
+	$(CC) $(OBJS) $(OBJDIR)/build-number.o -o $(EXE) $(LDFLAGS)
 
 $(SAEXE): $(SAOBJS)
-	$(CC) $(LDFLAGS) $(SAOBJS) -o $(SAEXE) 
+	$(CC) $(SAOBJS) -o $(SAEXE) $(LDFLAGS)
 
 $(CLEXE): $(CLOBJS)
-	$(CC) $(LDFLAGS) $(CLOBJS) -o $(CLEXE) 
+	$(CC) $(CLOBJS) -o $(CLEXE) $(LDFLAGS)
 
 $(OBJS): $(OBJDIR)/%.o: %.cpp
 	$(CC) $(CFLAGS) -c $< -o $@

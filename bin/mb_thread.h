@@ -19,6 +19,7 @@
 #define VIPF_CHECK_PERIOD					0.5		// seconds
 #define VSD_CHECK_PERIOD					0.5		// seconds
 #define HDHK_CHECK_PERIOD					0.5		// seconds
+#define SHT_CHECK_PERIOD					1		// seconds
 #define MAX_TCPIP_SOCKETS					16
 #define ESP_PING_TIMEOUT					60
 #define CAMERA_SNAPSHOT_PERIOD				60	// seconds
@@ -235,6 +236,7 @@ private:
 	SSL_CTX *m_sslServerCtx;
 	SSL_CTX *m_sslClientCtx;
 	struct lws_context *m_WSContext;
+	CThread* m_pWSThread;
 
 public:
 	CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyIOLinks, CPlcStates* pmyPlcStates, const enum E_THREAD_TYPE eThreadType, bool* pbThreadRunning, bool* pbAllDevicesDead );
@@ -244,12 +246,13 @@ public:
 	bool ChangeOutput( CMysql& myDB, const int iInAddress, const int iInChannel, const uint8_t iState, const enum E_EVENT_TYPE eEvent );
 	void ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel, const uint8_t uState,
 			const enum E_IO_TYPE eSwType, int iOutOnPeriod, const double dOutVsdFrequency );
-	const bool ClickFileExists( CMysql& myDB, const int iDeviceNo, const int iChannel );
+	const bool WebClickExists( CMysql& myDB, const int iDeviceNo, const int iChannel );
 	const bool IsComPortThread();
 	const bool IsTimerThread();
 	const bool IsTcpipThread();
 	const bool IsWebsocketThread();
 	const bool IsMyComPort( const char* szPort );
+	const bool IsVirtualComPort( const char* szPort );
 	SSL_CTX* InitServerCTX(void);
 	SSL_CTX* InitClientCTX(void);
 	bool LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char* szKeyFile );
@@ -260,6 +263,7 @@ public:
 	void CloseSocket( int& fd, const int fdx );
 	void SendEspMessage();
 	void CertErrorFlagFile( const bool bError );
+	void CertAgingFlagFile( const bool bError );
 	void ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB );
 	size_t ReadTcpipMsgBytes( SSL* ssl, const int newfd, NIMROD_MSGBUF_TYPE& msgBuf, const bool bBlock );
 	bool SendTcpipChangeOutputToHost( const char* szHostname, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel,
@@ -275,13 +279,15 @@ public:
 	void HandleVSDPwrElectDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleVSDOutputDevice( CMysql& myDB, const int idx, const int iChannel, const double dVsdFreq );
+	void HandleSHTDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int iButton );
 	void CheckForTimerOffTime( CMysql& myDB, const int idx );
 	void HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPrompt, bool& bAllDead );
 	void HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDead );
 	void GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList );
 	void ReadCameraRecords( CMysql& myDB, CCameraList& CameraList );
-	void ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pmyPlcStates );
+	int ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pmyPlcStates );
+	void ClearPlcActiveState( CMysql& myDB );
 	void ReadPlcStatesTableDelayTime( CMysql& myDB, CPlcStates* pmyPlcStates );
 	void ProcessPlcStates( CMysql& myDB, CPlcStates* pmyPlcStates );
 	void ProcessTemperatureData( CMysql& myDB, const int idx, const int i );
@@ -292,8 +298,12 @@ public:
 
 	void PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int idx, const int iChannel, const double dValNew, const bool bInput );
 	void websocket_init();
-	void websocket_process( const char* szMsg );
+	void websocket_process();
+	void websocket_addmessage( const char* szMsg );
 	void websocket_destroy();
+	void websocket_cancel_service();
+	lws_context* GetWSContext() { return m_WSContext; };
+	void SetWebsocketThread( CThread* pWSThread ){ m_pWSThread = pWSThread; };
 
 	static const char* GetThreadType( const enum E_THREAD_TYPE eTT );
 	static const char* GetTcpipMsgType( const enum E_MESSAGE_TYPE eMT );

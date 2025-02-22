@@ -123,6 +123,7 @@ int main( int argc, char** argv )
 		printf( "                       7 NFlixen 9600 VSD\n" );
 		printf( "                       8 Power Electronics SD700 VSD\n" );
 		printf( "                       9 HDHK 8Ch Current Meter\n" );
+		printf( "                      10 SHT40 / XY-MD02 Temperature/Humidity sensor\n" );
 		printf( "    optional   vsd_op: 1 forward\n");
 		printf( "                       2 backward\n");
 		printf( "                       3 forward jog\n");
@@ -136,6 +137,15 @@ int main( int argc, char** argv )
 
 	return 0;
 }
+
+// SHT40 / XY-MD02 Temperature/Humidity sensor
+// input register 0x0001	Temprature, 2 bytes
+// input register 0x0002	Humidity, 2 bytes
+// output register 0x0101	Address, 2 bytes
+// output register 0x0102	Baud Rate, 9600, 14400, 19200
+// output register 0x0103	Temperature correction / 10, +10.0 - -10.0, 2 bytes
+// output register 0x0104	Humidity correction / 10, +10.0 - -10.0, 2 bytes
+
 
 // PZEM-016 AC V/I Monitor
 // Does not reply to the broadcast address 0x00
@@ -556,6 +566,55 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 				}
 
 				usleep( 50000 );
+			}
+		}
+		else if ( type == 10 )
+		{	// SHT40 / XY-MD02 temperature/humidity sensor
+			if ( newAddr != oldAddr || newBaud != oldBaud )
+			{
+				reg = 0x0101;
+
+				uint16_t val[2];
+
+				val[0] = newAddr;
+				switch ( newBaud )
+				{
+				default:
+				case 9600:
+					val[1] = 9600;
+					break;
+				case 14400:
+					val[1] = 14400;
+					break;
+				case 19200:
+					val[1] = 19200;
+					break;
+				}
+
+				if ( modbus_write_registers( ctx, reg, 2, val ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else if ( newAddr == oldAddr )
+				{
+					printf( "New baud rate %d set\n", newBaud );
+				}
+				else if ( newBaud == oldBaud )
+				{
+					printf( "New slave address 0x%02d set\n", newAddr );
+				}
+				else
+				{
+					printf( "New slave address 0x%02d set\n", newAddr );
+					printf( "New baud rate %d set\n", newBaud );
+				}
+			}
+
+			// must power cycle the device when changing the address of baud rate
+			if ( newAddr != oldAddr || newBaud != oldBaud )
+			{
+				printf( "\nPower cycle the device to set the new address / baud rate\nPress enter when done\n");
+				getc(stdin);
 			}
 		}
 		else
@@ -1098,6 +1157,38 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 			}
 			printf ( " current transformer ratio\n" );
 		}	
+	}
+	else if ( type == 10 )
+	{	// SHT40 / XY-MD02 temperature / humidity sensor
+		printf( "Setting slave addr to %d\n", newAddr );
+		if ( modbus_set_slave( ctx, newAddr ) == -1 )
+		{
+			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+		}
+
+		iLen = 1;
+		uint16_t ulInputs[iLen];
+		addr = 0x0001;	
+		rc = modbus_read_input_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_input_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Temperature = %.1f degC\n", (double)((int)ulInputs[0]) / 10 );
+		}
+
+		addr = 0x0002;	
+		rc = modbus_read_input_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_input_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Humidity = %.1f %%\n", (double)ulInputs[0] / 10 );
+		}
 	}
 }
 

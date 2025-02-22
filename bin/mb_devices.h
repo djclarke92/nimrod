@@ -35,6 +35,8 @@ enum E_DEVICE_TYPE {
 	E_DT_VSD_NFLIXEN,		// 11: NFlixen 9600 VSD
 	E_DT_VSD_PWRELECT,		// 12: Power Electronics SD700 VSD
 	E_DT_HDHK_CURRENT,		// 13: HDHK 8 channel current meter
+	E_DT_SHT40_TH,			// 14: SHT40 / XY-MD02 temperature / humidity sensor
+	E_DT_VIRTUAL_INPUT,		// 15: virtual inputs
 };
 
 enum E_IO_TYPE {
@@ -84,6 +86,10 @@ enum E_IO_TYPE {
 	E_IO_RPMSPEED_LOW,		// 43:	torque too low
 	E_IO_RPMSPEED_HIGHLOW,	// 44:	torque too high or too low
 	E_IO_TIMEOFDAY,			// 45:	timeofday
+	E_IO_HUMIDITY_MONITOR,	// 46:	humidity monitor only
+	E_IO_HUMIDITY_HIGH,		// 47:	humidity too high
+	E_IO_HUMIDITY_LOW,		// 48:	humidity too low
+	E_IO_HUMIDITY_HIGHLOW,	// 49:	humidity too high or too low
 };
 
 enum E_EVENT_TYPE {
@@ -106,7 +112,9 @@ enum E_EVENT_TYPE {
 	E_ET_PLCEVENT,			// 16:	plc events
 	E_ET_TORQUE,			// 17:	torque
 	E_ET_RPMSPEED,			// 18:	rpm speed
-	E_ET_CERTIFICATENG		// 19:	certificate error
+	E_ET_CERTIFICATENG,		// 19:	certificate error
+	E_ET_CERTIFICATEAG,		// 20:	certificate aging
+	E_ET_HUMIDITY,			// 21:	humidity
 };
 
 enum E_DEVICE_STATUS {
@@ -274,6 +282,7 @@ public:
 	const double CalcLevel( const int iChannel, const bool bNew );
 	const double CalcRotaryEncoderDistance( const int iChannel, const bool bNew );
 	const double CalcVIPFValue( const int iChannel, const bool bNew );
+	const double CalcTHValue( const int iChannel, const bool bNew );
 	const double CalcVSDNFlixenValue( const int iChannel, const bool bNew );
 	const double CalcVSDPwrElectValue( const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int iChannel );
@@ -397,6 +406,7 @@ public:
 	const double CalcTemperature( const int idx, const int iChannel, const bool bNew );
 	const double CalcVoltage( const int idx, const int iChannel, const bool bNew );
 	const double CalcCurrent( const int idx, const int iChannel, const bool bNew );
+	const double CalcTHValue( const int idx, const int iChannel, const bool bNew );
 	const double CalcLevel( const int idx, const int iChannel, const bool bNew );
 	const double CalcRotaryEncoderDistance( const int idx, const int iChannel, const bool bNew );
 	const double CalcVIPFValue( const int idx, const int iChannel, const bool bNew );

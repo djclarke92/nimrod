@@ -33,6 +33,7 @@ function func_clear_pl_array( &$pl_array )
 	$pl_array['pl_PrintOrder'] = 0;
 	$pl_array['pl_DelayKey'] = "";
 	$pl_array['pl_InitialState'] = "N";
+	$pl_array['pl_MarkerRecord'] = "N";
 	$pl_array['error_msg'] = "";
 	$pl_array['info_msg'] = "";
 	$pl_array['state_filter'] = "";
@@ -60,12 +61,12 @@ function func_check_pl_array( &$pl_array, $marker, $next_marker )
 	    return false;
 	}
 	else if ( $marker !== false && $marker == $pl_array['pl_StateNo'] && 
-	    ($pl_array['pl_DeviceNo'] != 0 || $pl_array['pl_IOChannel'] != "" || $pl_array['pl_Test'] != "" || $pl_array['pl_Value'] != 0 || $pl_array['pl_NextStateName'] != ""))
+	    ($pl_array['pl_DeviceNo'] != 0 || $pl_array['pl_IOChannel'] != 0 || $pl_array['pl_Test'] != "" || $pl_array['pl_Value'] != 0 || $pl_array['pl_NextStateName'] != ""))
 	{  // this is the marker record
-	    $pl_array['error_msg'] = "The Operation / State Name marker cannot contain any rule details.";
+	    $pl_array['error_msg'] = sprintf( "The Operation / State Name marker cannot contain any rule details. (%d,%d,'%s',%.1f,'%s')", $pl_array['pl_DeviceNo'], $pl_array['pl_IOChannel'], $pl_array['pl_Test'], $pl_array['pl_Value'], $pl_array['pl_NextStateName'] );
 	    return false;
 	}
-	else if ( ($pl_array['pl_DeviceNo'] != 0 && $pl_array['pl_IOChannel'] === "") || ($pl_array['pl_DeviceNo'] == 0 && $pl_array['pl_IOChannel'] != "" && $pl_array['pl_RuleType'] != "E") )
+	else if ( ($pl_array['pl_DeviceNo'] != 0 && $pl_array['pl_IOChannel'] === "") || ($pl_array['pl_DeviceNo'] == 0 && $pl_array['pl_IOChannel'] != "" && $pl_array['pl_RuleType'] == "I") )
 	{
 	    $pl_array['error_msg'] = sprintf( "The input/output device must be selected (%d,%d).", $pl_array['pl_DeviceNo'], $pl_array['pl_IOChannel'] );
 	    return false;
@@ -75,7 +76,7 @@ function func_check_pl_array( &$pl_array, $marker, $next_marker )
 	    $pl_array['error_msg'] = "The Rule Type must be selected.";
 	    return false;
 	}
-	else if ( $pl_array['pl_RuleType'] == "" && ($pl_array['pl_DeviceNo'] != 0 || $pl_array['pl_IOChannel'] != "" || $pl_array['pl_Test'] != "" || $pl_array['pl_NextStateName'] != "") )
+	else if ( $pl_array['pl_RuleType'] == "" && $pl_array['pl_MarkerRecord'] == "N" && ($pl_array['pl_DeviceNo'] != 0 || $pl_array['pl_IOChannel'] != "" || $pl_array['pl_Test'] != "" || $pl_array['pl_NextStateName'] != "") )
 	{
 	    $pl_array['error_msg'] = "The Rule Type must be selected before entering the input/output device, Operator or 'Next State Name'.";
 	    return false;
@@ -207,6 +208,8 @@ if ( isset( $_POST['pl_DelayKey']) )
     $pl_array['pl_DelayKey'] = $_POST['pl_DelayKey'];
 if ( isset( $_POST['pl_InitialState']) )
     $pl_array['pl_InitialState'] = "Y";
+if ( isset( $_POST['pl_MarkerRecord']) )
+    $pl_array['pl_MarkerRecord'] = "Y";
 if (isset($_GET['StateFilter']))
     $pl_array['state_filter'] = $_GET['StateFilter'];
 if (isset($_POST['StateFilter']))
@@ -345,7 +348,8 @@ else if ( isset($_GET['StateNo']) )
             $pl_array['pl_TimerValues'] = $info[0]['pl_TimerValues'];
             $pl_array['pl_PrintOrder'] = $info[0]['pl_PrintOrder'];
             $pl_array['pl_DelayKey'] = $info[0]['pl_DelayKey'];
-            $pl_array['pl_InitiaState'] = $info[0]['pl_InitialState'];
+            $pl_array['pl_InitialState'] = $info[0]['pl_InitialState'];
+			$pl_array['pl_MarkerRecord'] = ($info['pl_DeviceNo'] == 0 && $info['pl_IOChannel'] == 0 ? "Y" : "N");
             
             if ( strstr( $pl_array['pl_StateTimestamp'], "0000-00-00" ) != false )
                 $pl_array['pl_StateTimestamp'] = "";
@@ -757,6 +761,11 @@ function onChangeRuleType()
     		printf( "<input type='checkbox' class='form-check-input' name='pl_InitialState' id='pl_InitialState' %s %s %s>", ($pl_array['pl_InitialState'] == "Y" ? "checked" : ""), $disabled,
     		    ($pl_array['pl_InitialState'] == "Y" ? "disabled" : "") );
     		printf( "Initial State</label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-2 form-check'>" );
+    		printf( "<label class='form-check-label'>" );
+    		printf( "<input type='checkbox' class='form-check-input' name='pl_MarkerRecord' id='pl_MarkerRecord' %s %s>", ($pl_array['pl_MarkerRecord'] == "Y" ? "checked" : ""), $disabled);
+    		printf( "Marker Record</label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-3'>" );
     		printf ( "Timestamp: %s",  $pl_array['pl_StateTimestamp'] );

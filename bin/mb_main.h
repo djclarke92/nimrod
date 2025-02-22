@@ -18,6 +18,7 @@ extern RS485_CONNECTION_TYPE gRS485;
 
 extern bool gbTerminateNow;
 extern bool gbCertificateError;
+extern bool gbCertificateAging;
 extern char gszHostname[HOST_NAME_MAX+1];
 
 
@@ -30,7 +31,7 @@ const char* GetMyHostname();
 #define MAX_THREAD_MESSAGES		20
 class CThreadMsg {
 private:
-	char m_szMsg[MAX_THREAD_MESSAGES][100];
+	char m_szMsg[MAX_THREAD_MESSAGES][256];
 
 public:
 	CThreadMsg();

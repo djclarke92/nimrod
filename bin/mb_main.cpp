@@ -34,6 +34,7 @@ bool gbPlcIsActive = false;
 bool gbTerminateNow = false;
 bool gbReadConfig = false;
 bool gbCertificateError = false;
+bool gbCertificateAging = false; 
 char gszHostname[HOST_NAME_MAX+1] = "";
 RS485_CONNECTION_TYPE gRS485 = { 9600, 'N', 8, 1 };
 CThreadMsg gThreadMsgToWS;
@@ -289,8 +290,8 @@ int main( int argc, char *argv[] )
 				}
 			}
 
-
-
+			// pass the websocket thread ptr to the timer thread 
+			myThread[1]->SetWebsocketThread( myThread[2] );
 
 			while ( !gbTerminateNow )
 			{
@@ -367,6 +368,10 @@ int main( int argc, char *argv[] )
 				usleep( 500000 );
 			}
 		}
+
+		// since the lws_service call can block for a few seconds
+		LogMessage( E_MSG_INFO, "calling ws cancel %p", myThread[2]->GetWSContext());
+		lws_cancel_service( myThread[2]->GetWSContext() );
 
 		// wait for threads to exit
 		LogMessage( E_MSG_INFO, "Wait for %d threads to exit", iThreads );
@@ -637,7 +642,7 @@ void CThreadMsg::PutMessage( const char* szFmt, ... )
 	bool found = false;
 	int i;
 	va_list args;
-	char szBuf[100];
+	char szBuf[256];
 
 	pthread_mutex_lock( &mutexLock[E_LT_WEBSOCKET] );
 
@@ -661,7 +666,7 @@ void CThreadMsg::PutMessage( const char* szFmt, ... )
 
 	if ( !found )
 	{
-		LogMessage( E_MSG_ERROR, "Failed to put ws message" );
+		LogMessage( E_MSG_ERROR, "Failed to put ws message '%s'", szBuf );
 	}
 }
 

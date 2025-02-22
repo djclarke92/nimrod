@@ -37,7 +37,7 @@ function func_check_de_array( &$de_array )
 	
 	if ( $de_array['de_ComPort'] == "" )
 	{
-		$de_array['error_msg'] = "You must enter the Com Port (e.g. /dev/ttyUSB0 or Timer or ESP).";
+		$de_array['error_msg'] = "You must enter the Com Port (e.g. /dev/ttyUSB0 or Timer/ESP/Virtual).";
 		return false;
 	}
 	else if ( strncmp( $de_array['de_ComPort'], "/dev/", 5 ) == 0 && $de_array['de_BaudRate'] != 9600 && $de_array['de_BaudRate'] != 19200 )
@@ -78,17 +78,27 @@ function func_check_de_array( &$de_array )
 	}
 	else if ( $de_array['de_Type'] == E_DT_LEVEL_HDL && ($de_array['de_NumInputs'] > 1 || $de_array['de_NumOutputs'] > 0) )
 	{
-	    $de_array['error_msg'] = "HDL Level devices can only have one input.";
+	    $de_array['error_msg'] = "HDL Level devices must only have one input.";
 	    return false;
 	}
 	else if ( $de_array['de_Type'] == E_DT_ROTARY_ENC_12BIT && ($de_array['de_NumInputs'] > 1 || $de_array['de_NumOutputs'] > 0) )
 	{
-	    $de_array['error_msg'] = "Rotary Encoder devices can only have one input.";
+	    $de_array['error_msg'] = "Rotary Encoder devices must only have one input.";
 	    return false;
 	}
 	else if ( $de_array['de_Type'] == E_DT_VIPF_MON && ($de_array['de_NumInputs'] != 6 || $de_array['de_NumOutputs'] > 0) )
 	{
-	    $de_array['error_msg'] = "HDL Level devices can only have 6 inputs.";
+	    $de_array['error_msg'] = "HDL Level devices must only have 6 inputs.";
+	    return false;
+	}
+	else if ( $de_array['de_Type'] == E_DT_SHT40_TH && ($de_array['de_NumInputs'] != 2 || $de_array['de_NumOutputs'] > 0) )
+	{
+	    $de_array['error_msg'] = "HDL Level devices must only have 2 inputs.";
+	    return false;
+	}
+	else if ( $de_array['de_Type'] == E_DT_VIRTUAL_INPUT && ($de_array['de_NumInputs'] != 16 || $de_array['de_NumOutputs'] > 0) )
+	{
+	    $de_array['error_msg'] = "Virtual Input devices must only have 16 inputs.";
 	    return false;
 	}
 	
@@ -295,7 +305,8 @@ $devices_list = $db->ReadDevicesTable();
     		printf( "<label for='de_ComPort'>COM Port: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<input type='text' class='form-control' name='de_ComPort' id='de_ComPort' size='40' value='%s'> ", $de_array['de_ComPort'] );
+			$tip = sprintf( "Use \"Timer\", \"ESP\" or \"Virtual\" for the Timer, ESP or Virtual Input devices." );
+    		printf( "<input type='text' class='form-control' name='de_ComPort' id='de_ComPort' size='40' value='%s' data-bs-toggle='tooltip' data-bs-html=true title='%s'> ", $de_array['de_ComPort'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );
 
@@ -303,7 +314,7 @@ $devices_list = $db->ReadDevicesTable();
     		printf( "<div class='col-sm-3'>" );
     		printf( "<label for='de_BaudRate'>BaudRate: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-4'>" );
     		printf( "<select class='form-control custom-select' name='de_BaudRate' id='de_BaudRate' size='1'>" );
     		printf( "<option %s>9600</option>", ($de_array['de_BaudRate'] == 9600 ? "selected" : "") );
     		printf( "<option %s>19200</option>", ($de_array['de_BaudRate'] == 19200 ? "selected" : "") );
@@ -315,7 +326,7 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_Name'>Name: </label>" );
   			printf( "</div>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='col-sm-4'>" );
   			printf( "<input type='text' class='form-control' name='de_Name' id='de_Name' size='15' value='%s'> ", $de_array['de_Name'] );
   			printf( "</div>" );
   			printf( "</div>" );
@@ -324,7 +335,7 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_Hostname'>Hostname: </label>" );
   			printf( "</div>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='col-sm-4'>" );
   			printf( "<input type='text' class='form-control' name='de_Hostname' id='de_Hostname' size='15' value='%s'> ", $de_array['de_Hostname'] );
   			printf( "</div>" );
   			printf( "</div>" );
@@ -333,7 +344,7 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_Address'>Modbus Address: </label>" );
   			printf( "</div>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='col-sm-4'>" );
   			$tip = sprintf( "ESP and Level devices still need a unique address to be entered event though they do not use Modbus." );
   			printf( "<input type='text' class='form-control' name='de_Address' id='de_Address' size='4' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", $de_array['de_Address'], $tip );
   			printf( "</div>" );
@@ -343,7 +354,7 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_NumInputs'>Num Inputs: </label>" );
   			printf( "</div>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='col-sm-2'>" );
   			$tip = sprintf( "AC VIPF devices have 6 inputs (V/I/P/E/F/PF)<br>.VSD devices have 5 inputs (V/I/P/F/T) and 1 output (F)." );
   			printf( "<input type='text' class='form-control' name='de_NumInputs' id='de_NumInputs' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html=true title='%s'> ", $de_array['de_NumInputs'], $tip );
   			printf( "</div>" );
@@ -353,7 +364,7 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_NumOutputs'>Num Outputs: </label>" );
   			printf( "</div>" );
-  			printf( "<div class='col'>" );
+  			printf( "<div class='col-sm-2'>" );
   			printf( "<input type='text' class='form-control' name='de_NumOutputs' id='de_NumOutputs' size='3' value='%s'> ", $de_array['de_NumOutputs'] );
   			printf( "</div>" );
   			printf( "</div>" );
@@ -376,7 +387,7 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "</div>" );
   			
   			printf( "<div class='row'>" );
-  			printf( "<div class='col-sm-2'>" );
+  			printf( "<div class='col-sm-3'>" );
   			printf( "<label for='de_AlwaysPoweredOn'>Always Powered On: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col form-check-inline'>" );

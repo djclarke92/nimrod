@@ -386,7 +386,7 @@ bool CheckForUpgrade()
 					{	// found a tar file
 						// move the tar file to our local directory
 						int rc;
-						char szCmd[4096];
+						char szCmd[8192];
 
 						snprintf( szCmd, sizeof(szCmd), "cp %s/%s .; rm %s/%s; sync; umount %s", szDirList[idx], gszTarFileName, szDirList[idx], gszTarFileName, szDirList[idx] );
 						rc = system( szCmd );

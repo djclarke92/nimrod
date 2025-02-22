@@ -46,6 +46,8 @@ define( "E_DT_CARD_READER", 10 );       // card reader
 define( "E_DT_VSD_NFLIXEN", 11 );       // NFlixen 9600 VSD
 define( "E_DT_VSD_PWRELECT", 12 );      // Power ELectronics SD700 VSD
 define( "E_DT_HDHK_CURRENT", 13 );		// HDHK 8 channel current meter
+define( "E_DT_SHT40_TH", 14 );			// SHT40 / XY-MD02 temperature / humidity sensor
+define( "E_DT_VIRTUAL_INPUT", 15 );		// virtual inputs
 $_SESSION['E_DTD'] = array();
 $_SESSION['E_DTD'][] = "Unused";
 $_SESSION['E_DTD'][] = "Digital IO"; 
@@ -61,7 +63,8 @@ $_SESSION['E_DTD'][] = "Card Reader";
 $_SESSION['E_DTD'][] = "NFlixen 9600 VSD";
 $_SESSION['E_DTD'][] = "PwrElect SD700 VSD";
 $_SESSION['E_DTD'][] = "HDHK 8Ch Current Meter";
-
+$_SESSION['E_DTD'][] = "SHT40 / XY-MD02 Temp/Humidity";
+$_SESSION['E_DTD'][] = "Virtual Input";
 
 define( "E_IO_UNUSED", 0 );
 define( "E_IO_ON_OFF", 1 );			// 1: 	manual on off switch
@@ -109,6 +112,10 @@ define( "E_IO_RPMSPEED_HIGH", 42 );     // 42:  rpm speed too high
 define( "E_IO_RPMSPEED_LOW", 43 );      // 43:  rpm speed too low
 define( "E_IO_RPMSPEED_HIGHLOW", 44 );  // 44:  rpm speed too high or too low
 define( "E_IO_TIMEOFDAY", 45 );  		// 45:  timeofday
+define( "E_IO_HUMIDITY_MONITOR", 46 );	// 46:	humidity monitor only
+define( "E_IO_HUMIDITY_HIGH", 47 );		// 47:	humidity too high
+define( "E_IO_HUMIDITY_LOW", 48 );		// 48:	humidity too low
+define( "E_IO_HUMIDITY_HIGHLOW", 49 );	// 49:	humidity too high or too low
 $_SESSION['E_IOD'] = array();
 $_SESSION['E_IOD'][] = "Unused";
 $_SESSION['E_IOD'][] = "Manual On Off Switch";
@@ -156,6 +163,10 @@ $_SESSION['E_IOD'][] = "RPM Speed Too High";
 $_SESSION['E_IOD'][] = "RPM Speed Too Low";
 $_SESSION['E_IOD'][] = "RPM Speed Too High or Low";
 $_SESSION['E_IOD'][] = "TimeOfDay";
+$_SESSION['E_IOD'][] = "Humidity Monitor Only";
+$_SESSION['E_IOD'][] = "Humidity Too High";
+$_SESSION['E_IOD'][] = "Humidity Too Low";
+$_SESSION['E_IOD'][] = "Humidity Too High or Low";
 
 define( "E_ET_CLICK", 0 );			// 0: single click
 define( "E_ET_DBLCLICK", 1 );		// 1: double click
@@ -177,6 +188,8 @@ define( "E_ET_PLCEVENT", 16 );      // 16: plc event
 define( "E_ET_TORQUE", 17 );        // 17: torque
 define( "E_ET_RPMSPEED", 18 );      // 18: rpm speed
 define( "E_ET_CERTIFICATENG", 19 ); // 19: certifgicate ng
+define( "E_ET_CERTIFICATEAG", 20 ); // 20: certifgicate aging
+define( "E_ET_HUMIDITY", 21 );		// 21: humidity
 $_SESSION['E_ETD'] = array();
 $_SESSION['E_ETD'][] = "Click";
 $_SESSION['E_ETD'][] = "Dbl CLick";
@@ -198,6 +211,8 @@ $_SESSION['E_ETD'][] = "PLC Event";
 $_SESSION['E_ETD'][] = "Torque %";
 $_SESSION['E_ETD'][] = "RPM Speed";
 $_SESSION['E_ETD'][] = "Certificate NG";
+$_SESSION['E_ETD'][] = "Certificate Aging";
+$_SESSION['E_ETC'][] = "Humidity %";
 
 define( "E_DS_ALIVE", 0 );			// 0:	alive
 define( "E_DSD_ALIVE", "Alive" );	
@@ -1113,18 +1128,20 @@ class MySQLDB
 		
 		$ss = "";
 		if ( $in )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
 					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
 			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW,
-    			    E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW, E_IO_ON_OFF_INV );
+    			    E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW, E_IO_ON_OFF_INV,
+					E_IO_HUMIDITY_MONITOR, E_IO_HUMIDITY_HIGH, E_IO_HUMIDITY_LOW, E_IO_HUMIDITY_HIGHLOW );
 		else if ( $out )
 			$ss = sprintf( "and di_IOType in (%d)", E_IO_OUTPUT );
 		
 		if ( $in && $out )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
 					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
 			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW,
-			         E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW, E_IO_ON_OFF_INV );
+			         E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW, E_IO_ON_OFF_INV,
+					 E_IO_HUMIDITY_MONITOR, E_IO_HUMIDITY_HIGH, E_IO_HUMIDITY_LOW, E_IO_HUMIDITY_HIGHLOW );
 			
 		$query = sprintf( "select de_DeviceNo,de_Address,de_Hostname,di_IOChannel,di_IOName,di_IOType from
 				deviceinfo,devices where di_DeviceNo=de_DeviceNo %s order by de_Hostname,de_Address,di_IOChannel",
@@ -1791,6 +1808,12 @@ class MySQLDB
 	{
 	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_TEMP_MONITOR, E_IO_TEMP_HIGHLOW );
 	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_TEMPERATURE );
+	}
+	
+	function GetLatestHumidities( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_HUMIDITY_HIGH, E_IO_HUMIDITY_LOW, E_IO_HUMIDITY_MONITOR, E_IO_HUMIDITY_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_HUMIDITY );
 	}
 	
 	function GetLatestVoltages( $hours, $datetime )
@@ -2603,6 +2626,24 @@ function func_calc_temperature( $cc )
 	return $temp;
 }
 
+function func_calc_humidity( $cc )
+{
+	$humid = "?";
+	if ( $cc == -1 )
+	{	// not connected
+		$humid = "N/A";
+	}
+	else
+	{	
+	    if ( $cc > 99 )
+	      	$humid = sprintf( "%.0f", $cc );
+	    else
+    		$humid = sprintf( "%.1f", $cc );
+	}	
+	
+	return $humid;
+}
+
 function func_calc_level( $cc )
 {
     $temp = "?";
@@ -3129,7 +3170,7 @@ function func_disabled_non_user()
 //  Graph Functions
 //
 //****************************************************************************
-function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $devices )
+function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $devices )
 {
     $data = array();
     foreach ( $devices as $gg )
@@ -3261,6 +3302,21 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                 }
             }
         }
+        if ( $found == false )
+        {
+            $gvoltage = false;
+            foreach ( $humidities as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['di_DeviceNo'] && $tt['di_IOChannel'] == $gg['di_IOChannel'] )
+                {
+                    $found = true;
+                    $myarray = $tt;
+                    $gname = $tt['di_IOName'];
+                    $atype = "H";
+                    break;
+                }
+            }
+        }
         
         if ( $found )
         {
@@ -3297,6 +3353,10 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $alert = true;
                 }
                 else if ( $atype == "R" && func_calc_rpmspeed($val) < $myarray['di_MonitorLo'] || func_calc_rpmspeed($val) > $myarray['di_MonitorHi'] )
+                {
+                    $alert = true;
+                }
+                else if ( $atype == "H" && func_calc_humidity($val) < $myarray['di_MonitorLo'] || func_calc_humidity($val) > $myarray['di_MonitorHi'] )
                 {
                     $alert = true;
                 }
@@ -3354,6 +3414,8 @@ function func_create_graph( $gdata, $divname )
                $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_torque($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
             else if ( $graph['atype'] == "R" )
                $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_rpmspeed($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
+		    else if ( $graph['atype'] == "H" )
+               $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_humidity($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
             else
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_voltage($data['ev_Value'],"A"), 'SeqNo'=>$graph['SeqNo'] );
         }
@@ -3638,6 +3700,11 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
             {
                 $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>rpm</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_rpmspeed($val), $hh );
+            }
+            else if ( $dat['atype'] == "H" )
+            {
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_humidity($val), $hh );
             }
             else
             {

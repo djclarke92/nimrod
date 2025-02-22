@@ -37,6 +37,7 @@ public:
 	unsigned char* GetMessage( const int idx, int& len );
 	void ClearClient( const int idx );
 	void ClearMessage( const int idx );
+	int GetCount();
 };
 
 CLWSClient::CLWSClient()
@@ -96,6 +97,20 @@ void CLWSClient::AddClient( struct lws* wsi )
 	}
 }
 
+int CLWSClient::GetCount()
+{
+	int iCount = 0;
+
+	for ( int i = 0; i < MAX_LWS_CLIENTS; i++ )
+	{
+		if ( m_Wsi[i] != NULL )
+		{
+			iCount += 1;
+		}
+	}
+
+	return iCount;
+}
 void CLWSClient::AddMessage( const char* szMsg )
 {
 	bool bAdded = false;
@@ -104,7 +119,7 @@ void CLWSClient::AddMessage( const char* szMsg )
 	{
 		if ( m_Wsi[i] != NULL )
 		{
-			snprintf( (char*)&m_Data[i][LWS_SEND_BUFFER_PRE_PADDING], sizeof(m_Data[i]), "%s", szMsg );
+			snprintf( (char*)&m_Data[i][LWS_SEND_BUFFER_PRE_PADDING], sizeof(m_Data[i])-LWS_SEND_BUFFER_PRE_PADDING, "%s", szMsg );
 
 			if ( lws_get_context( m_Wsi[i] ) != NULL )
 			{
@@ -256,6 +271,23 @@ static int callback_nimrod( struct lws *wsi, enum lws_callback_reasons reason, v
 		}
 		break;
 
+	case LWS_CALLBACK_EVENT_WAIT_CANCELLED:	// 71
+//		LogMessage( E_MSG_INFO, "ws EventWaitCancelled");
+		break;
+
+	case LWS_CALLBACK_HTTP_BIND_PROTOCOL:	// 49
+		//LogMessage( E_MSG_INFO, "ws HttpBindProtcol");
+		break;
+
+	case LWS_CALLBACK_ADD_HEADERS:	// 53
+		//LogMessage( E_MSG_INFO, "ws AddHeaders");
+		break;
+
+	case LWS_CALLBACK_VHOST_CERT_AGING:	// 72
+		gbCertificateAging = true;
+		LogMessage( E_MSG_INFO, "Cert is aging");
+		break;
+
 	default:
 		LogMessage( E_MSG_INFO, "ws callback %d", reason );
 		break;
@@ -334,14 +366,25 @@ void CThread::websocket_init()
 	LogMessage( E_MSG_INFO, "websocket context created %p, secure=%d", m_WSContext, (int)m_bSecureWebSocket );
 }
 
-void CThread::websocket_process( const char* szMsg )
+void CThread::websocket_addmessage( const char* szMsg )
 {
 	if ( strlen(szMsg) != 0 )
 	{
+//		LogMessage( E_MSG_INFO, "ws context  %p", m_WSContext);
 		myWsi.AddMessage( szMsg );
 	}
+}
 
-	lws_service( m_WSContext, /* timeout_ms = */ 20 );
+void CThread::websocket_cancel_service()
+{
+	lws_cancel_service(m_WSContext);
+}
+
+void CThread::websocket_process()
+{
+	// timeout is ignored and the lws_service() call can block for a few seconds
+//	LogMessage( E_MSG_INFO, "lws_service() %d", myWsi.GetCount());
+	lws_service( m_WSContext, /* timeout_ms = */ -1 );
 }
 
 void CThread::websocket_destroy()

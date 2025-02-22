@@ -108,7 +108,7 @@ function func_get_graph_datetime()
 	}
 }
 
-function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds )
+function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities )
 {
     $g_devices = array();
     foreach ( $_SESSION['GraphDevices'] as $gg )
@@ -209,6 +209,18 @@ function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $
                 }
             }
         }
+        if ( $found == false )
+        {
+            foreach ( $humidities as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
         
         if ( $found )
         {
@@ -229,6 +241,7 @@ function func_is_temp( $io_type )
         break;   
     case E_IO_TEMP_HIGH:
     case E_IO_TEMP_LOW:
+    case E_IO_TEMP_HIGHLOW:
     case E_IO_TEMP_MONITOR:
         $rc = true;
         break;
@@ -395,6 +408,7 @@ $powers = $db->GetLatestPowers( $_SESSION['GraphHours'], $datetime );
 $frequencies = $db->GetLatestFrequencies( $_SESSION['GraphHours'], $datetime );
 $torques = $db->GetLatestTorques( $_SESSION['GraphHours'], $datetime );
 $rpmspeeds = $db->GetLatestRpmSpeeds( $_SESSION['GraphHours'], $datetime );
+$humidities = $db->GetLatestHumidities( $_SESSION['GraphHours'], $datetime );
 
 $db_size = $db->GetDatabaseSize();
 
@@ -625,7 +639,7 @@ foreach ( $camera_list as $camera )
                     $class = "table-danger";
                 printf( "<tr class='%s'>", $class );
             	printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-            	printf( "<td><spa. id='LLI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, "%" );
+            	printf( "<td><span id='LLI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, "%" );
             	if ( count($tt['data']) > 0 )
                 	printf( "<td><div class='timestamp text-nowrap' id='LLI_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
             	else
@@ -665,38 +679,57 @@ foreach ( $camera_list as $camera )
             </thead>
 
             <?php   
-            foreach ( $temperatures as $tt )
-            {
-                $val = 0;
-                if ( count($tt['data']) > 0 )
-                    $val = func_calc_temperature( $tt['data'][count($tt['data'])-1]['ev_Value'] );
-                $class = "";
-                if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
-                    $class = "table-danger";
-                    
-                printf( "<tr class='%s'>", $class );
-            	
-            	if ( isset($tt['data'][count($tt['data'])-1]) )
-            	{
-            		printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-            		printf( "<td><span id='TTI_%02d_%02d'>%s</span>&#8451</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val );
-            		printf( "<td><div class='timestamp text-nowrap' id='TTI_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
-            	}
-            	else
-            	{
-            		printf( "<td>%s</td>", $tt['di_IOName'] );
-            		printf( "<td>? C</td>" );
-            		printf( "<td></td>" );
-            	}
-            	
-            	$img = "&nbsp;&nbsp;&nbsp;";
-            	if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
-            	{
-            		$img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
-            	}
-            	printf( "<td>%s</td>", $img );
-            	
-            	printf( "</tr>" );
+            $datalist = array( $temperatures, $humidities );
+    		foreach ( $datalist as $dtype )
+    		{
+    		    if ( count($dtype) > 0 )
+    		    {
+                    foreach ( $dtype as $tt )
+                    {
+                        $val = 0;
+                        if ( count($tt['data']) > 0 )
+                        {
+                            $units = $tt['di_AnalogType'];
+                            switch ( $tt['di_AnalogType'] )
+                            {
+                            default:
+                            case 'T':
+                                $val = func_calc_temperature( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                                break;
+                            case 'H':
+                                $val = func_calc_humidity( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                                break;
+                            }
+                        }
+                        $class = "";
+                        if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
+                            $class = "table-danger";
+                            
+                        printf( "<tr class='%s'>", $class );
+                        
+                        if ( isset($tt['data'][count($tt['data'])-1]) )
+                        {
+                            printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
+                            printf( "<td><span id='TTI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, ($units == 'T' ? "&#8451" : "%") );
+                            printf( "<td><div class='timestamp text-nowrap' id='TTI_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+                        }
+                        else
+                        {
+                            printf( "<td>%s</td>", $tt['di_IOName'] );
+                            printf( "<td>? C</td>" );
+                            printf( "<td></td>" );
+                        }
+                        
+                        $img = "&nbsp;&nbsp;&nbsp;";
+                        if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
+                        {
+                            $img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
+                        }
+                        printf( "<td>%s</td>", $img );
+                        
+                        printf( "</tr>" );
+                    }
+                }
             }
             ?>
                 
@@ -735,10 +768,11 @@ foreach ( $camera_list as $camera )
         $frequencies = $db->GetLatestFrequencies( $_SESSION['GraphHours'], $datetime );
         $torques = $db->GetLatestTorques( $_SESSION['GraphHours'], $datetime );
         $rpmspeeds = $db->GetLatestRpmSpeeds( $_SESSION['GraphHours'], $datetime );
+        $humidities = $db->GetLatestHumidities( $_SESSION['GraphHours'], $datetime );
         
-        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds );
+        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities );
         
-        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $g_devices );
+        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $g_devices );
         func_draw_graph_div( true, "graphdiv", 1, $alert_width, $graph_bgcolor, $alert_okcolor, $alert_ngcolor, $g_data );
         func_create_graph( $g_data, "graphdiv" );
         
@@ -916,7 +950,9 @@ foreach ( $camera_list as $camera )
             $msg = "";
             if ( file_exists("nimrod.certng") )
                 $msg = "Certificate Error";
-            printf( "<td colspan='2'><span id='CNG_00_00' class='text-danger'>%s&nbsp;</span></td>", $msg );
+            else if ( file_exists("nimrod.certag") )
+                $msg = "Certificate Aging";
+            printf( "<td colspan='2'><span id='CNG_00_00' class='text-danger'><span id='CAG_00_00' class='text-danger'>%s&nbsp;</span></span></td>", $msg );
             printf( "</tr>" );
         ?>
             

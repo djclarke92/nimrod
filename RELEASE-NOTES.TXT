@@ -7,7 +7,7 @@
 Nimrod Release Notes and History
 
 
-Version 0.2.5		May 2023
+Version 0.2.5		Feb 2025
 1.	Bug fixes to the Monitor pages re reviewing past data
 2.	Improved PlcState buttons and layout
 3.	Add websocket realtime updates of monitored voltage, current, temperature and levels on the Home page, Monitor pages and PLC State page
@@ -18,9 +18,10 @@ Version 0.2.5		May 2023
 	> sudo setfacl -R -m u:nimrod:rX /etc/letsencrypt/{live,archive}/<domain_name>.co.nz
 	> sudo setfacl -m u:nimrod:rX /etc/letsencrypt/{live,archive}
 7.	Add home page warning if the SSL certificate has expired or cannot be loaded.
-8.	When using Letsencrypt certificates and certbot but the nimrod server is not accessible from the internet, manually get the cet using dns-01 challenge
+8.	When using Letsencrypt certificates and certbot but the nimrod server is not accessible from the internet, manually get the cert using dns-01 challenge
 	sudo certbot -d www.<domain_name>.co.nz --manual --preferred-challenges dns certonly
-9.	
+9.	RaspberryPI OS updated to bookworm in the Gitlab prebuilt packages
+10.	Added support for SHT40 / XY-MD02 temperature / humidity sensor
 
 
 Version 0.2.4		February 2023

@@ -367,58 +367,58 @@ the ssh keys for all nimrod hosts
 > scp nimrod-x.y.z.tgz nimrod@nimrod:/var/www/html/.
 		
 2.	Set permissions and untar the package as the nimrod user
-> ssh nimrod@nimrod 
-> sudo chown -R nimrod:nimrod /var/www/html
-> cd /var/www/html
-> tar xvzf nimrod.x.y.z.tgz
-> cp files/site_config.php.sample files/site_config.php
-> vi site_config.php
+> ssh nimrod@nimrod  
+> sudo chown -R nimrod:nimrod /var/www/html  
+> cd /var/www/html  
+> tar xvzf nimrod.x.y.z.tgz  
+> cp files/site_config.php.sample files/site_config.php  
+> vi site_config.php  
 	- set REMOTE_MYSQL_HOST and DB_PASSWORD
 	
-3.	Establish the SSH tennel to the database host to accept the host key as the nimrod user
-> ssh nimrod@REMOTE_DB_HOST
-> yes
+3.	Establish the SSH tunnel to the database host to accept the host key as the nimrod user
+> ssh nimrod@REMOTE_DB_HOST  
+> yes  
 > ctrl-d		
 
 4.	Create the guest user fir camera ftp login
-> adduser guest
+> adduser guest  
 	- Set password to something
 
 4.	Apache2 setup
-> Create the cctv symlink
-	cd /var/www/html
-	sudo ln -s /var/cctv cctv
-> Add apache to the guest group
-	sudo adduser www-data guest
-> Restart apache
+> Create the cctv symlink  
+	cd /var/www/html  
+	sudo ln -s /var/cctv cctv  
+> Add apache to the guest group  
+	sudo adduser www-data guest  
+> Restart apache  
 	sudo service apache2 restart
 
 5.	Move the nimrod.log file onto /var/tmp
-> cd /home/nimrod
-> sudo ln -s /var/tmp log
+> cd /home/nimrod  
+> sudo ln -s /var/tmp log  
 > sudo vi /var/www/html/files/site_config.php
 			
 6.	Add nimrod to the guest group
 > sudo useradd nimrod guest
 
 7. create the web uploads directory
-> sudo mkdir /var/www/html/uploads
-> sudo chown -R nimrod:nimrod /var/www/html
+> sudo mkdir /var/www/html/uploads  
+> sudo chown -R nimrod:nimrod /var/www/html  
 > sudo chmod g+w /var/www/html/uploads
 
 8.	Set nimrod to start automatically
-> ssh pi@nimrod
-> cd /var/www/html
-> sudo cp scripts/nimrod.service.arm7 /lib/systemd/system/nimrod.service
-> sudo chown root:root /lib/systemd/system/nimrod.service
-> sudo systemctl enable nimrod.service
+> ssh pi@nimrod  
+> cd /var/www/html  
+> sudo cp scripts/nimrod.service.arm7 /lib/systemd/system/nimrod.service  
+> sudo chown root:root /lib/systemd/system/nimrod.service  
+> sudo systemctl enable nimrod.service  
 > sudo systemctl start nimrod
 
 9.	Setup vsftpd if you have cameras attached so nimrod and apache can view the video files
-> sudo vi /etc/vsftpd.conf
-  write_enable=YES
-  local_umask=002
-> sudo vi /home/guest/.bashrc
+> sudo vi /etc/vsftpd.conf  
+  write_enable=YES  
+  local_umask=002  
+> sudo vi /home/guest/.bashrc  
   umask 002
 
 10.	Nimrod should now be running
@@ -431,16 +431,17 @@ See the log in /home/nimrod/nimrod.log.  Point your browser to https://nimrod/in
 See https://peppe8o.com/use-lets-encrypt-and-certbot-to-secure-raspberry-pi-hosted-websites-automatically/ for details
 This gives you a 3 month signed certificate
 
-> sudo apt update
-> sudo apt install snapd
-> sudo reboot
-> sudo snap install core; sudo snap refresh core
+> sudo apt update  
+> sudo apt install snapd  
+> sudo reboot  
+> sudo snap install core  s
+> sudo snap refresh core
 
 ># remove certbot if it is already installed
 > sudo apt remove certbot
 
-> sudo snap install --classic certbot
-> sudo ln -s /snap/bin/certbot /usr/bin/certbot
+> sudo snap install --classic certbot  
+> sudo ln -s /snap/bin/certbot /usr/bin/certbot  
 > sudo certbot --apache -d <your_domain_name> -d www.<your_domain_name>
 
 To renew the certificate use the following command
@@ -450,9 +451,9 @@ To renew the certificate use the following command
 # Setup the cross compiler environment on your linux desktop PC
 
 On your linux desktop PC:
-> cd $HOME
-> mkdir raspberrypi; 
-> cd raspberrypi
+> cd $HOME  
+> mkdir raspberrypi  
+> cd raspberrypi  
 > rsync -rl --delete-after --copy-unsafe-links --progress pi@nimrod:/{lib,usr} $HOME/raspberrypi/rootfs
 
 # Download the raspberrypi tools from github

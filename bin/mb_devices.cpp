@@ -510,6 +510,40 @@ const double CMyDevice::CalcRotaryEncoderDistance( const int iChannel, const boo
 	return dVal;
 }
 
+const double CMyDevice::CalcTHValue( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		//dMMperRotation = m_dCalcFactor[iChannel];
+
+		if ( bNew )
+		{
+			dUnit = (double)(m_uNewData[iChannel]);
+		}
+		else
+		{
+			dUnit = (double)(m_uLastData[iChannel]);
+		}
+
+		switch ( iChannel )
+		{
+		default:
+			break;
+		case 0:	// temperature
+			dVal = (double)dUnit / 10;
+			break;
+		case 1:	// humidity
+			dVal = (double)dUnit / 10;
+			break;
+		}
+	}
+
+	return dVal;
+}
+
 const double CMyDevice::CalcVIPFValue( const int iChannel, const bool bNew )
 {
 	double dVal = 0.0;
@@ -683,6 +717,10 @@ const bool CMyDevice::IsSensorConnected( const int iChannel )
 		{
 			bRc = true;
 		}
+		else if ( m_eDeviceType == E_DT_SHT40_TH && m_uNewData[iChannel] != (uint16_t)-1 )
+		{
+			bRc = true;
+		}
 	}
 
 	return bRc;
@@ -699,6 +737,10 @@ const bool CMyDevice::WasSensorConnected( const int iChannel )
 			bRc = true;
 		}
 		else if ( m_eDeviceType == E_DT_TEMPERATURE_K1 && m_uLastData[iChannel] != 64536 )
+		{
+			bRc = true;
+		}
+		else if ( m_eDeviceType == E_DT_SHT40_TH && m_uLastData[iChannel] != (uint16_t)-1 )
 		{
 			bRc = true;
 		}
@@ -840,6 +882,11 @@ const bool CMyDevice::LinkTestPassed( const int iLinkChannel, const char* szLink
 
 		case E_DT_HDHK_CURRENT:
 			dVal = CalcCurrent( iLinkChannel, true );
+			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
+			break;
+
+		case E_DT_SHT40_TH:
+			dVal = CalcTHValue( iLinkChannel, true );
 			bRc = TestValue( szLinkTest, dLinkValue, dVal, bInvertState );
 			break;
 		}
@@ -1185,6 +1232,11 @@ bool CDeviceList::InitContext()
 		{	// esp32
 			iSuccess += 1;
 			LogMessage( E_MSG_INFO, "skip ctx for ESP DeviceNo %d on '%s'", m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
+		}
+		else if ( strncmp( m_Device[idx].GetComPort(), "Virtual", 7 ) == 0 )
+		{	// virtual input
+			iSuccess += 1;
+			LogMessage( E_MSG_INFO, "skip ctx for Virtual Input DeviceNo %d on '%s'", m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
 		}
 		else if ( m_Device[idx].GetDeviceType() == E_DT_LEVEL_K02 )
 		{	// level K02 device
@@ -1924,6 +1976,16 @@ const double CDeviceList::CalcCurrent( const int idx, const int iChannel, const 
 	return 0.0;
 }
 
+const double CDeviceList::CalcTHValue( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcTHValue( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
 const double CDeviceList::CalcLevel( const int idx, const int iChannel, const bool bNew )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
@@ -2338,7 +2400,9 @@ const int CDeviceList::GetTotalComPorts( char szPort[MAX_DEVICES][MAX_COMPORT_LE
 
 	for ( i = 0; i < MAX_DEVICES; i++ )
 	{
-		if ( m_Device[i].GetAddress() > 0 && strncmp( m_Device[i].GetComPort(), "ESP", 3 ) != 0 &&
+		if ( m_Device[i].GetAddress() > 0 && 
+				strncmp( m_Device[i].GetComPort(), "ESP", 3 ) != 0 &&
+				strncmp( m_Device[i].GetComPort(), "Virtual", 7 ) != 0 &&
 				m_Device[i].GetDeviceNo() > 0 && m_Device[i].GetComPort()[0] != '\0' &&
 				IsMyHostname(m_Device[i].GetDeviceHostname())  )
 		{	// this com port is one of ours

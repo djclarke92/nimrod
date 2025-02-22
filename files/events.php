@@ -206,8 +206,11 @@ $di_list[] = array( 'di_DeviceInfoNo'=>-3, 'di_IOName'=>"User Login Attempts" );
                     case E_ET_TEMPERATURE:
                         printf( "<td>%s C</td>", func_calc_temperature($info['ev_Value']) );
                         break;
-                    case E_ET_VOLTAGE:
-                        printf( "<td>%s V</td>", func_calc_voltage($info['ev_Value'], $info['di_AnalogType']) );
+					case E_ET_HUMIDITY:
+						printf( "<td>%s %%</td>", func_calc_humidity($info['ev_Value']) );
+						break;
+					case E_ET_VOLTAGE:
+                        printf( "<td>%s %s</td>", func_calc_voltage($info['ev_Value'], $info['di_AnalogType']) );
                         break;
     			    }
     			    
