@@ -8,7 +8,7 @@
 #include <time.h>
 
 #include <modbus/modbus.h>
-#include <mysql/errmsg.h>
+#include <mariadb/errmsg.h>
 
 #include "mb_mysql.h"
 #include "mb_utils.h"

@@ -1,7 +1,7 @@
 #ifndef _INC_MB_MYSQL_H
 #define _INC_MB_MYSQL_H
 
-#include <mysql/mysql.h>
+#include <mariadb/mysql.h>
 #include "mb_devices.h"
 
 

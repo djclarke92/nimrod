@@ -25,7 +25,7 @@
 #include <openssl/err.h>
 #include <openssl/tls1.h>
 #include <openssl/ssl.h>
-#include <mysql/mysql.h>
+#include <mariadb/mysql.h>
 #include <modbus/modbus.h>
 #include "mb_devices.h"
 #include "mb_thread.h"
@@ -4647,18 +4647,25 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 		if ( CameraList.GetNumCameras() > 0 )
 		{
 			int rc;
-			char szParms[250];
-			char szCmd[512];
+			char szParms[256];
+			char szCmd[1024];
 			char szOutput[256];
 			char szOutput2[256];
-
+			char szOutParms[256+20];
+			char szPwd[100];
+			
 			snprintf( szOutput, sizeof(szOutput), "%s/latest_snapshot.jpg", CameraList.GetSnapshotCamera().GetDirectory() );
 			snprintf( szOutput2, sizeof(szOutput), "%s/file_count.txt", CameraList.GetSnapshotCamera().GetDirectory() );
 
-			snprintf( szParms, sizeof(szParms), "cmd=snapPicture2&usr=%s&pwd=%s", CameraList.GetSnapshotCamera().GetUserId(), CameraList.GetSnapshotCamera().GetPassword() );
-			snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" -o %s",
-					CameraList.GetSnapshotCamera().GetIPAddress(), urlEncode(szParms).c_str(), szOutput );
+			CameraList.GetSnapshotCamera().GetPassword( szPwd, sizeof(szPwd));
+			snprintf( szParms, sizeof(szParms), "cmd=snapPicture2&usr=%s&pwd=%s", CameraList.GetSnapshotCamera().GetUserId(), szPwd );
 
+			urlEncode( szParms, szOutParms );
+			//LogMessage( E_MSG_INFO, "Params [%s]", szOutParms );
+			snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" -o %s",
+					CameraList.GetSnapshotCamera().GetIPAddress(), szOutParms, szOutput );
+
+			//LogMessage( E_MSG_INFO, "cmd [%s]", szCmd );
 			char szFile[100];
 
 			snprintf( szFile, sizeof(szFile), "/tmp/cam%d.sh", CameraList.GetSnapshotCamera().GetCameraNo() );

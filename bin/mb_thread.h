@@ -178,7 +178,7 @@ public:
 	const char* GetEncoding();
 	const char* GetDirectory();
 	const char* GetUserId();
-	const char* GetPassword();
+	void GetPassword( char* szPwd, size_t uLen);
 	const char* GetModel();
 	const char* GetMJpeg();
 };

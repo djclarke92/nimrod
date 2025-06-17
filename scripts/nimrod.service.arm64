@@ -1,0 +1,16 @@
+[Unit]
+Description=Nimrod home automation service
+
+[Service]
+WorkingDirectory=/var/www/html
+ExecStart=/var/www/html/bin/nimrod-arm64
+Restart=always
+RestartSec=5
+StandardOutput=null
+User=nimrod
+Group=nimrod
+
+[Install]
+WantedBy=multi-user.target
+Alias=nimrod.service
+

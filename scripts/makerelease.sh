@@ -55,6 +55,28 @@ if [[ $COPY = 0 ]]; then
 		fi
 	fi
 
+	echo ""
+	echo "-> Compiling on arm64"
+	scp *.cpp gateway:~/build/bin/.
+	scp *.h gateway:~/build/bin/.
+	scp Makefile gateway:~/build/bin
+	ssh gateway "cd build/bin; make -f Makefile"
+	scp gateway:~/build/bin/nimrod ./nimrod-arm64
+	if [ $? != 0 ]; then
+		echo "-> Error: arm64 build failed"
+		exit 1
+	fi
+	scp gateway:~/build/bin/nimrod-msg ./nimrod-msg-arm64
+	if [ $? != 0 ]; then
+		echo "-> Error: arm64 build failed"
+		exit 1
+	fi
+	scp gateway:~/build/bin/set-address ./set-address-arm64
+	if [ $? != 0 ]; then
+		echo "-> Error: arm64 build failed"
+		exit 1
+	fi
+
 	cd ..
 
 	if [[  $PKG = "Y" ]]; then
@@ -99,9 +121,12 @@ if [[ "$DEST" != 0 ]]; then
 				echo "-> Error: failed to copy new package to ${PI}"
 			fi
 		else
-			scp ${SRCFILE} ${PI}:/var/www/html
+			scp ${SRCFILE} ${PI}:/var/www/html 2>/dev/null
 			if [ $? != 0 ]; then
-				echo "-> Error: failed to copy new package to ${PI}"
+				scp ${SRCFILE} ${PI}:/var/www/flatcatit.co.nz
+				if [ $? != 0 ]; then
+					echo "-> Error: failed to copy new package to ${PI}"
+				fi
 			fi
 		fi
 	done

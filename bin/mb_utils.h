@@ -39,9 +39,11 @@ bool CreatePackageVerFile( const char* szTar );
 int SetComInterfaceAttribs( int iHandle, int iSpeed, int iNumBits, int iParity );
 void SetComBlocking( int iHandle, bool bShouldBlock );
 
-std::string base64_decode(std::string const& encoded_string);
-std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_len);
-std::string urlEncode(std::string str);
+//const char* base64_decode(const char* encoded_string);
+//std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_len);
+//char* base64_encode(const char* plain);
+char* base64_decode(const char* cypher);
+const char* urlEncode(const char* str, char* szOutBuf);
 
 
 #endif

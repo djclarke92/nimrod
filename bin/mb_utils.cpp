@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <memory.h>
 #include <string>
 
 #include <modbus/modbus.h>
@@ -624,6 +625,7 @@ void SetComBlocking( int iHandle, bool bShouldBlock )
 
 */
 
+/*
 static const std::string base64_chars =
              "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
              "abcdefghijklmnopqrstuvwxyz"
@@ -677,9 +679,9 @@ std::string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_
 
 }
 
-std::string base64_decode(std::string const& encoded_string)
+const char* base64_decode(const char* encoded_string)
 {
-  int in_len = encoded_string.size();
+  int in_len = strlen(encoded_string);
   int i = 0;
   int j = 0;
   int in_ = 0;
@@ -716,32 +718,106 @@ std::string base64_decode(std::string const& encoded_string)
     for (j = 0; (j < i - 1); j++) ret += char_array_3[j];
   }
 
-  return ret;
+  return ret.c_str();
+}
+*/
+
+char base46_map[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+                     'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+                     'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+                     'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'};
+
+/*
+char* base64_encode(const char* plain) {
+
+    int counts = 0;
+    char buffer[3];
+    char* cipher = (char*)malloc(strlen(plain) * 4 / 3 + 4);
+    int i = 0, c = 0;
+
+    for(i = 0; plain[i] != '\0'; i++) {
+        buffer[counts++] = plain[i];
+        if(counts == 3) {
+            cipher[c++] = base46_map[buffer[0] >> 2];
+            cipher[c++] = base46_map[((buffer[0] & 0x03) << 4) + (buffer[1] >> 4)];
+            cipher[c++] = base46_map[((buffer[1] & 0x0f) << 2) + (buffer[2] >> 6)];
+            cipher[c++] = base46_map[buffer[2] & 0x3f];
+            counts = 0;
+        }
+    }
+
+    if(counts > 0) {
+        cipher[c++] = base46_map[buffer[0] >> 2];
+        if(counts == 1) {
+            cipher[c++] = base46_map[(buffer[0] & 0x03) << 4];
+            cipher[c++] = '=';
+        } else {                      // if counts == 2
+            cipher[c++] = base46_map[((buffer[0] & 0x03) << 4) + (buffer[1] >> 4)];
+            cipher[c++] = base46_map[(buffer[1] & 0x0f) << 2];
+        }
+        cipher[c++] = '=';
+    }
+
+    cipher[c] = '\0';   // string padding character 
+    return cipher;
+}
+*/
+
+char* base64_decode(const char* cipher) {
+
+    int counts = 0;
+    char buffer[4];
+    char* plain = (char*)malloc(strlen(cipher) * 3 / 4);
+    int i = 0, p = 0;
+
+    for(i = 0; cipher[i] != '\0'; i++) {
+        int k;
+        for(k = 0 ; k < 64 && base46_map[k] != cipher[i]; k++);
+        buffer[counts++] = k;
+        if(counts == 4) {
+            plain[p++] = (buffer[0] << 2) + (buffer[1] >> 4);
+            if(buffer[2] != 64)
+                plain[p++] = (buffer[1] << 4) + (buffer[2] >> 2);
+            if(buffer[3] != 64)
+                plain[p++] = (buffer[2] << 6) + buffer[3];
+            counts = 0;
+        }
+    }
+
+    plain[p] = '\0';    // string padding character 
+    return plain;
 }
 
-std::string urlEncode(std::string str)
+const char* urlEncode(const char* chars, char* szOut)
 {
-    std::string new_str = "";
     char c;
     int ic;
-    const char* chars = str.c_str();
     char bufHex[10];
     int len = strlen(chars);
+	int iPos = 0;
 
+	szOut[0] = '\0';
     for(int i=0;i<len;i++){
         c = chars[i];
         ic = c;
         // uncomment this if you want to encode spaces with +
         /*if (c==' ') new_str += '+';
-        else */if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') new_str += c;
-        else {
+        else */if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+			szOut[iPos++] = c;
+		} else {
             sprintf(bufHex,"%X",c);
-            if(ic < 16)
-                new_str += "%0";
-            else
-                new_str += "%";
-            new_str += bufHex;
+            if(ic < 16) {
+                szOut[iPos++] = '%';
+				szOut[iPos++] = '0';
+				szOut[iPos++] = bufHex[0];
+			} else {
+                szOut[iPos++] = '%';
+				szOut[iPos++] = bufHex[0];
+				szOut[iPos++] = bufHex[1];
+			}
         }
     }
-    return new_str;
+	szOut[iPos] = '\0';
+
+    return szOut;
 }

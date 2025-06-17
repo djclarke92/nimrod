@@ -793,7 +793,7 @@ foreach ( $camera_list as $camera )
                     {
                         $cmd = sprintf( "ffmpeg -hide_banner -loglevel warning -i %s -codec copy %s", $filemkv, $filemp4 );
                         system( $cmd );
-                        //printf( $cmd );
+                        printf( $cmd );
                     }
                     $filemp4x = sprintf( "%s/%s%s", substr($camera_webdir,strlen($_SERVER['DOCUMENT_ROOT'])), $camera_files[0]['dir'], $basemp4 );
                     

@@ -7,6 +7,20 @@
 Nimrod Release Notes and History
 
 
+Version 0.2.6		June 2025
+1.	Fixing letsencrypt after an upgrade
+ 	sudo apt purge snapd
+ 	sudo reboot
+ 	sudo apt install snapd
+ 	sudo snap install core
+ 	sudo snap install certbot --classic
+ 	sudo certbot -d www.<domain_name>.co.nz --manual --preferred-challenges dns certonly
+ 	sudo setfacl -R -m u:nimrod:rX /etc/letsencrypt/{live,archive}/www.<domain_name>.co.nz
+ 	sudo setfacl -m u:nimrod:rX /etc/letsencrypt/{live,archive}
+ 	sudo systemctl restart nimrod
+2.	Allow building remotely on raspberyr Pi arm64
+
+
 Version 0.2.5		Feb 2025
 1.	Bug fixes to the Monitor pages re reviewing past data
 2.	Improved PlcState buttons and layout

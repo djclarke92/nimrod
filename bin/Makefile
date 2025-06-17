@@ -1,7 +1,7 @@
 CC=g++
 CFLAGS=-c -Wall -g -I/usr/include/modbus -I/usr/include/mariadb -I/usr/include/openssl \
 	-fmessage-length=0 -grecord-gcc-switches -D_FORTIFY_SOURCE=2 -fstack-protector -funwind-tables -fasynchronous-unwind-tables \
-	-DOPENSSL_LOAD_CONF -DPIC -fPIC -fno-strict-aliasing -g -O -DNDEBUG -MMD -MP
+	-DOPENSSL_LOAD_CONF -DPIC -fPIC -fno-strict-aliasing -g -O -DNDEBUG -MMD -MP -std=c++11
 CPPFLAGS += -MD -MP
 LDFLAGS=-L /usr/lib -lmodbus -lmariadbclient -lpthread -lz -lm -lssl -lcrypto -ldl -lrt -lwebsockets
 EXE=nimrod

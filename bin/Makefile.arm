@@ -1,5 +1,5 @@
-CC=$${HOME}/raspberrypi/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-gcc
-CPP=$${HOME}/raspberrypi/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-g++
+CC=/usr/bin/arm-linux-gnueabihf-gcc
+CPP=/usr/bin/arm-linux-gnueabihf-g++
 CFLAGS=-Wall -g -I$${HOME}/raspberrypi/rootfs/usr/include/modbus -I$${HOME}/raspberrypi/rootfs/usr/include/mariadb \
 	-I$${HOME}/raspberrypi/rootfs/usr/include/openssl \
 	-I$${HOME}/raspberrypi/rootfs/usr/include -I$${HOME}/raspberrypi/rootfs/usr/include/arm-linux-gnueabihf \

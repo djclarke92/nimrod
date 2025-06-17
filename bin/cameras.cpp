@@ -220,10 +220,12 @@ const char* CCamera::GetUserId()
 }
 
 // decode the pwd
-const char* CCamera::GetPassword()
+void CCamera::GetPassword( char* szPwd, size_t uLen )
 {
-	return base64_decode( m_szPassword ).c_str();
-}
+	char* pszPwd = base64_decode( m_szPassword );
+	snprintf( szPwd, uLen, "%s", pszPwd );
+	free( pszPwd );
+} 
 
 const char* CCamera::GetModel()
 {

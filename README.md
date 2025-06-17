@@ -288,7 +288,7 @@ Raspbian buster
 	# Authentication. The password is given using one of five methods, see below.
 	auth on
 	
-	# TODO: Use your own user name fpr the mail account
+	# TODO: Use your own user name for the mail account
 	user pi@<your_domain>
 	
 	# Password method 1: Add the password to the system keyring, and let msmtp get
@@ -325,6 +325,7 @@ Raspbian buster
 > sudo chown pi:pi /etc/msmtprc
 > sudo chmod 0600 /etc/msmtprc
 > sudo chmod 0777 /var/tmp
+  cp /etc/msmtprc ~/.msmtprc
 
 > sudo vi /etc/aliases
 	root: pi@<your_domain>
@@ -380,9 +381,15 @@ the ssh keys for all nimrod hosts
 > yes  
 > ctrl-d		
 
-4.	Create the guest user fir camera ftp login
+4.	Create the guest user for camera ftp login
 > adduser guest  
-	- Set password to something
+	- Set password to something (cameras will use guest/pwd to ftp videos to the server)
+> add cctv symlink
+	sudo su - guest
+	cd /home/guest
+	sudo mkdir /var/cctv .
+	sudo mkdir /var/cctv/<camera_name>
+	sudo chown -R guest:guest /var/cctv
 
 4.	Apache2 setup
 > Create the cctv symlink  
@@ -399,7 +406,7 @@ the ssh keys for all nimrod hosts
 > sudo vi /var/www/html/files/site_config.php
 			
 6.	Add nimrod to the guest group
-> sudo useradd nimrod guest
+> sudo adduser nimrod guest
 
 7. create the web uploads directory
 > sudo mkdir /var/www/html/uploads  
@@ -409,7 +416,7 @@ the ssh keys for all nimrod hosts
 8.	Set nimrod to start automatically
 > ssh pi@nimrod  
 > cd /var/www/html  
-> sudo cp scripts/nimrod.service.arm7 /lib/systemd/system/nimrod.service  
+> sudo cp scripts/nimrod.service.arm(7 or 64) /lib/systemd/system/nimrod.service  
 > sudo chown root:root /lib/systemd/system/nimrod.service  
 > sudo systemctl enable nimrod.service  
 > sudo systemctl start nimrod
@@ -420,6 +427,7 @@ the ssh keys for all nimrod hosts
   local_umask=002  
 > sudo vi /home/guest/.bashrc  
   umask 002
+  sudo systemctl restart vsftpd
 
 10.	Nimrod should now be running
 
