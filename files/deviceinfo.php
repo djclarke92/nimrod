@@ -30,6 +30,7 @@ function func_clear_di_array(&$di_array)
     $di_array['di_AnalogType'] = "";
     $di_array['di_CalcFactor'] = "";
     $di_array['di_Offset'] = "";
+    $di_array['di_Resolution'] = "";
     $di_array['di_MonitorPos1'] = "";
     $di_array['di_MonitorPos2'] = "";
     $di_array['di_MonitorPos3'] = "";
@@ -170,6 +171,18 @@ function func_check_di_array(&$di_array)
         strlen($di_array['di_CalcFactor']) == 0 )
     {
         $di_array['error_msg'] = "The 'Calc Factor' value must be entered for Rotary Encoders.";
+        return false;
+    }
+    else if ( ($di_array['di_IOType'] == E_IO_WEIGHT_LOW || $di_array['di_IOType'] == E_IO_WEIGHT_LOW || $di_array['di_IOType'] == E_IO_WEIGHT_HIGHLOW || $di_array['di_IOType'] == E_IO_WEIGHT_MONITOR) && 
+        strlen($di_array['di_Offset']) == 0 )
+    {
+        $di_array['error_msg'] = "The 'Offset' value must be entered for load cell devices as the rated max weight in kg.";
+        return false;
+    }
+    else if ( ($di_array['di_IOType'] == E_IO_WEIGHT_LOW || $di_array['di_IOType'] == E_IO_WEIGHT_LOW || $di_array['di_IOType'] == E_IO_WEIGHT_HIGHLOW || $di_array['di_IOType'] == E_IO_WEIGHT_MONITOR) && 
+        strlen($di_array['di_Resolution']) == 0 )
+    {
+        $di_array['error_msg'] = "The 'Resolution' value must be entered for load cell devices as the percentage of max weight, e.g. 1% or 0.1%.";
         return false;
     }
     
@@ -383,6 +396,8 @@ if (isset($_POST['di_CalcFactor']))
     $di_array['di_CalcFactor'] = $_POST['di_CalcFactor'];
 if (isset($_POST['di_Offset']))
     $di_array['di_Offset'] = $_POST['di_Offset'];
+if (isset($_POST['di_Resolution']))
+    $di_array['di_Resolution'] = $_POST['di_Resolution'];
 if (isset($_POST['di_MonitorPos1']))
     $di_array['di_MonitorPos1'] = strtoupper($_POST['di_MonitorPos1']);
 if (isset($_POST['di_MonitorPos2']))
@@ -423,7 +438,8 @@ if (isset($_GET['DeviceInfoNo']))
     {   // show blank detail page
         $new_deviceinfo = true;
     }
-    else if (($line = $db->GetFields('deviceinfo', 'di_DeviceInfoNo', $di_array['di_DeviceInfoNo'], "di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo")) !== false) { // success
+    else if (($line = $db->GetFields('deviceinfo', 'di_DeviceInfoNo', $di_array['di_DeviceInfoNo'], "di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,
+            di_MonitorPos,di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo,di_Resolution")) !== false) { // success
         $di_array['di_DeviceNo'] = $line[0];
         $di_array['di_IOChannel'] = $line[1];
         $di_array['di_IOName'] = $line[2];
@@ -444,6 +460,7 @@ if (isset($_GET['DeviceInfoNo']))
         $di_array['di_MonitorLo'] = $line[13];
         $di_array['di_ValueRangeHi'] = $line[14];
         $di_array['di_ValueRangeLo'] = $line[15];
+        $di_array['di_Resolution'] = $line[16];
         
         $di_array['de_Address'] = 0;
         $di_array['de_Hostname'] = '?';
@@ -533,7 +550,7 @@ else if (isset($_POST['NewDeviceInfo']) || isset($_POST['UpdateDeviceInfo']))
         $stime = func_convert_time($di_array['di_StartTime']);
         $monitor_pos = sprintf("%s%s%s%s%s", $di_array['di_MonitorPos1'], $di_array['di_MonitorPos2'], $di_array['di_MonitorPos3'], $di_array['di_MonitorPos4'], $di_array['di_MonitorPos5']);
         if ($db->UpdateDeviceInfoTable($di_array['di_DeviceInfoNo'], $di_array['di_DeviceNo'], $di_array['di_IOChannel'], $di_array['di_IOName'], $di_array['di_IOType'], $di_array['di_OnPeriod'], $stime, $di_array['di_Hysteresis'], $di_array['di_Weekdays'], $di_array['di_AnalogType'], $di_array['di_CalcFactor'], $di_array['di_Offset'], $monitor_pos, 
-            $di_array['di_MonitorHi'], $di_array['di_MonitorLo'], $di_array['di_ValueRangeHi'], $di_array['di_ValueRangeLo'] )) 
+            $di_array['di_MonitorHi'], $di_array['di_MonitorLo'], $di_array['di_ValueRangeHi'], $di_array['di_ValueRangeLo'], $di_array['di_Resolution'] )) 
         { // success
           // update iolinks
             if ($record !== false) 
@@ -969,9 +986,10 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_CalcFactor'>Calc Factor: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-2'>" );
-    		$tip = sprintf( "Analog Voltage devices only measure 0-10V directly, so if you are measuring 100V via a 10:1 divider the calc factor would be 10.0<br>" );
-    		$tip .= sprintf( "For Level devices the Calc Factor is the max water level in mm.<br>" );
-    		$tip .= sprintf( "For Rotary Encoders the Calc Factor is the distance in mm for one rotation." );
+    		$tip = sprintf( "<ul><li>Analog Voltage devices only measure 0-10V directly, so if you are measuring 100V via a 10:1 divider the calc factor would be 10.0</li>" );
+    		$tip .= sprintf( "<li>For Level devices the Calc Factor is the max water level in mm.</li>" );
+    		$tip .= sprintf( "<li>For Rotary Encoders the Calc Factor is the distance in mm for one rotation.</li>" );
+    		$tip .= sprintf( "<li>For PT113 devices the Calc Factor is the unloaded weight of the weigh bridge in Kg.</li></ul>" );
     		printf( "<input type='text' class='form-control' name='di_CalcFactor' id='di_CalcFactor' size='5' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
     		    $di_array['di_CalcFactor'], $tip );
     		printf( "</div>" );
@@ -982,8 +1000,22 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_Offset'>Offset Voltage: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-2'>" );
-    		$tip = sprintf( "For Analog Current the Offset is the 0 Amp voltage, e.g. 2.49V.<br>For K02 Level devices the Offset is the sensor height above the max level.<br> For HDL Level devices the Offset is the decimal pt multiplication factor." );
+    		$tip = sprintf( "<ul><li>For Analog Current the Offset is the 0 Amp voltage, e.g. 2.49V.</li>");
+            $tip .= sprintf("<li>For K02 Level devices the Offset is the sensor height above the max level.</li>");
+            $tip .= sprintf("<li>For HDL Level devices the Offset is the decimal pt multiplication factor.</li>");
+            $tip .= sprintf("<li>For PT113 devices the Offset is the max weight in kg.</li></ul>" );
     		printf( "<input type='text' class='form-control' name='di_Offset' id='di_Offset' size='5' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", $di_array['di_Offset'], $tip );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='di_Resolution'>Resolution %%: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-2'>" );
+    		$tip = sprintf( "<ul><li>For PT113 the percentage of max weight, e.g. 1%% or 0.1%%.</li>");
+            $tip .= sprintf("</ul>" );
+    		printf( "<input type='text' class='form-control' name='di_Resolution' id='di_Resolution' size='5' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", $di_array['di_Resolution'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );
     		
@@ -992,7 +1024,10 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		printf( "<label for='di_MonitorPos'>Monitor Position: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		$tip = sprintf( "Enter 3 characters:<br>1st: monitor number 1 or 2<br>2nd: F, L or R for full width, left or right<br>3rd: graph row number, 1 to 4" );
+    		$tip = sprintf( "Enter 3 characters:<br>");
+            $tip .= sprintf("<ul><li>1st: monitor number 1 or 2</li>");
+            $tip .= sprintf("<li>2nd: F, L or R for full width, left or right</li>");
+            $tip .= sprintf("<li>3rd: graph row number, 1 to 4</li></ul>" );
     		printf( "<input type='text' class='form-control' name='di_MonitorPos1' id='di_MonitorPos1' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 
     		    $di_array['di_MonitorPos1'], $tip );
     		printf( "<input type='text' class='form-control' name='di_MonitorPos2' id='di_MonitorPos2' size='3' value='%s' data-bs-toggle='tooltip' data-bs-html='true' title='%s'> ", 

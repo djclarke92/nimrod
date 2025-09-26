@@ -88,17 +88,22 @@ function func_check_de_array( &$de_array )
 	}
 	else if ( $de_array['de_Type'] == E_DT_VIPF_MON && ($de_array['de_NumInputs'] != 6 || $de_array['de_NumOutputs'] > 0) )
 	{
-	    $de_array['error_msg'] = "HDL Level devices must only have 6 inputs.";
+	    $de_array['error_msg'] = "VIPF Monitor devices must only have 6 inputs.";
 	    return false;
 	}
 	else if ( $de_array['de_Type'] == E_DT_SHT40_TH && ($de_array['de_NumInputs'] != 2 || $de_array['de_NumOutputs'] > 0) )
 	{
-	    $de_array['error_msg'] = "HDL Level devices must only have 2 inputs.";
+	    $de_array['error_msg'] = "SHT40 temperature devices must only have 2 inputs.";
 	    return false;
 	}
 	else if ( $de_array['de_Type'] == E_DT_VIRTUAL_INPUT && ($de_array['de_NumInputs'] != 16 || $de_array['de_NumOutputs'] > 0) )
 	{
 	    $de_array['error_msg'] = "Virtual Input devices must only have 16 inputs.";
+	    return false;
+	}
+	else if ( $de_array['de_Type'] == E_DT_PT113_LCT && ($de_array['de_NumInputs'] != 3 || $de_array['de_NumOutputs'] > 0) )
+	{
+	    $de_array['error_msg'] = "PT113 load cell transmitter devices must only have 3 inputs.";
 	    return false;
 	}
 	
@@ -305,7 +310,7 @@ $devices_list = $db->ReadDevicesTable();
     		printf( "<label for='de_ComPort'>COM Port: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-			$tip = sprintf( "Use \"Timer\", \"ESP\" or \"Virtual\" for the Timer, ESP or Virtual Input devices." );
+			$tip = sprintf( "Use \"Timer\", \"ESP<chipmac>\" or \"Virtual\" for the Timer, ESP or Virtual Input devices." );
     		printf( "<input type='text' class='form-control' name='de_ComPort' id='de_ComPort' size='40' value='%s' data-bs-toggle='tooltip' data-bs-html=true title='%s'> ", $de_array['de_ComPort'], $tip );
     		printf( "</div>" );
     		printf( "</div>" );
@@ -327,7 +332,8 @@ $devices_list = $db->ReadDevicesTable();
   			printf( "<label for='de_Name'>Name: </label>" );
   			printf( "</div>" );
   			printf( "<div class='col-sm-4'>" );
-  			printf( "<input type='text' class='form-control' name='de_Name' id='de_Name' size='15' value='%s'> ", $de_array['de_Name'] );
+			$tip = sprintf("use ESPxxx for ESP devices where xxx is the 3 digit unit number programmed into the ESP");
+  			printf( "<input type='text' class='form-control' name='de_Name' id='de_Name' size='15' value='%s' data-bs-toggle='tooltip' data-bs-html=true title='%s'> ", $de_array['de_Name'], $tip );
   			printf( "</div>" );
   			printf( "</div>" );
   			

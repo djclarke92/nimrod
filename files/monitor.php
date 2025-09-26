@@ -111,59 +111,60 @@ $powers = $db->GetLatestPowers( $monitor_period, $datetime );
 $frequencies = $db->GetLatestFrequencies( $monitor_period, $datetime );
 $torques = $db->GetLatestTorques( $monitor_period, $datetime );
 $rpmspeeds = $db->GetLatestRpmSpeeds( $monitor_period, $datetime );
+$weights = $db->GetLatestWeights( $monitor_period, $datetime );
 
 
 $f1_devices = $db->GetMonitorDevices( sprintf( "%dF1", $monitor_page ) );
 if ( count($f1_devices) != 0 )
 {
-    $f1_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $f1_devices );
+    $f1_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $f1_devices );
 }
 else
 {
     $l1_devices = $db->GetMonitorDevices( sprintf( "%dL1", $monitor_page ) );
     $r1_devices = $db->GetMonitorDevices( sprintf( "%dR1", $monitor_page ) );
 
-    $l1_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $l1_devices );
-    $r1_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $r1_devices );
+    $l1_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $l1_devices );
+    $r1_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $r1_devices );
 }
 $f2_devices = $db->GetMonitorDevices( sprintf( "%dF2", $monitor_page ) );
 if ( count($f2_devices) != 0 )
 {
-    $f2_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $f2_devices );
+    $f2_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $f2_devices );
 }
 else
 {
     $l2_devices = $db->GetMonitorDevices( sprintf( "%dL2", $monitor_page ) );
     $r2_devices = $db->GetMonitorDevices( sprintf( "%dR2", $monitor_page ) );
     
-    $l2_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $l2_devices );
-    $r2_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $r2_devices );
+    $l2_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $l2_devices );
+    $r2_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $r2_devices );
 }
 $f3_devices = $db->GetMonitorDevices( sprintf( "%dF3", $monitor_page ) );
 if ( count($f3_devices) != 0 )
 {
-    $f3_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $f3_devices );
+    $f3_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $f3_devices );
 }
 else
 {
     $l3_devices = $db->GetMonitorDevices( sprintf( "%dL3", $monitor_page ) );
     $r3_devices = $db->GetMonitorDevices( sprintf( "%dR3", $monitor_page ) );
     
-    $l3_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $l3_devices );
-    $r3_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $r3_devices );
+    $l3_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $l3_devices );
+    $r3_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $r3_devices );
 }
 $f4_devices = $db->GetMonitorDevices( sprintf( "%dF4", $monitor_page ) );
 if ( count($f4_devices) != 0 )
 {
-    $f4_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $f4_devices );
+    $f4_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $f4_devices );
 }
 else
 {
     $l4_devices = $db->GetMonitorDevices( sprintf( "%dL4", $monitor_page ) );
     $r4_devices = $db->GetMonitorDevices( sprintf( "%dR4", $monitor_page ) );
     
-    $l4_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $l4_devices );
-    $r4_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $r4_devices );
+    $l4_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $l4_devices );
+    $r4_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $r4_devices );
 }
 
 

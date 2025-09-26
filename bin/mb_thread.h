@@ -19,6 +19,7 @@
 #define VIPF_CHECK_PERIOD					0.5		// seconds
 #define VSD_CHECK_PERIOD					0.5		// seconds
 #define HDHK_CHECK_PERIOD					0.5		// seconds
+#define PT113_LCT_CHECK_PERIOD				0.5		// seconds
 #define SHT_CHECK_PERIOD					1		// seconds
 #define MAX_TCPIP_SOCKETS					16
 #define ESP_PING_TIMEOUT					60
@@ -227,6 +228,7 @@ private:
 	time_t m_tThreadStartTime;
 	time_t m_tCardReaderStart;
 	time_t m_tLastCertificateCheck;
+	time_t m_tLastSentEspTime;
 	struct in_addr m_xClientInAddr[MAX_TCPIP_SOCKETS];
 	SSL* m_xClientSSL[MAX_TCPIP_SOCKETS];
 	CDeviceList* m_pmyDevices;
@@ -262,6 +264,7 @@ public:
 	void AcceptTcpipClient();
 	void CloseSocket( int& fd, const int fdx );
 	void SendEspMessage();
+	void SetEspResponse( const char* szOutDeviceName, const char* szEspResponseMsg );
 	void CertErrorFlagFile( const bool bError );
 	void CertAgingFlagFile( const bool bError );
 	void ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB );
@@ -280,6 +283,7 @@ public:
 	void HandleOutputDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void HandleVSDOutputDevice( CMysql& myDB, const int idx, const int iChannel, const double dVsdFreq );
 	void HandleSHTDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
+	void HandlePT113Device( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead );
 	void ProcessEspSwitchEvent( CMysql& myDB, const char* szName, const int iButton );
 	void CheckForTimerOffTime( CMysql& myDB, const int idx );
 	void HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPrompt, bool& bAllDead );

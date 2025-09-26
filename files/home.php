@@ -108,7 +108,7 @@ function func_get_graph_datetime()
 	}
 }
 
-function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities )
+function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights )
 {
     $g_devices = array();
     foreach ( $_SESSION['GraphDevices'] as $gg )
@@ -212,6 +212,18 @@ function func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $
         if ( $found == false )
         {
             foreach ( $humidities as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
+                {
+                    $found = true;
+                    $gname = $tt['di_IOName'];
+                    break;
+                }
+            }
+        }
+        if ( $found == false )
+        {
+            foreach ( $weights as $tt )
             {
                 if ( $tt['di_DeviceNo'] == $gg['GraphDeviceNo'] && $tt['di_IOChannel'] == $gg['GraphIOChannel'] )
                 {
@@ -409,6 +421,7 @@ $frequencies = $db->GetLatestFrequencies( $_SESSION['GraphHours'], $datetime );
 $torques = $db->GetLatestTorques( $_SESSION['GraphHours'], $datetime );
 $rpmspeeds = $db->GetLatestRpmSpeeds( $_SESSION['GraphHours'], $datetime );
 $humidities = $db->GetLatestHumidities( $_SESSION['GraphHours'], $datetime );
+$weights = $db->GetLatestWeights( $_SESSION['GraphHours'], $datetime );
 
 $db_size = $db->GetDatabaseSize();
 
@@ -659,6 +672,59 @@ foreach ( $camera_list as $camera )
             }
             ?>
             
+			<?php
+			if ( count($weights) > 0 )
+			{
+			$title = "Weights";
+			printf( "<h3>%s</h3>", $title );
+			?>
+            
+            <table class='table table-striped'>
+            <thead class="thead-light">
+              <tr>
+              <th>Name</th>
+              <th>Value</th>
+              <th>Date</th>
+              <th>Graph</th>
+              </tr>
+            </thead>
+    
+    		<?php         
+            $de_no = 0;
+            foreach ( $weights as $tt )
+            {
+                if ( $tt['di_DeviceNo'] != $de_no )
+                {   // weight is in channel 1 only
+                    $de_no = $tt['di_DeviceNo'];
+                    $val = 0;
+                    if ( count($tt['data']) > 0 )
+                        $val = func_calc_weight( $tt['data'][count($tt['data'])-1]['ev_Value'] );
+                    $class = "";
+                    if ( $tt['di_MonitorLo'] != 0.0 && $tt['di_MonitorHi'] != 0.0 && ($val < $tt['di_MonitorLo'] || $val > $tt['di_MonitorHi']) )
+                        $class = "table-danger";
+                    printf( "<tr class='%s'>", $class );
+                    printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
+                    printf( "<td><span id='LLI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, "kg" );
+                    if ( count($tt['data']) > 0 )
+                        printf( "<td><div class='timestamp text-nowrap' id='LLI_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
+                    else
+                        printf( "<td><div class='timestamp text-nowrap'>?</div></td>" );
+                    
+                    $img = "&nbsp;&nbsp;&nbsp;";
+                    if ( func_find_graph_device( $tt['di_DeviceNo'], $tt['di_IOChannel'] ) )
+                    {
+                        $img = sprintf( "<img src='./images/green_tick.png' height='15px'>" );
+                    }
+                    printf( "<td>%s</td>", $img );
+                    
+                    printf( "</tr>" );
+                }
+            }
+            
+            printf( "</table>" );
+            }
+            ?>
+            
         </div>
         </div>
 
@@ -769,10 +835,11 @@ foreach ( $camera_list as $camera )
         $torques = $db->GetLatestTorques( $_SESSION['GraphHours'], $datetime );
         $rpmspeeds = $db->GetLatestRpmSpeeds( $_SESSION['GraphHours'], $datetime );
         $humidities = $db->GetLatestHumidities( $_SESSION['GraphHours'], $datetime );
+        $weights = $db->GetLatestWeights( $_SESSION['GraphHours'], $datetime );
         
-        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities );
+        $g_devices = func_get_graph_devices( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights );
         
-        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $g_devices );
+        $g_data = func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $g_devices );
         func_draw_graph_div( true, "graphdiv", 1, $alert_width, $graph_bgcolor, $alert_okcolor, $alert_ngcolor, $g_data );
         func_create_graph( $g_data, "graphdiv" );
         

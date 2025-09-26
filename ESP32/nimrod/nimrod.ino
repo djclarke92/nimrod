@@ -1,46 +1,22 @@
-#include "FS.h"
-#include "esp_system.h"
+#include <Arduino.h>
+//#include "FS.h"
+//#include "esp_system.h"
 #include <esp_wifi.h>
 #include <string.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <Preferences.h>  // WiFi storage
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// TODO: replace this with your own certificate
-const char* gszNimrodRootCA= \
-"-----BEGIN CERTIFICATE-----\n" \
-"MIIECTCCAvGgAwIBAgIULPJ1Z9nziVj6H0pcv4Sc981YAo8wDQYJKoZIhvcNAQEL\n" \
-"BQAwgZMxCzAJBgNVBAYTAk5aMQ8wDQYDVQQIDAZCdWxsZXIxEzARBgNVBAcMCkNo\n" \
-"YXJsZXN0b24xEjAQBgNVBAoMCUZsYXRDYXRJVDELMAkGA1UECwwCQ0ExJzAlBgkq\n" \
-"hkiG9w0BCQEWGGRqY2xhcmtlQGZsYXRjYXRpdC5jby5uejEUMBIGA1UEAwwLMTky\n" \
-"LjE2OC4wLjEwHhcNMjEwNjA0MjM0NTAxWhcNMzEwNjAyMjM0NTAxWjCBkzELMAkG\n" \
-"A1UEBhMCTloxDzANBgNVBAgMBkJ1bGxlcjETMBEGA1UEBwwKQ2hhcmxlc3RvbjES\n" \
-"MBAGA1UECgwJRmxhdENhdElUMQswCQYDVQQLDAJDQTEnMCUGCSqGSIb3DQEJARYY\n" \
-"ZGpjbGFya2VAZmxhdGNhdGl0LmNvLm56MRQwEgYDVQQDDAsxOTIuMTY4LjAuMTCC\n" \
-"ASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBANlhhh+IgP73c5R7azrT12yg\n" \
-"GIWnSKRUYG5vzePiRQ46LFgkOoP1OBYxD3bhSeppj9BA09CFKVGeuglpD8flmIGI\n" \
-"uGNZCrIHCkZ7zvYmkJlgJclVI5SkE7eUNBMhRmI0ccITLvKiC5smDh9u31XvDXX2\n" \
-"RJYHrtIa1KszYIwKTfFTiG0Bpy9AaHE6XSP/BwnjzWED9OCixAVlepaNf2tImiFo\n" \
-"/trlHFv8qY0J9yU/L57RjX4jqeRdM/WWSYGwCMNdpctAWfChojKEHssIibiYnQFh\n" \
-"JYJsA2F8ZZl5nziFR55D6VJT0N7GH9pCPDwJmWSyaNMpaWIyiHXz661M6d+FuFUC\n" \
-"AwEAAaNTMFEwHQYDVR0OBBYEFI+Noc2V3uJkkr3peq3PWHz7v6rzMB8GA1UdIwQY\n" \
-"MBaAFI+Noc2V3uJkkr3peq3PWHz7v6rzMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZI\n" \
-"hvcNAQELBQADggEBAI+o7Ahr/GF0Kr81DoovEO0hl4xmoqRcFGamyrssfk5M2Rcy\n" \
-"to/4tj5b2QR7p8A9iCRBKMCxQJsQAuYN77u3ZCxW4ARmxFdOEgWm8oftxkur7yy2\n" \
-"20QYlmodo/AFraHqx5u8DtW3W4xxbvhwEVmHDLcwJxr55vXejrQ9LD7q8voBVVVx\n" \
-"whmiQ4VoRagBDOPco9C8GHc7Hgqh0o89NhCznOEXY5YRV6qzLKXvqZE+LGcQ+5zh\n" \
-"cdPOWNTgtQvAe+HhX+IimmfoM9jkjcY/llz/yPvR2BimbayFZqkXwBEfRUhtY38w\n" \
-"zMwM0EuD+iasPmY0N0bgwgk4IqbYweDq+hfksDQ=\n" \
-"-----END CERTIFICATE-----\n";
+#define ENABLE_DEBUG        // To enable debugging
+#define ENABLE_ERROR_STRING // To show details in error
+#define DEBUG_PORT Serial   // To define the serial port for debug printing
+#include <ESP_SSLClient.h>
+#include <WiFiClient.h>
 
-const char* gszNimrodCertKey = "";
-const char* gszNimrodCert = "";
 
-     
-const char* gszSSID = NULL;  
-const char* gszPassword = NULL;
+//const char* gszSSID = NULL;  
+//const char* gszPassword = NULL;
 String gsPrefSSID;
 String gsPrefPassword;
 int giWFstatus = 255; //WL_IDLE_STATUS;
@@ -106,6 +82,7 @@ int giBtn1Active = 0;
 int giBtn2Active = 0;
 int giBtn3Active = 0;
 int giBtn4Active = 0;
+unsigned long gulLastLoopMillis = 0;
 unsigned long gulBtn1Time = 0;
 unsigned long gulBtn2Time = 0;
 unsigned long gulBtn3Time = 0;
@@ -115,7 +92,11 @@ hw_timer_t * timer1 = NULL;
 hw_timer_t * timer2 = NULL;
 hw_timer_t * timer3 = NULL;
 hw_timer_t * timer4 = NULL;
-WiFiClientSecure client;
+
+ESP_SSLClient ssl_client;
+
+WiFiClient basic_client;
+
 DeviceAddress wDeviceAddr;
 // end nimrod definitions
 
@@ -130,39 +111,66 @@ void setup()
   nimrodSetup();
 
   wifiInit();
+
+  // ignore server ssl certificate verification
+  ssl_client.setInsecure();
+  //ssl_client.allowSelfSignedCerts();
+
+  // Set the receive and transmit buffers size in bytes for memory allocation (512 to 16384).
+  ssl_client.setBufferSizes(1024 /* rx */, 512 /* tx */);
+
+  /** Call setDebugLevel(level) to set the debug
+   * esp_ssl_debug_none = 0
+   * esp_ssl_debug_error = 1
+   * esp_ssl_debug_warn = 2
+   * esp_ssl_debug_info = 3
+   * esp_ssl_debug_dump = 4
+   */
+  ssl_client.setDebugLevel(1);
+
+  // In case ESP32 WiFiClient, the session timeout should be set,
+  // if the TCP session was kept alive because it was unable to detect the server disconnection.
+  ssl_client.setSessionTimeout(120); // Set the timeout in seconds (>=120 seconds)
+
+  // Assign the basic client to use in non-secure mode.
+  ssl_client.setClient(&basic_client, false /* set enable SSL option to false */);
+
 } 
 
 void loop() 
 {
-  nimrodLoop();
+  if ( gulLastLoopMillis + 100 < millis() )
+  {
+    gulLastLoopMillis = millis();
 
-  if ( giWFstatus != WiFi.status() )
-  { // wifi status has changed
-    giWFstatus = getWifiStatus();
+    nimrodLoop();
+
+    if ( giWFstatus != WiFi.status() )
+    { // wifi status has changed
+      giWFstatus = getWifiStatus();
+    }
+    
+    if ( WiFi.status() != WL_CONNECTED ) 
+    {  // WiFi DOWN
+      if ( giWiFiUpCount == 0 )
+      {
+        Serial.printf("Starting Wifi...\n" );
+        
+        WiFi.begin(gsPrefSSID.c_str(), gsPrefPassword.c_str());
+        giWiFiUpCount += 1;
+      }
+      else if ( giWiFiUpCount > 200 )
+      { // try again
+        giWiFiUpCount = 0;
+        
+        Serial.printf("WiFi still not connected\n");
+      }
+      else
+      {
+        giWiFiUpCount += 1;
+      }
+    }  
   }
-  
-  if ( WiFi.status() != WL_CONNECTED ) 
-  {  // WiFi DOWN
-    if ( giWiFiUpCount == 0 )
-    {
-      Serial.printf("Starting Wifi...\n" );
-      
-      WiFi.begin(gsPrefSSID.c_str(), gsPrefPassword.c_str());
-      giWiFiUpCount += 1;
-    }
-    else if ( giWiFiUpCount > 200 )
-    { // try again
-      giWiFiUpCount = 0;
-      
-      Serial.printf("WiFi still not connected\n");
-    }
-    else
-    {
-      giWiFiUpCount += 1;
-    }
-  }  
-
-  delay(100);
 }  
 
 void wifiInit() 
@@ -170,10 +178,10 @@ void wifiInit()
   WiFi.mode(WIFI_AP_STA);  // required to read NVR before WiFi.begin()
 
   // load credentials from NVR, a little RTOS code here
-  wifi_config_t conf;
-  esp_wifi_get_config(WIFI_IF_STA, &conf);  // load wifi settings to struct comf
-  gszSSID = reinterpret_cast<const char*>(conf.sta.ssid);
-  gszPassword = reinterpret_cast<const char*>(conf.sta.password);
+//  wifi_config_t conf;
+//  esp_wifi_get_config(WIFI_IF_STA, &conf);  // load wifi settings to struct comf
+//  gszSSID = reinterpret_cast<const char*>(conf.sta.ssid);
+//  gszPassword = reinterpret_cast<const char*>(conf.sta.password);
 
   // Open Preferences with "wifi" namespace. Namespace is limited to 15 chars
   gPrefStorage.begin("wifi", false);
@@ -186,6 +194,7 @@ void wifiInit()
   { // NV and Prefs are different, setup with SmartConfig
     if (gsPrefSSID == "none")
     { // new wifi config
+      //delay(10000);
       initSmartConfig();
       
       delay(3000);
@@ -204,11 +213,12 @@ void wifiInit()
 // executed
 bool checkPrefsStore() 
 {
-  bool bRet = false;
-  String NVssid, NVpass, prefssid, prefpass;
+  bool bRet = true;
+//  String NVssid, NVpass;
+  String prefssid, prefpass;
 
-  NVssid = getSsidPass("ssid");
-  NVpass = getSsidPass("pass");
+//  NVssid = getSsidPass("ssid");
+//  NVpass = getSsidPass("pass");
 
   // Open Preferences with my-app namespace. Namespace name is limited to 15
   // chars
@@ -217,9 +227,9 @@ bool checkPrefsStore()
   prefpass = gPrefStorage.getString("password", "none");  // NVS key password
   gPrefStorage.end();
 
-  if (NVssid.equals(prefssid) && NVpass.equals(prefpass)) 
-  {
-    bRet = true;
+  if ( prefssid == "none" || prefssid == "" || prefpass == "none" || prefpass == "") 
+  { // wifi creds are not setup
+    bRet = false;
   }
 
   return bRet;
@@ -241,7 +251,7 @@ void initSmartConfig()
     if (loopCounter >= 30) 
     {
       loopCounter = 0;
-      Serial.printf("\n");
+      Serial.printf("%s\n", esp_smartconfig_get_version());
     }
     delay(500);
     ++loopCounter;
@@ -254,7 +264,14 @@ void initSmartConfig()
 
   while (WiFi.status() != WL_CONNECTED)  
   { // wait forever until connected
+    Serial.printf("-");
+    if (loopCounter >= 30) 
+    {
+      loopCounter = 0;
+      Serial.printf("%s\n", esp_smartconfig_get_version());
+    }
     delay(500);
+    ++loopCounter;
   }
 
   PrintIPinfo();
@@ -272,9 +289,9 @@ void PrintIPinfo()
 {
   gsGetSsid = WiFi.SSID();
   gsGetPass = WiFi.psk();
-  giRssi = getRSSI(gszSSID);
+  giRssi = WiFi.RSSI(); 
   giWFstatus = getWifiStatus();
-  gsMAC = getMacAddress();
+  gsMAC = WiFi.macAddress();
 
   Serial.printf("SSID '%s', %d dbm\n", gsGetSsid.c_str(), giRssi );
   Serial.printf("IP address: %s / %s\n", WiFi.localIP().toString().c_str(), WiFi.subnetMask().toString().c_str() );
@@ -322,39 +339,6 @@ int getWifiStatus()
   return WiFiStatus;
 }
 
-
-// Get the station interface MAC address.
-// @return String MAC
-String getMacAddress(void) 
-{
-  uint8_t baseMac[6];
-  char macStr[18] = {0};
-
-  WiFi.mode(WIFI_AP_STA);  // required to read NVR before WiFi.begin()
-  
-  esp_read_mac(baseMac, ESP_MAC_WIFI_STA);  // Get MAC address for WiFi station
-  sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X", baseMac[0], baseMac[1],
-          baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
-
-  return String(macStr);
-}
-
-// Return RSSI or 0 if target SSID not found
-int32_t getRSSI(const char* target_ssid) 
-{
-  byte available_networks = WiFi.scanNetworks();
-
-  for (int network = 0; network < available_networks; network++) 
-  {
-    if (strcmp(WiFi.SSID(network).c_str(), target_ssid) == 0) 
-    {
-      return WiFi.RSSI(network);
-    }
-  }
-  
-  return 0;
-}  
-
 // Returns String NONE, ssid or pass according to request
 // return "NONE" if wrong key sent
 String getSsidPass(String sKey) 
@@ -387,7 +371,7 @@ String getSsidPass(String sKey)
 //**********************************************************************************************************
 
 // callbacks for button debounce
-void IRAM_ATTR button1_cb()
+/*void IRAM_ATTR button1_cb()
 { // delay 50msec
   if ( giBtn1Active == 0 )
   {
@@ -449,7 +433,7 @@ void IRAM_ATTR button4Changed()
 {
   giButton4Changed = digitalRead(INPUT_4_PIN);
   gulBtn4Time = millis();
-}
+} */
 
 void nimrodSetup()
 {
@@ -464,10 +448,10 @@ void nimrodSetup()
   pinMode( INPUT_3_PIN, INPUT_PULLUP );
   pinMode( INPUT_4_PIN, INPUT_PULLUP );
 
-  attachInterrupt( INPUT_1_PIN, button1_cb, FALLING );
-  attachInterrupt( INPUT_2_PIN, button2_cb, FALLING );
-  attachInterrupt( INPUT_3_PIN, button3_cb, FALLING );
-  attachInterrupt( INPUT_4_PIN, button4_cb, FALLING );
+  //attachInterrupt( INPUT_1_PIN, button1_cb, FALLING );
+  //attachInterrupt( INPUT_2_PIN, button2_cb, FALLING );
+  //attachInterrupt( INPUT_3_PIN, button3_cb, FALLING );
+  //attachInterrupt( INPUT_4_PIN, button4_cb, FALLING );
 
   digitalWrite( OUTPUT_LED_PIN, HIGH );
   digitalWrite( OUTPUT_1_PIN, iOutput1State );
@@ -476,19 +460,15 @@ void nimrodSetup()
   digitalWrite( OUTPUT_4_PIN, iOutput4State ); 
 
   // 80 prescale = 1 microsecond timer 
-  timer1 = timerBegin(0, 80, true);
-  timer2 = timerBegin(1, 80, true);
-  timer3 = timerBegin(2, 80, true);
-  timer4 = timerBegin(3, 80, true);
+  //timer1 = timerBegin(0, 80, true);
+  //timer2 = timerBegin(1, 80, true);
+  //timer3 = timerBegin(2, 80, true);
+  //timer4 = timerBegin(3, 80, true);
 
-  timerAttachInterrupt( timer1, &button1Changed, false );
-  timerAttachInterrupt( timer2, &button2Changed, false );
-  timerAttachInterrupt( timer3, &button3Changed, false );
-  timerAttachInterrupt( timer4, &button4Changed, false );
-
-  client.setCACert(gszNimrodRootCA);
-//  client.setCertificate(gszNimrodCertKey); // for client verification
-//  client.setPrivateKey(gszNimrodCert);  // for client verification
+  //timerAttachInterrupt( timer1, &button1Changed, false );
+  //timerAttachInterrupt( timer2, &button2Changed, false );
+  //timerAttachInterrupt( timer3, &button3Changed, false );
+  //timerAttachInterrupt( timer4, &button4Changed, false );
 
   // print the device addresses
   while ( sensors.getAddress( wDeviceAddr, giNumDevices) )
@@ -512,18 +492,18 @@ void nimrodLoop()
 {
   unsigned long ulTimeNow = millis();
   
-  if ( client.connected() )
+  if ( ssl_client.connected() )
   { // socket is connected
-    if ( client.available() == 8 )
+    if ( ssl_client.available() == 8 )
     {
       giSecSinceLastRecv = 0;
-      Serial.printf( "msg is available, %d bytes\n", client.available() );
+      Serial.printf( "msg is available, %d bytes\n", ssl_client.available() );
 
       int i;
       char szMsg[MSG_LENGTH+1];
       for ( i = 0; i < 8; i++ )
       {
-        szMsg[i] = client.read();
+        szMsg[i] = ssl_client.read();
       }
       szMsg[i] = '\0';
       
@@ -639,7 +619,7 @@ void nimrodLoop()
       PrintIPinfo();
       
       Serial.printf( "Try to connect the socket\n" );
-      if (!client.connect(NIMROD_IP, NIMROD_PORT)) 
+      if (!ssl_client.connect(NIMROD_IP, NIMROD_PORT)) 
       {
         Serial.printf("Connection to %s:%d failed\n", NIMROD_IP, NIMROD_PORT );
       }
@@ -649,13 +629,23 @@ void nimrodLoop()
       
         Serial.printf( "Connected to %s:%d\n", NIMROD_IP, NIMROD_PORT );
   
-        char szMsg[MSG_LENGTH+1];
-        // 01234567890123456789
-        // ESP001CLK1
-        // ESPxxxCIDyyyyyyyy
-        sprintf( szMsg, "%sCID%c%c%c%c%c%c%c%c%c%c%c%c", sEspName, gsMAC[0], gsMAC[1], gsMAC[3], gsMAC[4], gsMAC[6], gsMAC[7],
-            gsMAC[9], gsMAC[10], gsMAC[12], gsMAC[13], gsMAC[15], gsMAC[16] );
-        socket_send( szMsg );
+        Serial.print("Upgrade to HTTPS...");
+        if (!ssl_client.connectSSL())
+        {
+            Serial.println(" failed\r\n");
+            ssl_client.stop();
+            giSocketConnected = -1;
+        }
+        else
+        {
+          char szMsg[MSG_LENGTH+1];
+          // 01234567890123456789
+          // ESP001CLK1
+          // ESPxxxCIDyyyyyyyy
+          sprintf( szMsg, "%sCID%c%c%c%c%c%c%c%c%c%c%c%c", sEspName, gsMAC[0], gsMAC[1], gsMAC[3], gsMAC[4], gsMAC[6], gsMAC[7],
+              gsMAC[9], gsMAC[10], gsMAC[12], gsMAC[13], gsMAC[15], gsMAC[16] );
+          socket_send( szMsg );
+        }
       }      
     }
 
@@ -667,7 +657,7 @@ void nimrodLoop()
         giSecSinceLastRecv = 0;
         
         Serial.printf( "socket is dead\n" );
-        client.stop();
+        ssl_client.stop();
         giSocketConnected = -1;
       }
       else if ( giSecSinceLastSend >= PING_PERIOD )
@@ -815,7 +805,7 @@ void socket_send( char* msg )
 
   Serial.printf( "skt send: %s\n", msg );
 
-  client.print( msg );
+  ssl_client.print( msg );
   
   giSecSinceLastSend = 0;
 }

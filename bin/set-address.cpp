@@ -124,6 +124,7 @@ int main( int argc, char** argv )
 		printf( "                       8 Power Electronics SD700 VSD\n" );
 		printf( "                       9 HDHK 8Ch Current Meter\n" );
 		printf( "                      10 SHT40 / XY-MD02 Temperature/Humidity sensor\n" );
+		printf( "                      11 PT113MB Load Cell Transmitter\n" );
 		printf( "    optional   vsd_op: 1 forward\n");
 		printf( "                       2 backward\n");
 		printf( "                       3 forward jog\n");
@@ -137,6 +138,12 @@ int main( int argc, char** argv )
 
 	return 0;
 }
+
+// PT113MB - baud rate and address set by ATCom windows woftware only
+// 0x03 read holding registers
+// 0x10 preset multiple registers
+// read 40001:	weight/force/count
+// read 40003: status
 
 // SHT40 / XY-MD02 Temperature/Humidity sensor
 // input register 0x0001	Temprature, 2 bytes
@@ -616,6 +623,10 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 				printf( "\nPower cycle the device to set the new address / baud rate\nPress enter when done\n");
 				getc(stdin);
 			}
+		}
+		else if ( type == 11 )
+		{
+			printf( "skip baud/address setting for PT113MB\n" );
 		}
 		else
 		{
@@ -1189,6 +1200,105 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 		{
 			printf( "Humidity = %.1f %%\n", (double)ulInputs[0] / 10 );
 		}
+	}
+	else if ( type == 11 )
+	{	// PT113MB load cell transmitter
+		printf( "Setting slave addr to %d\n", newAddr );
+		if ( modbus_set_slave( ctx, newAddr ) == -1 )
+		{
+			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+		}
+
+		// read the psu voltage
+		iLen = 1;
+		uint16_t ulInputs[iLen];
+		addr = 33;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "PSU Voltage %.1f V\n", ((double)ulInputs[0])/10 );
+		}
+
+		// read the status
+		iLen = 1;
+		//uint16_t ulInputs[iLen];
+		addr = 2;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Status 0x%04X\n", ulInputs[0] );
+			printf( "System %s\n", ((ulInputs[0] & 0x0001) == 0 ? "Ready" : "Busy") );
+			printf( "%s\n", ((ulInputs[0] & 0x0002) == 0 ? "Error" : "Data Ok") );
+			printf( "Weight %s\n", ((ulInputs[0] & 0x0003) == 0 ? "Stable" : "Unstable") );
+			printf( "%s Mode\n", ((ulInputs[0] & 0x0004) == 0 ? "Gross" : "Net") );
+			printf( "%s Mode\n", ((ulInputs[0] & 0x0006) == 0 ? "Weight/Force" : "Count") );
+			printf( "%s centre of zero\n", ((ulInputs[0] & 0x1000) == 0 ? "Out of" : "Weight is in") );
+			printf( "Error Code %s (%d)\n", ((ulInputs[0] & 0xE000) == 0 ? "No Errors" : "Error"), (ulInputs[0] & 0xE000)>>13 );
+		}
+
+		// read the weight/count
+		iLen = 2;
+		uint16_t ulInputs2[iLen];
+		addr = 0;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs2 );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Weight/Count %u (%u,%u)\n", 65536*ulInputs2[0] + ulInputs2[1], ulInputs[0], ulInputs[1] );
+		}
+
+		// read the operating mode
+		iLen = 1;
+		//uint16_t ulInputs2[iLen];
+		addr = 13;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Operating Mode %u\n", ulInputs[0] );
+		}
+
+		// read the count mode input range
+		iLen = 1;
+		//uint16_t ulInputs2[iLen];
+		addr = 14;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Count Mode Input Range %u\n", ulInputs[0] );
+		}
+
+		// read the digital filter
+		iLen = 1;
+		//uint16_t ulInputs2[iLen];
+		addr = 15;	
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Digital Filter %u\n", ulInputs[0] );
+		}	
 	}
 }
 

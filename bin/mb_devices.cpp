@@ -82,6 +82,7 @@ void CMyDevice::Init()
 		SetAnalogType( j, 'V' );
 		SetCalcFactor( j, 0.0 );
 		SetOffset( j, 0.0 );
+		SetResolution( j, 0.0 );
 		SetMonitorPos( j, "   " );
 		GetConditionTriggered( j ) = 0;
 		GetAlarmTriggered( j ) = 0;
@@ -229,6 +230,14 @@ void CMyDevice::SetOffset( const int i, const double dOffset )
 	if ( i >= 0 && i < MAX_IO_PORTS )
 	{
 		m_dOffset[i] = dOffset;
+	}
+}
+
+void CMyDevice::SetResolution( const int i, const double dResolution )
+{
+	if ( i >= 0 && i < MAX_IO_PORTS )
+	{
+		m_dResolution[i] = dResolution;
 	}
 }
 
@@ -691,6 +700,59 @@ const double CMyDevice::CalcVSDPwrElectValue( const int iChannel, const bool bNe
 				break;
 			case 5:		// running speed, rpm
 				dVal = (double)dUnit;
+				break;
+			}
+		}
+	}
+
+	return dVal;
+}
+
+// count is in channels 0 and 1, status is in channel 2
+// should only be called for channel 0
+const double CMyDevice::CalcPT113Weight( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		bool bDataOk = false;
+		if ( bNew )
+		{
+			dUnit = (double)(m_uNewData[0])*65536 + (double)(m_uNewData[1]);
+			if ((m_uNewData[2] & 0x0002) != 0 && (m_uNewData[2] & 0xe000) == 0 )
+			{
+				bDataOk = true;
+			}
+		}
+		else
+		{
+			//LogMessage( E_MSG_INFO, "oldval %u %u", m_uLastData[0], m_uLastData[1] );
+			dUnit = (double)(m_uLastData[0]*65536 + (double)(m_uLastData[1]));
+			if ((m_uLastData[2] & 0x0002) != 0 && (m_uLastData[2] & 0xe000) == 0 )
+			{
+				bDataOk = true;
+			}
+		}
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 || !bDataOk )
+		{	// sensor is not connected
+
+		}
+		else
+		{
+			switch ( iChannel )
+			{
+			default:
+				break;
+			case 0:		// weight, kg
+				// Offset: load cell rated weight, 25,000kg
+				dVal = (double)dUnit / LOAD_CELL_MAX_COUNT * m_dOffset[0];
+				if ( dVal > (m_dOffset[0]*1.5) || dVal < 0.0 )
+				{	// data error out of range
+					dVal = 0.0;
+				}
 				break;
 			}
 		}
@@ -1840,6 +1902,16 @@ const double CDeviceList::GetOffset( const int idx, const int j )
 	return 0.0;
 }
 
+const double CDeviceList::GetResolution( const int idx, const int j )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].GetResolution(j);
+	}
+
+	return 0.0;
+}
+
 const char* CDeviceList::GetMonitorPos( const int idx, const int j )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
@@ -2036,6 +2108,16 @@ const double CDeviceList::CalcVSDPwrElectValue( const int idx, const int iChanne
 	return 0.0;
 }
 
+const double CDeviceList::CalcPT113Weight( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcPT113Weight( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
 const bool CDeviceList::IsSensorConnected( const int idx, const int iChannel )
 {
 	if ( idx >= 0 && idx < MAX_DEVICES )
@@ -2135,7 +2217,7 @@ void CDeviceList::SetDeviceHostname( const int idx, const char* szHostname )
 // calling function must get E_LT_NODEESP lock first
 void CDeviceList::SetEspResponseMsg( const char* szEspName, const char* szEspResponseMsg )
 {
-	if ( m_iEspMessageCount <= 0 && m_iEspMessageCount < MAX_ESP_QUEUE )
+	if ( m_iEspMessageCount >= 0 && m_iEspMessageCount < MAX_ESP_QUEUE )
 	{	// found an empty slot
 		snprintf( m_szEspResponseMsg[m_iEspMessageCount], sizeof(m_szEspResponseMsg[m_iEspMessageCount]), "%s", szEspResponseMsg );
 		snprintf( m_szEspName[m_iEspMessageCount], sizeof(m_szEspName[m_iEspMessageCount]), "%s", szEspName );
@@ -2143,7 +2225,7 @@ void CDeviceList::SetEspResponseMsg( const char* szEspName, const char* szEspRes
 	}
 	else
 	{
-		LogMessage( E_MSG_ERROR, "No slot for ESP response message" );
+		LogMessage( E_MSG_ERROR, "No slot for ESP response message, %d vs %d", m_iEspMessageCount, MAX_ESP_QUEUE );
 	}
 }
 
@@ -2285,6 +2367,14 @@ void CDeviceList::SetOffset( const int idx, const int j, const double dOffset )
 	if ( idx >= 0 && idx < MAX_DEVICES )
 	{
 		m_Device[idx].SetOffset( j, dOffset );
+	}
+}
+
+void CDeviceList::SetResolution( const int idx, const int j, const double dResolution )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		m_Device[idx].SetResolution( j, dResolution );
 	}
 }
 
@@ -2523,7 +2613,91 @@ bool CDeviceList::SelectCardNumber( CMysql& myDB, const char* szCardNumber, char
 		bEnabled = ( strcmp((const char*)row[1], "Y" ) == 0 ? true : false);
 		iPinFailCount = atoi((const char*)row[2]);
 
-		LogMessage( E_MSG_INFO, "Found Pin for card '%s'", szCardNumber );
+		LogMessage( E_MSG_INFO, "Found card details for '%s'", szCardNumber );
+	}
+	myDB.FreeResult();
+
+	return bRet;
+}
+
+bool CDeviceList::GetLastCardSwipeTimestamp( CMysql& myDB, const char* szCardNumber, time_t& tLastCardSwipe, double& dLastWeight )
+{
+	bool bRet = true;
+	int iNumFields;
+	MYSQL_ROW row;
+
+	tLastCardSwipe = 0;
+	dLastWeight = 0;
+	if ( myDB.RunQuery( "select unix_timestamp(ev_Timestamp),ev_Value from events where ev_EventType=%d and ev_Description='%s' order by ev_Timestamp desc limit 1", E_ET_CARDWEIGHT, szCardNumber ) != 0 )
+	{
+		bRet = false;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	else if ( (row = myDB.FetchRow( iNumFields )) )
+	{
+		bRet = true;
+		tLastCardSwipe = atol((const char*)row[0]);
+		dLastWeight = atof( (const char*)row[1] );
+	}
+	myDB.FreeResult();
+
+	return bRet;
+}
+
+bool CDeviceList::UpdateTruckTare( CMysql& myDB, const char* szCardNumber, const double dTruckWeight )
+{
+	bool bRet = true;
+
+	if ( myDB.RunQuery( "update users set us_TruckTare=%ld where us_CardNumber='%s'", (long)dTruckWeight, szCardNumber ) != 0 )
+	{
+		bRet = false;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	myDB.FreeResult();
+
+	return bRet;
+}
+
+bool CDeviceList::UpdateTrailerTare( CMysql& myDB, const char* szCardNumber, const double dTrailerWeight )
+{
+	bool bRet = true;
+
+	if ( myDB.RunQuery( "update users set us_TrailerTare=%ld where us_CardNumber='%s'", (long)dTrailerWeight, szCardNumber ) != 0 )
+	{
+		bRet = false;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	myDB.FreeResult();
+
+	return bRet;
+}
+
+bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTrailerRego, const size_t uLen2, char* szTruckTare, 
+	const size_t uLen3, char* szTrailerTare, const size_t uLen4 )
+{
+	bool bRet = false;
+	int iNumFields;
+	MYSQL_ROW row;
+
+	szTruckRego[0] = '\0';
+	szTrailerRego[0] = '\0';
+	szTruckTare[0] = '\0';
+	szTrailerTare[0] = '\0';
+
+	if ( myDB.RunQuery( "select us_TruckRego,us_TrailerRego,us_TruckTare,us_TrailerTare from users where us_CardNumber='%s'", szCardNumber ) != 0 )
+	{
+		bRet = false;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	else if ( (row = myDB.FetchRow( iNumFields )) )
+	{
+		bRet = true;
+		snprintf( szTruckRego, uLen1, "%s", (const char*)row[0] );
+		snprintf( szTrailerRego, uLen2, "%s", (const char*)row[1] );
+		snprintf( szTruckTare, uLen3, "%06ld", atol((const char*)row[2]) );
+		snprintf( szTrailerTare, uLen4, "%06ld", atol((const char*)row[3]) );
+
+		LogMessage( E_MSG_INFO, "Found card rego details for '%s'", szCardNumber );
 	}
 	myDB.FreeResult();
 
@@ -2641,8 +2815,8 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 			if ( myDB.RunQuery( "SELECT di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,"
 				//   6                 7              8           9             10            11        12
 					"di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,"
-				//   13           14
-					"di_MonitorHi,di_MonitorLo FROM deviceinfo WHERE di_DeviceNo=%d order by di_IOChannel",
+				//   13           14		   15
+					"di_MonitorHi,di_MonitorLo,di_Resolution FROM deviceinfo WHERE di_DeviceNo=%d order by di_IOChannel",
 					m_Device[i].GetDeviceNo() ) != 0 )
 			{
 				bRet = false;
@@ -2672,6 +2846,7 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 						SetMonitorPos( i, j, (const char*)row[12] );
 						// row[13]
 						// row[14]
+						// row[15]
 
 						LogMessage( E_MSG_INFO, "DeviceInfo OUT(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, OnPeriod:%d, Days:%s, MonPos:'%s'", i, j,
 								GetOutIOName(i,j), GetOutChannelType(i,j), GetOutOnPeriod(i,j),
@@ -2694,16 +2869,17 @@ bool CDeviceList::ReadDeviceConfig( CMysql& myDB )
 						SetMonitorPos( i, j, (const char*)row[12] );
 						GetMonitorValueHi( i, j ) = atof( (const char*)row[13] );
 						GetMonitorValueLo( i, j ) = atof( (const char*)row[14] );
+						SetResolution( i, j, atof( (const char*)row[15] ) );
 
 						if ( GetInChannelType(i,j) == E_IO_ON_OFF_INV )
 						{	// invert the state
 							GetLastInput(i,j) = true;
 						}
 
-						LogMessage( E_MSG_INFO, "DeviceInfo  IN(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, Hyst:%d, Temp:%.1f, Days:%s AType:'%c', CFactor:%.3f, Offset:%.2f, MonPos:'%s', MonHi:%.1f, MonLo:%.1f",
+						LogMessage( E_MSG_INFO, "DeviceInfo  IN(%d,%d): Name:'%s', Type:%d, OnPeriod:%d, STime:%d, Hyst:%d, Temp:%.1f, Days:%s AType:'%c', CFactor:%.3f, Offset:%.2f, MonPos:'%s', MonHi:%.1f, MonLo:%.1f, Res:%.3f",
 								i, j, GetInIOName(i,j), GetInChannelType(i,j), GetInOnPeriod(i,j),
 								GetStartTime(i,j), GetHysteresis(i,j), GetMonitorValueLo(i,j), GetInWeekdays(i,j), GetAnalogType(i,j), GetCalcFactor(i,j),
-								GetOffset(i,j), GetMonitorPos(i,j), GetMonitorValueHi(i,j), GetMonitorValueLo(i,j) );
+								GetOffset(i,j), GetMonitorPos(i,j), GetMonitorValueHi(i,j), GetMonitorValueLo(i,j), GetResolution(i,j) );
 					}
 				}
 
@@ -3095,7 +3271,32 @@ const double CInOutLinks::GetLinkValue( const int idx, const int cn )
 	return 0.0;
 }
 
+// returns the idx of the linked device or -1 if not found
+const int CInOutLinks::FindLinkedDevice( const int iInDeviceNo, const int iInChannel, const enum E_DEVICE_TYPE eDeviceType, CDeviceList* m_pmyDevices )
+{
+	int idx = -1;
+	int lnk = 0;
 
+	while ( lnk < MAX_IO_LINKS )
+	{
+		if ( m_iInDeviceNo[lnk] == iInDeviceNo && m_iInChannel[lnk] == iInChannel )
+		{
+			LogMessage( E_MSG_INFO, "Found link for %d,%d", iInDeviceNo, iInChannel );
+			int iAddr = m_pmyDevices->GetAddressForDeviceNo(m_iOutDeviceNo[lnk]);
+			int i = m_pmyDevices->GetIdxForAddr(iAddr);
+			if ( m_pmyDevices->GetDeviceType(i) == eDeviceType )
+			{
+				LogMessage( E_MSG_INFO, "Found linked device type %d for %d,%d: %s", eDeviceType, iInDeviceNo, iInChannel, m_pmyDevices->GetDeviceName(i) );
+				idx = i;
+				break;
+			}
+		}
+
+		lnk += 1;
+	}
+
+	return idx;
+}
 
 bool CInOutLinks::Find( const int iInDeviceNo, const int iInChannel, int &idx, int& iOutDeviceNo, int& iOutChannel, int& iOnPeriod, double& dVsdFrequency, bool& bLinkTestPassed, bool& bInvertState, CDeviceList* m_pmyDevices )
 {

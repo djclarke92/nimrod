@@ -14,10 +14,11 @@
 #define MAX_IO_LINKS				100		// across all pi's
 #define MAX_CONDITIONS				10		// per each iolink
 #define ESP_MSG_SIZE				22
-#define MAX_ESP_QUEUE				4
+#define MAX_ESP_QUEUE				6
 #define MAX_DATA_BUFFER				10
 #define MAX_TEMPERATURE_DIFF		10.0		// max temperature value change between readings
 #define MAX_PIN_FAILURES			3
+#define LOAD_CELL_MAX_COUNT			1000000		//  2mV/V unipolar load cell
 
 
 enum E_DEVICE_TYPE {
@@ -31,12 +32,14 @@ enum E_DEVICE_TYPE {
 	E_DT_LEVEL_HDL,			// 7: water level sensor type HDL300
 	E_DT_ROTARY_ENC_12BIT,	// 8: rotary encoder 12 bit
 	E_DT_VIPF_MON,			// 9: PZEM-016 VIPF Monitor
-	E_DT_CARD_READER,		// 10: HID card reader with pin pad
+	E_DT_CARD_READER,		// 10: HID card reader without pin pad
 	E_DT_VSD_NFLIXEN,		// 11: NFlixen 9600 VSD
 	E_DT_VSD_PWRELECT,		// 12: Power Electronics SD700 VSD
 	E_DT_HDHK_CURRENT,		// 13: HDHK 8 channel current meter
 	E_DT_SHT40_TH,			// 14: SHT40 / XY-MD02 temperature / humidity sensor
 	E_DT_VIRTUAL_INPUT,		// 15: virtual inputs
+	E_DT_PT113_LCT,			// 16: PT113MB load cell transmitter
+	E_DT_ESP_DISPLAY		// 17: ESP32 matrix display
 };
 
 enum E_IO_TYPE {
@@ -90,6 +93,12 @@ enum E_IO_TYPE {
 	E_IO_HUMIDITY_HIGH,		// 47:	humidity too high
 	E_IO_HUMIDITY_LOW,		// 48:	humidity too low
 	E_IO_HUMIDITY_HIGHLOW,	// 49:	humidity too high or too low
+	E_IO_WEIGHT_MONITOR,	// 50:	weight monitor only
+	E_IO_WEIGHT_HIGH,		// 51:	weight too high
+	E_IO_WEIGHT_LOW,		// 52:	weight too low
+	E_IO_WEIGHT_HIGHLOW,	// 53:	weight too high or too low
+	E_IO_READER_WEIGHBRIDGE,	// 54:	card reader for weigh bridge
+	E_IO_ESP_DISPLAY,		// 55:	ESP32 display
 };
 
 enum E_EVENT_TYPE {
@@ -115,6 +124,8 @@ enum E_EVENT_TYPE {
 	E_ET_CERTIFICATENG,		// 19:	certificate error
 	E_ET_CERTIFICATEAG,		// 20:	certificate aging
 	E_ET_HUMIDITY,			// 21:	humidity
+	E_ET_WEIGHT,			// 22:	weight
+	E_ET_CARDWEIGHT,		// 23:	card swipe and weight
 };
 
 enum E_DEVICE_STATUS {
@@ -134,7 +145,7 @@ enum E_DAY_NIGHT_STATE {
 
 
 /* Ultrasonic distance measurment module: AJ-SR04M ($5 from AliExpress)
- * - Output is TTL level RS-232.
+ * - Output is TTL level RS-232.GetNewData
  * - The module runs on 5VDC and can be powered directly from a USB/RS232 TTL converter
  * - USB/RS232 converter wiring. Red = 5V, Black = 0V, White = Rx (wire the module Tx/Echo pin), Green = Tx (wire to module Rx/Trg pin)
  * - Nimrod software is written to use mode 5 (R19 = 0 or short circuit) ascii data
@@ -219,6 +230,7 @@ public:
 
 	const int FindEmptyConditionSlot( const int idx );
 	bool Find( const int iInAddress, const int iInSwitch, int &idx, int& iOutADdress, int& iOutChannel, int& iOnPeriod, double &dVsdFrequency, bool& bLinkTestPassed, bool& bInvertState, CDeviceList* m_pmyDevices );
+	const int FindLinkedDevice( const int iInDeviceNo, const int iInChannel, const enum E_DEVICE_TYPE eDeviceType, CDeviceList* m_pmyDevices );
 };
 
 
@@ -266,6 +278,7 @@ private:
 	char m_cAnalogType[MAX_IO_PORTS];
 	double m_dCalcFactor[MAX_IO_PORTS];
 	double m_dOffset[MAX_IO_PORTS];
+	double m_dResolution[MAX_IO_PORTS];
 	char m_szMonitorPos[MAX_IO_PORTS][15+1];	// max of 5 sets of 3 chars
 	struct timespec m_tEventTime[MAX_IO_PORTS];
 
@@ -285,6 +298,7 @@ public:
 	const double CalcTHValue( const int iChannel, const bool bNew );
 	const double CalcVSDNFlixenValue( const int iChannel, const bool bNew );
 	const double CalcVSDPwrElectValue( const int iChannel, const bool bNew );
+	const double CalcPT113Weight( const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int iChannel );
 	const bool WasSensorConnected( const int iChannel );
 	const bool IsTimerEnabledToday( const int iChannel );
@@ -336,6 +350,7 @@ public:
 	const char GetAnalogType( const int i){ return m_cAnalogType[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	const double GetCalcFactor( const int i){ return m_dCalcFactor[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	const double GetOffset( const int i ){ return m_dOffset[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
+	const double GetResolution( const int i ){ return m_dResolution[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	const char* GetMonitorPos( const int i ){ return m_szMonitorPos[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 	void GetEventTime( const int i, struct timespec& ts ){ ts = m_tEventTime[(i >= 0 && i < MAX_IO_PORTS ? i : 0)]; };
 
@@ -365,6 +380,7 @@ public:
 	void SetAnalogType( const int i, const char cType );
 	void SetCalcFactor( const int i, const double dFactor );
 	void SetOffset( const int i, const double dOffset );
+	void SetResolution( const int i, const double dResolution );
 	void SetMonitorPos( const int i, const char* szMonPos );
 	void SetEventTime( const int i, const struct timespec ts );
 };
@@ -412,6 +428,7 @@ public:
 	const double CalcVIPFValue( const int idx, const int iChannel, const bool bNew );
 	const double CalcVSDNFlixenValue( const int idx, const int iChannel, const bool bNew );
 	const double CalcVSDPwrElectValue( const int idx, const int iChannel, const bool bNew );
+	const double CalcPT113Weight( const int idx, const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int idx, const int iChannel );
 	const bool WasSensorConnected( const int idx, const int iChannel );
 	const bool IsTimerEnabledToday( const int idx, const int iChannel );
@@ -462,6 +479,7 @@ public:
 	const char GetAnalogType( const int idx, const int j );
 	const double GetCalcFactor( const int idx, const int j );
 	const double GetOffset( const int idx, const int j );
+	const double GetResolution( const int idx, const int j );
 	const char* GetMonitorPos( const int idx, const int j );
 	void GetEventTime( const int idx, const int j, struct timespec& ts );
 	void GetEventTimeNow( struct timespec& tNow );
@@ -496,6 +514,7 @@ public:
 	void SetAnalogType( const int idx, const int j, const char cType );
 	void SetCalcFactor( const int idx, const int j, const double dFactor );
 	void SetOffset( const int idx, const int j, const double dOffset );
+	void SetResolution( const int idx, const int j, const double dResolution );
 	void SetMonitorPos( const int idx, const int j, const char* szMonPos );
 	void SetEventTime( const int idx, const int j, const struct timespec ts );
 	void SetDayNightState( const double dVoltage );
@@ -503,6 +522,11 @@ public:
 
 	bool UpdatePinFailCount( CMysql& myDB, const char* szCardNumber, const int iPinFailCount );
 	bool SelectCardNumber( CMysql& myDB, const char* szCardNumber, char* szCardPin, const int iLen, bool& bEnabled, int& iPinFailCount );
+	bool SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTrailerRego, const size_t uLen2, char* szTruckTare, 
+			const size_t uLen3, char* szTrailerTare, const size_t uLen4 );
+	bool UpdateTruckTare( CMysql& myDB, const char* szCardNumber, const double dTruckWeight );
+	bool UpdateTrailerTare( CMysql& myDB, const char* szCardNumber, const double dTrailerWeight );
+	bool GetLastCardSwipeTimestamp( CMysql& myDB, const char* szCardNumber, time_t& tLastCardSwipe, double& dLastWeight );
 	bool UpdateDeviceStatus( CMysql& myDB, const int idx );
 	bool UpdateDeviceOutOnStartTime( CMysql& myDB, const int iOutIdx, const int iOutChannel );
 	bool UpdateDBDeviceComPort( CMysql& myDB, const int idx );

@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 122 );
+define( "THIS_DATABASE_VERSION", 127 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -29,6 +29,8 @@ define( "E_UF_UPGRADE", 1 );
 define( "E_UFD_UPGRADE", "Software Upgrade" );
 define( "E_UF_HOMECAMERAS", 2 );
 define( "E_UFD_HOMECAMERAS", "Show Cameras on Home Page" );
+define( "E_UF_ACCOUNTINGUSER", 3 );
+define( "E_UFD_ACCOUNTINGUSER", "Copy invoices to this user" );
 
 define( "MAX_CAMERAS", 9 );
 
@@ -42,12 +44,14 @@ define( "E_DT_LEVEL_K02", 6 );	     // level, K02 module
 define( "E_DT_LEVEL_HDL", 7 );	     // level, HDL300 sensor
 define( "E_DT_ROTARY_ENC_12BIT", 8 );	     // rotary encoder, 12 bit
 define( "E_DT_VIPF_MON", 9 );           // PZEM-016 V/I Monitor
-define( "E_DT_CARD_READER", 10 );       // card reader
+define( "E_DT_CARD_READER", 10 );       // card reader without pin pad
 define( "E_DT_VSD_NFLIXEN", 11 );       // NFlixen 9600 VSD
 define( "E_DT_VSD_PWRELECT", 12 );      // Power ELectronics SD700 VSD
 define( "E_DT_HDHK_CURRENT", 13 );		// HDHK 8 channel current meter
 define( "E_DT_SHT40_TH", 14 );			// SHT40 / XY-MD02 temperature / humidity sensor
 define( "E_DT_VIRTUAL_INPUT", 15 );		// virtual inputs
+define( "E_DT_PT113_LCT", 16 );			// PT113MB load cell transmittrer
+define( "E_DT_ESP_DISPLAY", 17 );		// ESP32 matrix display
 $_SESSION['E_DTD'] = array();
 $_SESSION['E_DTD'][] = "Unused";
 $_SESSION['E_DTD'][] = "Digital IO"; 
@@ -65,6 +69,8 @@ $_SESSION['E_DTD'][] = "PwrElect SD700 VSD";
 $_SESSION['E_DTD'][] = "HDHK 8Ch Current Meter";
 $_SESSION['E_DTD'][] = "SHT40 / XY-MD02 Temp/Humidity";
 $_SESSION['E_DTD'][] = "Virtual Input";
+$_SESSION['E_DTD'][] = "PT113MB Load Cell Transmitter";
+$_SESSION['E_DTD'][] = "ESP32 Matrix Display";
 
 define( "E_IO_UNUSED", 0 );
 define( "E_IO_ON_OFF", 1 );			// 1: 	manual on off switch
@@ -116,6 +122,12 @@ define( "E_IO_HUMIDITY_MONITOR", 46 );	// 46:	humidity monitor only
 define( "E_IO_HUMIDITY_HIGH", 47 );		// 47:	humidity too high
 define( "E_IO_HUMIDITY_LOW", 48 );		// 48:	humidity too low
 define( "E_IO_HUMIDITY_HIGHLOW", 49 );	// 49:	humidity too high or too low
+define( "E_IO_WEIGHT_MONITOR", 50 );	// 50:	weight monitor only
+define( "E_IO_WEIGHT_HIGH", 51 );		// 51:	weight too high
+define( "E_IO_WEIGHT_LOW", 52 );		// 52:	weight too low
+define( "E_IO_WEIGHT_HIGHLOW", 53 );	// 53:	weight too high or too low
+define( "E_IO_READER_WEIGHBRIDGE", 54 );	// 54:	card reader for weigh bridge
+define( "E_IO_ESP_DISPLAY", 55 );		// 55:	ESP32 display
 $_SESSION['E_IOD'] = array();
 $_SESSION['E_IOD'][] = "Unused";
 $_SESSION['E_IOD'][] = "Manual On Off Switch";
@@ -167,6 +179,12 @@ $_SESSION['E_IOD'][] = "Humidity Monitor Only";
 $_SESSION['E_IOD'][] = "Humidity Too High";
 $_SESSION['E_IOD'][] = "Humidity Too Low";
 $_SESSION['E_IOD'][] = "Humidity Too High or Low";
+$_SESSION['E_IOD'][] = "Weight Monitor Only";
+$_SESSION['E_IOD'][] = "Weight Too High";
+$_SESSION['E_IOD'][] = "Weight Too Low";
+$_SESSION['E_IOD'][] = "Weight Too High or Low";
+$_SESSION['E_IOD'][] = "Card Reader for Weigh Bridge";
+$_SESSION['E_IOD'][] = "ESP32 matrix display";
 
 define( "E_ET_CLICK", 0 );			// 0: single click
 define( "E_ET_DBLCLICK", 1 );		// 1: double click
@@ -190,6 +208,8 @@ define( "E_ET_RPMSPEED", 18 );      // 18: rpm speed
 define( "E_ET_CERTIFICATENG", 19 ); // 19: certifgicate ng
 define( "E_ET_CERTIFICATEAG", 20 ); // 20: certifgicate aging
 define( "E_ET_HUMIDITY", 21 );		// 21: humidity
+define( "E_ET_WEIGHT", 22 );		// 22: weight
+define( "E_ET_CARDWEIGHT", 23 );	// 23: card and weight
 $_SESSION['E_ETD'] = array();
 $_SESSION['E_ETD'][] = "Click";
 $_SESSION['E_ETD'][] = "Dbl CLick";
@@ -212,7 +232,9 @@ $_SESSION['E_ETD'][] = "Torque %";
 $_SESSION['E_ETD'][] = "RPM Speed";
 $_SESSION['E_ETD'][] = "Certificate NG";
 $_SESSION['E_ETD'][] = "Certificate Aging";
-$_SESSION['E_ETC'][] = "Humidity %";
+$_SESSION['E_ETD'][] = "Humidity %";
+$_SESSION['E_ETD'][] = "Weight Kg";
+$_SESSION['E_ETD'][] = "Card Weight Kg";
 
 define( "E_DS_ALIVE", 0 );			// 0:	alive
 define( "E_DSD_ALIVE", "Alive" );	
@@ -732,6 +754,116 @@ function func_check_database( $db )
         
         $version = func_update_database_version( $db, 122 );
     }
+
+    if ( $version === false || $version < 123 )
+    {   // we have some work to do
+        $query = "alter table deviceinfo modify di_Offset decimal(10,3) not null default 0.0";
+        
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table deviceinfo", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 123 );
+    }
+
+    if ( $version === false || $version < 124 )
+    {   // we have some work to do
+        $query = "alter table users add us_TruckRego char(6) not null default ''";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $query = "alter table users add us_TrailerRego char(6) not null default ''";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $query = "alter table users add us_BillingName char(50) not null default ''";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $query = "alter table users add us_BillingAddr1 char(50) not null default ''";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $query = "alter table users add us_BillingAddr2 char(50) not null default ''";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $query = "alter table users add us_BillingAddr3 char(50) not null default ''";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $query = "alter table users add us_BillingEmail char(50) not null default ''";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 124);
+    }
+
+    if ( $version === false || $version < 125 )
+    {   // we have some work to do
+        $query = "alter table users add us_TruckTare int(10) not null default 0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $query = "alter table users add us_TrailerTare int(10) not null default 0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 125);
+    }
+
+	if ( $version === false || $version < 126 )
+    {   // we have some work to do
+        $query = "alter table deviceinfo modify di_CalcFactor decimal(10,3) not null default 0.0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table deviceinfo", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 126);
+    }
+
+	if ( $version === false || $version < 127 )
+    {   // we have some work to do
+        $query = "alter table deviceinfo add di_Resolution decimal(10,3) not null default 0.0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table deviceinfo", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 127);
+    }
 }
 
 function func_db_warning_count( $db )
@@ -1128,20 +1260,22 @@ class MySQLDB
 		
 		$ss = "";
 		if ( $in )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, 
 					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
 			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW,
     			    E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW, E_IO_ON_OFF_INV,
-					E_IO_HUMIDITY_MONITOR, E_IO_HUMIDITY_HIGH, E_IO_HUMIDITY_LOW, E_IO_HUMIDITY_HIGHLOW );
+					E_IO_HUMIDITY_MONITOR, E_IO_HUMIDITY_HIGH, E_IO_HUMIDITY_LOW, E_IO_HUMIDITY_HIGHLOW,
+					E_IO_WEIGHT_MONITOR, E_IO_WEIGHT_HIGH, E_IO_WEIGHT_LOW, E_IO_WEIGHT_HIGHLOW, E_IO_READER_WEIGHBRIDGE );
 		else if ( $out )
-			$ss = sprintf( "and di_IOType in (%d)", E_IO_OUTPUT );
+			$ss = sprintf( "and di_IOType in (%d,%d,%d)", E_IO_OUTPUT, E_IO_WEIGHT_MONITOR, E_IO_ESP_DISPLAY );
 		
 		if ( $in && $out )
-			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
+			$ss = sprintf( "and di_IOType in (%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)", E_IO_ON_OFF, E_IO_ON_TIMER, E_IO_TOGGLE, E_IO_ON_OFF_TIMER, E_IO_OUTPUT, 
 					 E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_VOLT_HIGH, E_IO_VOLT_LOW, E_IO_TEMP_MONITOR, E_IO_VOLT_MONITOR,
 			         E_IO_TEMP_HIGHLOW, E_IO_VOLT_HIGHLOW, E_IO_LEVEL_MONITOR, E_IO_LEVEL_HIGH, E_IO_LEVEL_LOW, E_IO_LEVEL_HIGHLOW,
 			         E_IO_ROTENC_MONITOR, E_IO_ROTENC_HIGH, E_IO_ROTENC_LOW, E_IO_ROTENC_HIGHLOW, E_IO_ON_OFF_INV,
-					 E_IO_HUMIDITY_MONITOR, E_IO_HUMIDITY_HIGH, E_IO_HUMIDITY_LOW, E_IO_HUMIDITY_HIGHLOW );
+					 E_IO_HUMIDITY_MONITOR, E_IO_HUMIDITY_HIGH, E_IO_HUMIDITY_LOW, E_IO_HUMIDITY_HIGHLOW,
+					 E_IO_WEIGHT_MONITOR, E_IO_WEIGHT_HIGH, E_IO_WEIGHT_LOW, E_IO_WEIGHT_HIGHLOW, E_IO_READER_WEIGHBRIDGE, E_IO_ESP_DISPLAY );
 			
 		$query = sprintf( "select de_DeviceNo,de_Address,de_Hostname,di_IOChannel,di_IOName,di_IOType from
 				deviceinfo,devices where di_DeviceNo=de_DeviceNo %s order by de_Hostname,de_Address,di_IOChannel",
@@ -1206,7 +1340,7 @@ class MySQLDB
 		$info = false;
 		$query = sprintf( "select di_DeviceInfoNo,di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,
 				di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,di_MonitorHi,di_MonitorLo,
-                di_ValueRangeHi,di_ValueRangeLo from
+                di_ValueRangeHi,di_ValueRangeLo,di_Resolution from
                 deviceinfo where di_DeviceInfoNo=%d", $di_no );
 
 		$result = $this->RunQuery( $query );
@@ -1219,7 +1353,7 @@ class MySQLDB
 			                 'di_Weekdays'=>$line[10], 'di_AnalogType'=>$line[11],
 							'di_CalcFactor'=>$line[12], 'di_Offset'=>$line[13],
 			                'di_MonitorPos'=>$line[14], 'di_MonitorHi'=>$line[15], 'di_MonitorLo'=>$line[16],
-			                'di_ValueRangeHi'=>$line[17], 'di_ValueRangeLo'=>$line[18] );
+			                'di_ValueRangeHi'=>$line[17], 'di_ValueRangeLo'=>$line[18], 'di_Resolution'=>$line[19] );
 		}
 
 		$this->FreeQuery($result);
@@ -1230,9 +1364,9 @@ class MySQLDB
 	function ReadDeviceInfoDC( $de_no, $channel )
 	{
 		$info = false;
-		$query = sprintf( "select di_DeviceInfoNo,di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,
-				di_Hysteresis,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,
-                di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo from 
+		$query = sprintf( "select di_DeviceInfoNo,di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,di_Hysteresis,
+				di_OutOnStartTime,di_OutOnPeriod,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,di_MonitorHi,di_MonitorLo,
+				di_ValueRangeHi,di_ValueRangeLo,di_Resolution from 
 				deviceinfo where di_DeviceNo=%d and di_IOChannel=%d", $de_no, $channel );
 
 		$result = $this->RunQuery( $query );
@@ -1241,10 +1375,11 @@ class MySQLDB
 			$info = array( 'di_DeviceInfoNo'=>$line[0], 'di_DeviceNo'=>$line[1],  
 							'di_IOChannel'=>$line[2], 'di_IOName'=>$line[3], 'di_IOType'=>$line[4], 
 							'di_OnPeriod'=>$line[5], 'di_StartTime'=>$line[6], 'di_Hysteresis'=>$line[7],
-							'di_Weekdays'=>$line[8], 'di_AnalogType'=>$line[9],
-							'di_CalcFactor'=>$line[10], 'di_Offset'=>$line[11],
-			                'di_MonitorPos'=>$line[12], 'di_MonitorHi'=>$line[13], 'di_MonitorHi'=>$line[14],
-			                'di_ValueRangeHi'=>$line[15], 'di_ValueRangeLo'=>$line[16] );
+							'di_OutOnStartTime'=>$line[8], 'di_OutOnPeriod'=>$line[9], 
+							'di_Weekdays'=>$line[10], 'di_AnalogType'=>$line[11],
+							'di_CalcFactor'=>$line[12], 'di_Offset'=>$line[13],
+			                'di_MonitorPos'=>$line[14], 'di_MonitorHi'=>$line[15], 'di_MonitorLo'=>$line[16],
+			                'di_ValueRangeHi'=>$line[17], 'di_ValueRangeLo'=>$line[18], 'di_Resolution'=>$line[19] );
 		}
 
 		$this->FreeQuery($result);
@@ -1252,25 +1387,25 @@ class MySQLDB
 		return $info;
 	}
 
-	function UpdateDeviceInfoTable( $di_no, $de_no, $channel, $name, $type, $period, $stime, $hyst, $days, $atype, $factor, $offset, $monitor_pos, $monitor_hi, $monitor_lo, $value_hi, $value_lo )
+	function UpdateDeviceInfoTable( $di_no, $de_no, $channel, $name, $type, $period, $stime, $hyst, $days, $atype, $factor, $offset, $monitor_pos, $monitor_hi, $monitor_lo, $value_hi, $value_lo, $resolution )
 	{
 		if ( $di_no == 0 )
 		{	// insert
 			$query = sprintf( "insert into deviceinfo (di_DeviceNo,di_IOChannel,di_IOName,di_IOType,di_OnPeriod,di_StartTime,
 					di_Hysteresis,di_Weekdays,di_AnalogType,di_CalcFactor,di_Offset,di_MonitorPos,
-                    di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo)
-					values(%d,%d,'%s',%d,%d,%d,%d,'%s','%s',%.3f,%.3f,'%s',%.1f,%.1f,'%s','%s')",
-					$de_no, $channel, addslashes($name), $type, $period, $stime, $hyst, $days, $atype, $factor, $offset, $monitor_pos, $monitor_hi, $monitor_lo, $value_hi, $value_lo );
+                    di_MonitorHi,di_MonitorLo,di_ValueRangeHi,di_ValueRangeLo,di_Resolution)
+					values(%d,%d,'%s',%d,%d,%d,%d,'%s','%s',%.3f,%.3f,'%s',%.1f,%.1f,'%s','%s',%.3f)",
+					$de_no, $channel, addslashes($name), $type, $period, $stime, $hyst, $days, $atype, $factor, $offset, $monitor_pos, $monitor_hi, $monitor_lo, $value_hi, $value_lo, $resolution );
 		}
 		else
 		{
 			$query = sprintf( "update deviceinfo set di_DeviceNo=%d,di_IOChannel=%d,di_IOName='%s',di_IOType=%d,
 					di_OnPeriod=%d,di_StartTime=%d,di_Hysteresis=%d,di_Weekdays='%s',di_AnalogType='%s',
 					di_CalcFactor=%.3f,di_Offset=%.3f,di_MonitorPos='%s',di_MonitorHi=%.1f,di_MonitorLo=%.1f,
-                    di_ValueRangeHi='%s',di_ValueRangeLo='%s'  
+                    di_ValueRangeHi='%s',di_ValueRangeLo='%s',di_Resolution=%.3f  
 					where di_DeviceInfoNo=%d",
 					$de_no, $channel, addslashes($name), $type, $period, $stime, $hyst, $days, $atype, $factor, $offset, $monitor_pos,
-			        $monitor_hi, $monitor_lo, $value_hi, $value_lo,
+			        $monitor_hi, $monitor_lo, $value_hi, $value_lo, $resolution,
 					$di_no );
 		}
 		$result = $this->RunQuery( $query );
@@ -1359,7 +1494,8 @@ class MySQLDB
 		$info = array();
 		$query = sprintf( "select il_LinkNo,il_InDeviceNo,il_InChannel,il_OutDeviceNo,il_OutChannel,il_EventType,il_OnPeriod,il_VsdFrequency,
 				di_IOName,di_OutOnStartTime,di_OutOnPeriod from 
-				iolinks,deviceinfo where il_OutDeviceNo=di_DeviceNo and il_OutChannel=di_IOChannel and di_IOType=%d order by il_OutDeviceNo,il_OutChannel", E_IO_OUTPUT );
+				iolinks,deviceinfo where il_OutDeviceNo=di_DeviceNo and il_OutChannel=di_IOChannel and di_IOType in (%d,%d,%d) order by il_OutDeviceNo,il_OutChannel", 
+				E_IO_OUTPUT, E_IO_WEIGHT_MONITOR, E_IO_ESP_DISPLAY );
 				 
 		$result = $this->RunQuery( $query );
 		while ( $line = mysqli_fetch_row($result) )
@@ -1804,6 +1940,12 @@ class MySQLDB
 	    return $info;
 	}
 	
+	function GetLatestWeights( $hours, $datetime )
+	{
+	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_WEIGHT_HIGH, E_IO_WEIGHT_LOW, E_IO_WEIGHT_MONITOR, E_IO_WEIGHT_HIGHLOW );
+	    return $this->GetLatestData( $hours, $datetime, $search, E_ET_WEIGHT );
+	}
+	
 	function GetLatestTemperatures( $hours, $datetime )
 	{
 	    $search = sprintf( "(%d,%d,%d,%d)", E_IO_TEMP_HIGH, E_IO_TEMP_LOW, E_IO_TEMP_MONITOR, E_IO_TEMP_HIGHLOW );
@@ -1991,12 +2133,15 @@ class MySQLDB
 	function ReadUsers()
 	{
 	    $info = array();
-	    $query = sprintf( "Select us_Username,us_name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount from users" );
+	    $query = sprintf( "Select us_Username,us_name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
+			us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare from users" );
 	    $result = $this->RunQuery( $query );
 	    while ( $line = mysqli_fetch_row($result) )
 	    {
 	        $info[] = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
-	            'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8] );
+	            'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8],
+				'us_TruckRego'=>$line[9], 'us_TrailerRego'=>$line[10], 'us_BillingName'=>$line[11], 'us_BillingAddr1'=>$line[12], 'us_BillingAddr2'=>$line[13],
+				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[16], 'us_TrailerTare'=>$line[17] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -2032,25 +2177,34 @@ class MySQLDB
 	    return false;
 	}
 	
-	function UpdateUserTable( $newuser, $username, $name, $password, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count )
+	function UpdateUserTable( $newuser, $username, $name, $password, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count,
+			$truck_rego, $trailer_rego, $billing_name, $billing_addr1, $billing_addr2, $billing_addr3, $billing_email, $truck_tare, $trailer_tare )
 	{
 	    $hash = hash( "sha256", $password, FALSE );
 	    
 	    if ( $newuser )
 	    {
-	        $query = sprintf( "insert into users (us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount)  
-                values('%s','%s','%s',%d,'%s','%s','%s','%s',%d)",
-	            addslashes($username), addslashes($name), $hash, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count );
+	        $query = sprintf( "insert into users (us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
+				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TrcukTare,us_TrailerTare)  
+                values('%s','%s','%s',%d,'%s','%s','%s','%s',%d,'%s','%s','%s','%s','%s','%s','%s',%d,%d)",
+	            addslashes($username), addslashes($name), $hash, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count,
+				$truck_rego, $trailer_rego, addslashes($billing_name), addslashes($billing_addr1), addslashes($billing_addr2), addslashes($billing_addr3),
+				addslashes($billing_email), $truck_tare, $trailer_tare );
 	    }
 	    else
 	    {
-	        $query = sprintf( "update users set us_Name='%s',us_AuthLevel=%d,us_Features='%s',us_CardNumber='%s',us_CardEnabled='%s',us_PinFailCount=%d",
-	            $name, $auth_level, $features, $card_number, $card_enabled, $pin_fail_count );
+	        $query = sprintf( "update users set us_Name='%s',us_AuthLevel=%d,us_Features='%s',us_CardNumber='%s',us_CardEnabled='%s',us_PinFailCount=%d,
+				us_TruckRego='%s',us_TrailerRego='%s',us_BillingName='%s',us_BillingAddr1='%s',us_BillingAddr2='%s',us_BillingAddr3='%s',us_BillingEmail='%s',
+				us_TruckTare=%d,us_TrailerTare=%d",
+	            addslashes($name), $auth_level, $features, $card_number, $card_enabled, $pin_fail_count,
+				$truck_rego, $trailer_rego, addslashes($billing_name), addslashes($billing_addr1), addslashes($billing_addr2), addslashes($billing_addr3), addslashes($billing_email),
+				$truck_tare, $trailer_tare );
 	        
 	        if ( $password != "" )
 	            $query .= sprintf( ",us_Password='%s'", $hash );
-	        if ( $card_pin != "" )
-	            $query .= sprintf( ",us_CardPin='%s'", $card_pin );
+	        
+			// allow PIN to be cleared
+            $query .= sprintf( ",us_CardPin='%s'", $card_pin );
 	                
 	        $query .= sprintf( " where us_Username='%s'", $username );
 	    }
@@ -2068,12 +2222,16 @@ class MySQLDB
 	{
 	    $info = false;
 	    
-        $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount from users where us_Username='%s'", addslashes($username) );
+        $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
+			us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare
+			from users where us_Username='%s'", addslashes($username) );
         $result = $this->RunQuery( $query );
         if ( $line = mysqli_fetch_row($result) )
         {  
            $info = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
-               'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8] ); 
+               	'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8],
+				'us_TruckRego'=>$line[9], 'us_TrailerRego'=>$line[10], 'us_BillingName'=>$line[11], 'us_BillingAddr1'=>$line[12], 'us_BillingAddr2'=>$line[13],
+				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[15], 'us_TrailerTare'=>$line[17] ); 
         }
         
         $this->FreeQuery($result);
@@ -2086,14 +2244,20 @@ class MySQLDB
 	    $info = false;
 	    
 	    if ( $username == "" )
-    	    $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount from users where us_CardNumber='%s'", $card_number );
+    	    $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
+				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare 
+				from users where us_CardNumber='%s'", $card_number );
 	    else
-	        $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount from users where us_CardNumber='%s' and us_Username!='%s'", $card_number, addslashes($username) );
+	        $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
+				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare 
+				from users where us_CardNumber='%s' and us_Username!='%s'", $card_number, addslashes($username) );
 	    $result = $this->RunQuery( $query );
 	    if ( $line = mysqli_fetch_row($result) )
 	    {
 	        $info = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
-	            'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8] );
+	            'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8],
+				'us_TruckRego'=>$line[9], 'us_TrailerRego'=>$line[10], 'us_BillingName'=>$line[11], 'us_BillingAddr1'=>$line[12], 'us_BillingAddr2'=>$line[13],
+				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[15], 'us_TrailerTare'=>$line[17] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -2624,6 +2788,24 @@ function func_calc_temperature( $cc )
 	}	
 	
 	return $temp;
+}
+
+function func_calc_weight( $cc )
+{
+	$humid = "?";
+	if ( $cc == -1 )
+	{	// not connected
+		$humid = "N/A";
+	}
+	else
+	{	
+	    if ( $cc > 99 )
+	      	$humid = sprintf( "%.0f", $cc );
+	    else
+    		$humid = sprintf( "%.1f", $cc );
+	}	
+	
+	return $humid;
 }
 
 function func_calc_humidity( $cc )
@@ -3170,7 +3352,7 @@ function func_disabled_non_user()
 //  Graph Functions
 //
 //****************************************************************************
-function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $devices )
+function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $powers, $frequencies, $torques, $rpmspeeds, $humidities, $weights, $devices )
 {
     $data = array();
     foreach ( $devices as $gg )
@@ -3317,6 +3499,21 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                 }
             }
         }
+        if ( $found == false )
+        {
+            $gvoltage = false;
+            foreach ( $weights as $tt )
+            {
+                if ( $tt['di_DeviceNo'] == $gg['di_DeviceNo'] && $tt['di_IOChannel'] == $gg['di_IOChannel'] )
+                {
+                    $found = true;
+                    $myarray = $tt;
+                    $gname = $tt['di_IOName'];
+                    $atype = "K";
+                    break;
+                }
+            }
+        }
         
         if ( $found )
         {
@@ -3357,6 +3554,10 @@ function func_get_graph_data( $temperatures, $voltages, $levels, $currents, $pow
                     $alert = true;
                 }
                 else if ( $atype == "H" && func_calc_humidity($val) < $myarray['di_MonitorLo'] || func_calc_humidity($val) > $myarray['di_MonitorHi'] )
+                {
+                    $alert = true;
+                }
+                else if ( $atype == "K" && func_calc_weight($val) < $myarray['di_MonitorLo'] || func_calc_weight($val) > $myarray['di_MonitorHi'] )
                 {
                     $alert = true;
                 }
@@ -3416,6 +3617,8 @@ function func_create_graph( $gdata, $divname )
                $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_rpmspeed($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
 		    else if ( $graph['atype'] == "H" )
                $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_humidity($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
+		    else if ( $graph['atype'] == "K" )
+               $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_weight($data['ev_Value']), 'SeqNo'=>$graph['SeqNo'] );
             else
                 $combined[] = array( 'ev_Timestamp'=>$data['ev_Timestamp'], 'value'=>func_calc_voltage($data['ev_Value'],"A"), 'SeqNo'=>$graph['SeqNo'] );
         }
@@ -3705,6 +3908,11 @@ function func_draw_graph_div( $bs, $div_name, $graph_per_line, $alert_width, $gr
             {
                 $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>%%</div></%s></td></tr></table>",
                     100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_humidity($val), $hh );
+            }
+            else if ( $dat['atype'] == "K" )
+            {
+                $a_info .= sprintf( "<table width='100%%' height='%d%%' style='background-color: %s; text-align: center; table-layout: fixed;'><tr><td style='word-wrap: break-word'><%s>%s<br><div class='small'><b>%s</b>Kg</div></%s></td></tr></table>",
+                    100/count($div_data), $a_bgcolor, $hh, $dat['name'], func_calc_weight($val), $hh );
             }
             else
             {

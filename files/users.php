@@ -24,11 +24,21 @@ function func_clear_us_array( &$us_array )
 	$us_array['us_UF_Cameras'] = "N";
 	$us_array['us_UF_Upgrade'] = "N";
 	$us_array['us_UF_HomeCameras'] = "N";
+	$us_array['us_UF_AccountingUser'] = 'N';
 	$us_array['us_CardNumber'] = "";
 	$us_array['us_CardPin'] = "";
 	$us_array['us_CardPin2'] = "";
 	$us_array['us_CardEnabled'] = 'N';
 	$us_array['us_PinFailCount'] = "";
+	$us_array['us_TruckRego'] = "";
+	$us_array['us_TrailerRego'] = "";
+	$us_array['us_BillingName'] = "";
+	$us_array['us_BillingAddr1'] = "";
+	$us_array['us_BillingAddr2'] = "";
+	$us_array['us_BillingAddr3'] = "";
+	$us_array['us_BillingEmail'] = "";
+	$us_array['us_TruckTare'] = "";
+	$us_array['us_TrailerTare'] = "";
 	$us_array['error_msg'] = "";
 	$us_array['info_msg'] = "";
 }
@@ -92,6 +102,11 @@ function func_check_us_array( &$us_array )
 	    $us_array['error_msg'] = "The PIN and confirmation must match.";
 	    return false;
 	}
+	else if ( ($us_array['us_TruckRego'] != "" || $us_array['us_TrailerRego'] != "") && ($us_array['us_BillingName'] == "" || $us_array['us_BillingAddr1'] == "" || $us_array['us_BillingEmail'] == "") )
+	{
+	    $us_array['error_msg'] = "The Billing Name, Address and Email must be entered if a Rego is entered.";
+	    return false;
+	}
 	
 	return true;
 }
@@ -129,6 +144,24 @@ if ( isset( $_POST['us_CardPin2']) )
     $us_array['us_CardPin2'] = $_POST['us_CardPin2'];
 if ( isset( $_POST['us_CardEnabled']) )
     $us_array['us_CardEnabled'] = "Y";
+if ( isset( $_POST['us_TruckRego']) )
+	$us_array['us_TruckRego'] = $_POST['us_TruckRego'];
+if ( isset( $_POST['us_TrailerRego']) )
+	$us_array['us_TrailerRego'] = $_POST['us_TrailerRego'];
+if ( isset( $_POST['us_BillingName']) )
+	$us_array['us_BillingName'] = $_POST['us_BillingName'];
+if ( isset( $_POST['us_BillingAddr1']) )
+	$us_array['us_BillingAddr1'] = $_POST['us_BillingAddr1'];
+if ( isset( $_POST['us_BillingAddr2']) )
+	$us_array['us_BillingAddr2'] = $_POST['us_BillingAddr2'];
+if ( isset( $_POST['us_BillingAddr3']) )
+	$us_array['us_BillingAddr3'] = $_POST['us_BillingAddr3'];
+if ( isset( $_POST['us_BillingEmail']) )
+	$us_array['us_BillingEmail'] = $_POST['us_BillingEmail'];
+if ( isset( $_POST['us_TruckTare']) )
+	$us_array['us_TruckTare'] = $_POST['us_TruckTare'];
+if ( isset( $_POST['us_TrailerTare']) )
+	$us_array['us_TrailerTare'] = $_POST['us_TrailerTare'];
         
 if ( isset( $_FILES['us_FileName']) )        
 {
@@ -190,7 +223,8 @@ if ( isset( $_FILES['us_FileName']) )
 
 if ( isset($_GET['Username']) )
 {
-	if ( ($line=$db->GetFields( 'users', 'us_Username', $us_array['us_Username'], "us_Username,us_Name,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount" )) !== false )
+	if ( ($line=$db->GetFields( 'users', 'us_Username', $us_array['us_Username'], "us_Username,us_Name,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
+			us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare" )) !== false )
 	{	// success
 		$us_array['us_Username'] = stripslashes($line[0]);
 		$us_array['us_Name'] = stripslashes($line[1]);
@@ -198,10 +232,21 @@ if ( isset($_GET['Username']) )
 		$us_array['us_UF_Cameras'] = substr( $line[3], E_UF_CAMERAS, 1 );
 		$us_array['us_UF_Upgrade'] = substr( $line[3], E_UF_UPGRADE, 1 );
 		$us_array['us_UF_HomeCameras'] = substr( $line[3], E_UF_HOMECAMERAS, 1 );
+		$us_array['us_UF_AccountingUser'] = substr( $line[3], E_UF_ACCOUNTINGUSER, 1 );
 		$us_array['us_CardNumber'] = $line[4];
 		$us_array['us_CardPin'] = $line[5];
+		$us_array['us_CardPin2'] = $us_array['us_CardPin'];
 		$us_array['us_CardEnabled'] = $line[6];
 		$us_array['us_PinFailCount'] = $line[7];
+		$us_array['us_TruckRego'] = $line[8];
+		$us_array['us_TrailerRego'] = $line[9];
+		$us_array['us_BillingName'] = $line[10];
+		$us_array['us_BillingAddr1'] = $line[11];
+		$us_array['us_BillingAddr2'] = $line[12];
+		$us_array['us_BillingAddr3'] = $line[13];
+		$us_array['us_BillingEmail'] = $line[14];
+		$us_array['us_TruckTare'] = $line[15];
+		$us_array['us_TrailerTare'] = $line[16];
 	}
 	else
 	{
@@ -246,7 +291,7 @@ else if ( isset($_POST['NewUser']) || isset($_POST['UpdateUser']) )
 	{
 	    $us_array['error_msg'] = sprintf( "Username %s already exists in the database.", $us_array['us_Username'] );
 	}
-	else if ( $db->SelectCardNumber($us_array['us_CardNumber'], $us_array['us_Username']) !== false )
+	else if ( $us_array['us_CardNumber'] != "" && $db->SelectCardNumber($us_array['us_CardNumber'], $us_array['us_Username']) !== false )
 	{
 	    $us_array['error_msg'] = sprintf( "The Card Number '%s' already exists in the database.", $us_array['us_CardNumber'] );
 	}
@@ -259,9 +304,11 @@ else if ( isset($_POST['NewUser']) || isset($_POST['UpdateUser']) )
 	    $features .= $us_array['us_UF_Cameras'];
 	    $features .= $us_array['us_UF_Upgrade'];
 	    $features .= $us_array['us_UF_HomeCameras'];
-	    $features .= "NNNNNNN";
+		$features .= $us_array['us_UF_AccountingUser'];
+	    $features .= "NNNNNN";
 		if ( $db->UpdateUserTable( $new_user, $us_array['us_Username'], $us_array['us_Name'], $us_array['us_Password'], $us_array['us_AuthLevel'], $features, $us_array['us_CardNumber'], 
-		    $us_array['us_CardPin'], $us_array['us_CardEnabled'], $us_array['us_PinFailCount'] ) )
+		    $us_array['us_CardPin'], $us_array['us_CardEnabled'], $us_array['us_PinFailCount'], $us_array['us_TruckRego'], $us_array['us_TrailerRego'], $us_array['us_BillingName'],
+			$us_array['us_BillingAddr1'], $us_array['us_BillingAddr2'], $us_array['us_BillingAddr3'], $us_array['us_BillingEmail'], $us_array['us_TruckTare'], $us_array['us_TrailerTare'] ) )
 		{	// success
 			//func_clear_us_array( $us_array );
 			
@@ -368,7 +415,7 @@ $user_list = $db->ReadUsers();
             
 
 			printf( "<div class='row'>" ); 
-			printf( "<div class='col-sm-2'>" );
+			printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_Username'>Username: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -377,7 +424,7 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
 
 			printf( "<div class='row'>" ); 
-			printf( "<div class='col-sm-2'>" );
+			printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_Name'>Name: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
@@ -386,28 +433,28 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
 
 			printf( "<div class='row'>" ); 
-			printf( "<div class='col-sm-2'>" );
+			printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_Password'>Password: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<input type='password' class='form-control' name='us_Password' id='us_Password' size='12' value='%s'> ", $us_array['us_Password'] );
     		printf( "</div>" );
     		printf( "</div>" );
 
 			printf( "<div class='row'>" ); 
-			printf( "<div class='col-sm-2'>" );
+			printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_Password2'>Confirmation: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<input type='password' class='form-control' name='us_Password2' id='us_Password2' size='12' value='%s'> ", $us_array['us_Password2'] );
     		printf( "</div>" );
     		printf( "</div>" );
 
 			printf( "<div class='row'>" ); 
-			printf( "<div class='col-sm-2'>" );
+			printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_AuthLevel'>Security Level: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-3'>" );
             printf( "<select class='form-control custom-select' size='1' name='us_AuthLevel' id='us_AuthLevel' %s>", func_disabled_non_admin() );
             printf( "<option ></option>" );
             printf( "<option %s>%d. None</option>", ($us_array['us_AuthLevel'] == SECURITY_LEVEL_NONE ? "selected" : ""), SECURITY_LEVEL_NONE );
@@ -418,10 +465,10 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
 
     		printf( "<div class='row'>" );
-    		printf( "<div class='col-sm-2'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_Name'>Card Number: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<input type='text' class='form-control' name='us_CardNumber' id='us_CardNumber' size='8' value='%s'> ", $us_array['us_CardNumber'] );
     		//printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_CardEnabled' id='us_CardEnabled' %s> ", ($us_array['us_CardEnabled'] == "Y" ? "checked" : "") );
@@ -430,35 +477,117 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		
     		printf( "<div class='row'>" );
-    		printf( "<div class='col-sm-2'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_Password'>PIN: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='password' class='form-control' name='us_CardPin' id='us_CardPin' size='6' value='%s'> ", $us_array['us_CardPin'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		
     		printf( "<div class='row'>" );
-    		printf( "<div class='col-sm-2'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_CardPin2'>Confirmation: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='password' class='form-control' name='us_CardPin2' id='us_CardPin2' size='6' value='%s'> ", $us_array['us_CardPin2'] );
     		printf( "</div>" );
     		printf( "</div>" );
     		
     		printf( "<div class='row'>" );
-    		printf( "<div class='col-sm-2'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_PinFailCount'>Pin Fail Count: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col'>" );
+    		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='test' class='form-control' name='us_PinFailCount' id='us_PinFailCount' size='6' value='%s'> ", $us_array['us_PinFailCount'] );
     		printf( "</div>" );
     		printf( "</div>" );
-    		
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Truck Rego: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "<input type='text' class='form-control' name='us_TruckRego' id='us_TruckRego' size='6' value='%s'> ", $us_array['us_TruckRego'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Truck Tare: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "<input type='text' class='form-control' name='us_TruckTare' id='us_TruckTare' size='6' value='%s'>  KG", $us_array['us_TruckTare'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Trailer Rego: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "<input type='text' class='form-control' name='us_TrailerRego' id='us_TrailerRego' size='6' value='%s'> ", $us_array['us_TrailerRego'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Trailer Tare: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "<input type='text' class='form-control' name='us_TrailerTare' id='us_TrailerTare' size='6' value='%s'>  KG", $us_array['us_TrailerTare'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Billing Name: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='us_BillingName' id='us_TruckBillingName' size='30' value='%s'> ", $us_array['us_BillingName'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Billing Address #1: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='us_BillingAddr1' id='us_BillingAddr1' size='30' value='%s'> ", $us_array['us_BillingAddr1'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Billing Address #2: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='us_BillingAddr2' id='us_BillingAddr2' size='30' value='%s'> ", $us_array['us_BillingAddr2'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Billing Address #3: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='us_BillingAddr3' id='us_BillingAddr3' size='30' value='%s'> ", $us_array['us_BillingAddr3'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+			printf( "<div class='row'>" ); 
+			printf( "<div class='col-sm-3'>" );
+    		printf( "<label for='us_Name'>Billing Email: </label>" );
+    		printf( "</div>" );
+    		printf( "<div class='col'>" );
+    		printf( "<input type='text' class='form-control' name='us_BillingEmail' id='us_BillingEmail' size='30' value='%s'> ", $us_array['us_BillingEmail'] );
+    		printf( "</div>" );
+    		printf( "</div>" );
+
+
     		printf( "<div class='row'>" );
-    		printf( "<div class='col-sm-2'>" );
-    		printf( "</div'>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "</div>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_UF_HomeCameras' id='us_UF_HomeCameras' %s> ", ($us_array['us_UF_HomeCameras'] == "Y" ? "checked" : "") );
@@ -467,8 +596,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		
     		printf( "<div class='row'>" );
-    		printf( "<div class='col-sm-2'>" );
-    		printf( "</div>>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "</div>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_UF_Cameras' id='us_UF_Cameras' %s> ", ($us_array['us_UF_Cameras'] == "Y" ? "checked" : "") );
@@ -477,8 +606,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		
     		printf( "<div class='row'>" );
-    		printf( "<div class='col-sm-2'>" );
-    		printf( "</div>>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "</div>" );
     		printf( "<div class='col form-check'>" );
     		printf( "<label class='form-check-label'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_UF_Upgrade' id='us_UF_Upgrade' %s> ", ($us_array['us_UF_Upgrade'] == "Y" ? "checked" : "") );
@@ -486,10 +615,20 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
+    		printf( "<div class='row'>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "</div>" );
+    		printf( "<div class='col form-check'>" );
+    		printf( "<label class='form-check-label'>" );
+    		printf( "<input type='checkbox' class='form-check-input' name='us_UF_AccountingUser' id='us_UF_AccountingUser' %s> ", ($us_array['us_UF_AccountingUser'] == "Y" ? "checked" : "") );
+    		printf( "Copy invoices to this user</label>" );
+    		printf( "</div>" );
+    		printf( "</div>" );
+    		
     		if ( $us_array['us_UF_Upgrade'] == 'Y' )
     		{
         		printf( "<div class='row'>" );
-        		printf( "<div class='col-sm-2'>" );
+        		printf( "<div class='col-sm-3'>" );
         		printf( "</div>" );
         		printf( "<div class='col'>" );
         		printf( "<input type='hidden' name='MAX_FILE_SIZE' value='4096000'>" );

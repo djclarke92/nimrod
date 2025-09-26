@@ -43,14 +43,15 @@ CREATE TABLE IF NOT EXISTS `deviceinfo` (
 	`di_OutOnPeriod` int(10) NOT NULL default '0',				# output on period in seconds
 	`di_Weekdays` char(7) NOT NULL default 'YYYYYYY',			# days of the week, sunday to saturday
 	`di_AnalogType` char(1) NOT NULL default ' ',				# type of analog sensor: Voltage or Amps
-	`di_CalcFactor` decimal(7,3) NOT NULL default 0.0,			# analog conversion factor
+	`di_CalcFactor` decimal(10,3) NOT NULL default 0.0,			# analog conversion factor
 	`di_Voltage` decimal(4,1) NOT NULL default 0.0,				# voltage trigger value
-	`di_Offset` decimal(7,3) NOT NULL default 0.0,				# analog offset factor for current measurement
+	`di_Offset` decimal(10,3) NOT NULL default 0.0,				# analog offset factor for current measurement
 	`di_MonitorPos` char(15) NOT NULL default '   ',			# display this device on the monitor page, 5 sets of 3 chars: 1F1, [12][FLR][1-4]
 	`di_MonitorHi` decimal(4,1) NOT NULL default 0.0,			# upper value for range monitoring
 	`di_MonitorLo` decimal(4,1) NOT NULL default 0.0,			# lower value for range monitoring
 	`di_ValueRangeHi` char(10) NOT NULL default '',				# y axis high value, or null
-	`di_ValueRangeLo` char(10) NOT NULL default '',				# y axis low value, or null  
+	`di_ValueRangeLo` char(10) NOT NULL default '',				# y axis low value, or null
+	`di_Resolution` decimal(10,3) NOT NULL DEFAULT 0.0,			# resolution of weigh bridge, percentage of full scale
 	PRIMARY KEY (`di_DeviceInfoNo`),
 	KEY (`di_DeviceNo`,`di_IOChannel`),
 	UNIQUE KEY `di_name_index` (`di_IOName`)
@@ -102,6 +103,15 @@ create TABLE IF NOT EXISTS `users` (
 	`us_CardPin` char(6) NOT NULL default '',					# card PIN
 	`us_CardEnabled` char(1) NOT NULL default 'N',				# card is enabled
 	`us_PinFailCount` int(10) NOT NULL default 0,				# consecutive pin failure count
+	`us_TruckRego` char(6) NOT NULL default '',					# truck rego for weigh bridge
+	`us_TrailerRego` char(6) NOT NULL default '',				# trailer rego for weigh bridge
+	`us_BillingName` char(50) NOT NULL default '',				# send the invoice to this company
+	`us_BillingAddr1` char(50) NOT NULL default '',				# send the invoice to this address
+	`us_BillingAddr2` char(50) NOT NULL default '',				# address line 2
+	`us_BillingAddr3` char(50) NOT NULL default '',				# address line 3
+	`us_BillingEmail` char(50) NOT NULL default '',				# send the invoice to this email
+	`us_TruckTare` int(10) NOT NULL default 0,					# truck tare in kg
+	`us_TrailerTare` int(10) NOT NULL default 0,				# trailer tare in kg
 	PRIMARY KEY (`us_Username`),
 	KEY `us_name_index` (`us_Name`),
 	KEY `us_cardnumber_index` (`us_CardNumber`)

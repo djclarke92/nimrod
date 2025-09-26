@@ -62,6 +62,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_tCardReaderStart = 0;
 	m_iLevelMessage = 0;
 	m_bSecureWebSocket = true;
+	m_tLastSentEspTime = 0;
 
 	m_sslServerCtx = NULL;
 	m_sslClientCtx = NULL;
@@ -102,6 +103,25 @@ CThread::~CThread()
 	LogMessage( E_MSG_INFO, "Thread %s terminating", GetThreadType(m_eThreadType) );
 }
 
+// Server PSK callback
+const char* psKey = "baadf00d1f2d3e4abaadf00d1f2d3e4abaadf00d1f2d3e4abaadf00d1f2d3e4a";
+//const char* psKey = "baadf00d1f2d3e4abaadf00d1f2d3e4a";
+//const char* psKey = "baadf00d";
+unsigned int psk_server_cb(SSL* ssl, const char* identity,
+                           unsigned char* psk, unsigned int max_psk_len) {
+    // ... logic to lookup PSK based on identity ...
+	unsigned int uLen = strlen(psKey);
+    if (strcmp(identity, "esp_client") == 0) {
+        memcpy(psk, psKey, uLen);
+		psk[uLen] = '\0';
+		LogMessage( E_MSG_INFO, "psk_server_cb: %u %u", uLen, max_psk_len );
+
+        return uLen;
+    }
+		LogMessage( E_MSG_INFO, "psk_server_cb: 0" );
+    return 0; // PSK not found
+}
+
 SSL_CTX* CThread::InitServerCTX(void)
 {
 	const SSL_METHOD *method;
@@ -115,9 +135,29 @@ SSL_CTX* CThread::InitServerCTX(void)
     }
     else
     {
-    	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);
+    	//SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
 
-    	//SSL_CTX_set_max_proto_version( ctx, TLS1_1_VERSION );
+		//SSL_CTX_set_cert_verify_callback(ctx, always_true_callback, NULL);
+		SSL_CTX_set_psk_server_callback( ctx, psk_server_cb );
+
+		/*
+		Shared Ciphers: ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA
+		Signature Algorithms: ECDSA+SHA256:ECDSA+SHA224:ECDSA+SHA384:ECDSA+SHA512:ECDSA+SHA1:RSA+SHA256:RSA+SHA224:RSA+SHA384:RSA+SHA512:RSA+SHA1
+		Shared Signature Algorithms: ECDSA+SHA256:ECDSA+SHA224:ECDSA+SHA384:ECDSA+SHA512:RSA+SHA256:RSA+SHA224:RSA+SHA384:RSA+SHA512
+		CIPHER is ECDHE-RSA-CHACHA20-POLY1305
+		*/
+		int rc;
+		rc = SSL_CTX_set_cipher_list( ctx, "ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA" );
+		if ( rc == 0 ) {
+			LogSSLError();
+		}
+		//rc = SSL_CTX_set_ciphersuites( ctx, "PSK" );
+		//if ( rc == 0 ) {
+		//	LogSSLError();
+		//}
+
+    	SSL_CTX_set_min_proto_version( ctx, TLS1_1_VERSION );
+    	SSL_CTX_set_max_proto_version( ctx, TLS1_2_VERSION );
 
     	//SSL_CTX_set_max_send_fragment( ctx, 1024 );
 
@@ -140,9 +180,12 @@ SSL_CTX* CThread::InitClientCTX(void)
     }
     else
     {
-    	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);
+    	//SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);
 
-    	//SSL_CTX_set_max_proto_version( ctx, TLS1_1_VERSION );
+		//SSL_CTX_set_cert_verify_callback(ctx, always_true_callback, NULL);
+
+    	SSL_CTX_set_min_proto_version( ctx, TLS1_2_VERSION );
+    	SSL_CTX_set_max_proto_version( ctx, TLS1_2_VERSION );
 
     	//SSL_CTX_set_max_send_fragment( ctx, 1024 );
 
@@ -178,6 +221,12 @@ bool CThread::LoadCertificates( SSL_CTX* ctx, const char* szCertFile, const char
     	bRc = false;
     	LogMessage( E_MSG_ERROR, "SSL_CTX_check_private_key failed: Private key does not match the public certificate" );
     }
+
+	if (SSL_CTX_load_verify_locations(ctx,"/etc/ssl/certs/ca-certificates.crt", NULL) <1) 
+	{
+		bRc = false;
+		LogMessage( E_MSG_ERROR, "SSL_CTX_load_verify_locations failed: %s", ERR_reason_error_string(ERR_get_error()) );
+	}
 
     if ( bRc )
     {
@@ -378,7 +427,7 @@ void CThread::Worker()
 	while ( !gbTerminateNow )
 	{
 		bool bAllDead = true;
-	int iMax = MAX_DEVICES;
+		int iMax = MAX_DEVICES;
 
 		tTimenow = time(NULL);
 		localtime_r( &tTimenow, &tm );
@@ -753,6 +802,18 @@ void CThread::Worker()
 								bAllDead = false;
 						}
 					}
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_PT113_LCT )
+					{
+						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + PT113_LCT_CHECK_PERIOD <= TimeNowMS() )
+						{	// only check PT115 devices every 0.5 seconds
+							m_pmyDevices->SetLastCheckedTimeMS( idx, TimeNowMS() );
+
+							HandlePT113Device( myDB, ctx, idx, bAllDead );
+
+							if ( !m_pmyDevices->GetAlwaysPoweredOn(idx) )
+								bAllDead = false;
+						}
+					}
 					else
 					{
 						if ( m_pmyDevices->GetNumInputs(idx) > 0 )
@@ -1055,11 +1116,11 @@ void CThread::HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPr
 void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDead )
 {
 	bool bCardError = false;
-	int iLen;
+	//int iLen;
 	int n;
 	int iCount = 0;
 	char* cptr;
-	char szPin[7] = "";
+	//char szPin[7] = "";
 	char szPinDB[7] = "";
 	unsigned char szByte[2] = "";
 	unsigned char szCard[11] = "";
@@ -1092,9 +1153,12 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 			LogMessage( E_MSG_ERROR, "Too many card digits, %d", iCount );
 			break;
 		}
+
+		// sleep to get all the bytes
+		usleep(10000);
 	}
 
-	if ( iCount == 1 )
+	/*if ( iCount == 1 )
 	{	// pin digit - always ends with #
 		if ( szByte[0] == 0x0a )
 			szByte[0] = '*';
@@ -1118,7 +1182,8 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 
 		LogMessage( E_MSG_INFO, "CardReader: [****] pin hidden" );
 	}
-	else if ( iCount > 0 && !bCardError )
+	else */
+	if ( iCount >= 3 && !bCardError )
 	{	// card number 3 or more bytes
 		m_szComBuffer[0] = 0;
 
@@ -1136,47 +1201,213 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 		LogMessage( E_MSG_INFO, "CardReader: '%s'", m_szComBuffer );
 	}
 
-	if ( m_szComBuffer[strlen(m_szComBuffer)-1] == '#' )
-	{
+	if ( m_szComBuffer[strlen(m_szComBuffer)-1] == ';' )
+	{	// card only
 		if ( (cptr = strchr( m_szComBuffer, ';' )) != NULL )
 		{	// card + pin
 			bool bEnabled = false;
 			int iPinFailCount = 0;
+			char szCardNumber[11];
 
-			LogMessage( E_MSG_INFO, "Process card+pin '%s'", m_szComBuffer );
-
-			// split card number and pin
-			snprintf( szPin, sizeof(szPin), "%s", cptr+1 );
-
-			szPin[strlen(szPin)-1] = '\0';	// strip trailing #
+			LogMessage( E_MSG_INFO, "Process card '%s'", m_szComBuffer );
 			*cptr = '\0';
+			strncpy( szCardNumber, m_szComBuffer, sizeof(szCardNumber)-1 );
+			szCardNumber[sizeof(szCardNumber)-1] = '\0';
 
-			// find card in users table
-			if ( strlen(szPin) < 4 )
-			{	// pin too short
-				LogMessage( E_MSG_WARN, "Pin too short" );
-				bCardError = true;
+			// get linked devices for card reader (esp display and weigh bridge)
+			int iInDeviceNo = m_pmyDevices->GetDeviceNo(idx);
+			int iInChannel = 0;
+			int iEspIdx = -1;
+			if ( (iEspIdx = m_pmyIOLinks->FindLinkedDevice( iInDeviceNo, iInChannel, E_DT_ESP_DISPLAY, m_pmyDevices )) >= 0 )
+			{	
+				LogMessage( E_MSG_INFO, "Card reader linked device: %s", m_pmyDevices->GetDeviceName(iEspIdx));
 			}
-			else if ( m_pmyDevices->SelectCardNumber( myDB, m_szComBuffer, szPinDB, sizeof(szPinDB), bEnabled, iPinFailCount ) )
+
+			if ( m_pmyDevices->SelectCardNumber( myDB, szCardNumber, szPinDB, sizeof(szPinDB), bEnabled, iPinFailCount ) )
 			{
 				if ( !bEnabled )
 				{	// card is disabled
 					bCardError = true;
-					LogMessage( E_MSG_WARN, "Card '%s' is disabled", m_szComBuffer );
-					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 2, "Access invalid: CardDisabled '%s'", m_szComBuffer );
-				}
-				else if ( strcmp( szPin, szPinDB ) == 0 )
-				{	// pin matches
-					LogMessage( E_MSG_INFO, "Card found and Pin matched" );
-					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 0, "Access valid: Card+Pin '%s'", m_szComBuffer );
+					LogMessage( E_MSG_WARN, "Card '%s' is disabled", szCardNumber );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 2, "Access invalid: CardDisabled '%s'", szCardNumber );
 
-					// TODO:
-
-
-
-
+					switch ( m_pmyDevices->GetInChannelType(idx, 0) )
+					{
+					default:
+						LogMessage( E_MSG_WARN, "Unhandled card reader io type" );
+						break;
+					case E_IO_READER_WEIGHBRIDGE:
+						LogMessage( E_MSG_INFO, "Got disabled card for weigh bridge" );
+			
+						if ( iEspIdx >= 0 )
+						{
+							char szEspResponseMsg[ESP_MSG_SIZE];
+							snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XD%s", szCardNumber );
+							SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+						}
+						break;
+					}
 				}
 				else
+				{	
+					LogMessage( E_MSG_INFO, "Card found" );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 0, "Access valid: Card '%s'", szCardNumber );
+
+					char szThisRego[7] = "";
+					char szTruckRego[7] = "";
+					char szTrailerRego[7] = "";
+					char szTruckTare[11] = "";
+					char szTrailerTare[11] = "";
+					if ( m_pmyDevices->SelectCardNumberRego( myDB, szCardNumber, szTruckRego, sizeof(szTruckRego), szTrailerRego, sizeof(szTrailerRego), szTruckTare, sizeof(szTruckTare), szTrailerTare, sizeof(szTrailerTare) ) )
+					{	// rego details found
+						LogMessage( E_MSG_INFO, "Card '%s': Truck rego '%s' %s Kg, Trailer '%s' %s Kg", szCardNumber, szTruckRego, szTruckTare, szTrailerRego, szTrailerTare );
+
+						int iWbIdx = -1;
+						for ( int i = 0; i < MAX_DEVICES; i++ )
+						{
+							if ( m_pmyDevices->GetDeviceType(i) == E_DT_PT113_LCT )
+							{	// found the weigh bridge
+								iWbIdx = i;
+								break;
+							}
+						}
+
+						if ( iWbIdx >= 0 )
+						{
+							// are we weighting truck or trailer ?
+							bool bTruck = true;
+							time_t tLastCardSwipe = 0;
+							double dLastWeight = 0;
+							m_pmyDevices->GetLastCardSwipeTimestamp( myDB, szCardNumber, tLastCardSwipe, dLastWeight );
+							if ( time(NULL) - tLastCardSwipe < 2*60 )
+							{	// 2 minutes
+								// TODO: move this into config
+								bTruck = false;
+								snprintf( szThisRego, sizeof(szThisRego), "%s", szTrailerRego );
+							}
+							else 
+							{
+								snprintf( szThisRego, sizeof(szThisRego), "%s", szTruckRego );
+							}
+							LogMessage( E_MSG_INFO, "Last swipe for '%s' was %d minutes ago, weight %.1f kg, assume this is the %s", szCardNumber, (time(NULL)-tLastCardSwipe)/60, dLastWeight, (bTruck ? "Truck" : "Trailer") );
+
+
+							bool bProblem = false;
+							double dTruckWeight = 0.0;
+							double dTrailerWeight = 0.0;
+							double dBridgeTare = 0.0;
+							double dThisWeight = 0.0;
+							double dDBTruckWeight = (double)atol( szTruckTare );
+							double dDBTrailerWeight = (double)atol(szTrailerTare);
+
+							// read the bridge tare weight
+							dBridgeTare = m_pmyDevices->GetCalcFactor(iWbIdx,0);
+
+							// read the current weight
+							dThisWeight = m_pmyDevices->CalcPT113Weight(iWbIdx, 0, true );
+							dThisWeight -= dBridgeTare;
+							if ( dThisWeight < 0.0 )
+							{
+								dThisWeight = 0.0;
+							}
+
+							if ( bTruck )
+							{
+								dTruckWeight = dThisWeight;
+								LogMessage( E_MSG_INFO, "Truck Tare for '%s' %.1f / %.1f / %.1f / %.1f", szThisRego, dTruckWeight, dDBTruckWeight, dTruckWeight+dBridgeTare, dBridgeTare );
+								snprintf( szTruckTare, sizeof(szTruckTare), "%06ld", (long)dTruckWeight );
+							}
+							else
+							{
+								dTrailerWeight = dThisWeight;
+								LogMessage( E_MSG_INFO, "Trailer Tare for '%s' %.1f / %.1f / %.1f / %.1f", szThisRego, dTrailerWeight, dDBTrailerWeight, dTrailerWeight+dBridgeTare, dBridgeTare );
+								snprintf( szTrailerTare, sizeof(szTrailerTare), "%06ld", (long)dTrailerWeight );
+							}
+
+
+							if ( bTruck && dDBTruckWeight > 0 && fabs(dTruckWeight - dDBTruckWeight) > (dDBTruckWeight * 0.05) )
+							{	// truck tare changed by more than 5%
+								// TODO: move this into config
+								LogMessage( E_MSG_WARN, "Truck '%s' Tare for card %s changed from %.1f to %.1f", szThisRego, szCardNumber, dDBTruckWeight, dTruckWeight );
+								bProblem = true;
+							}
+							else if ( !bTruck && dDBTrailerWeight > 0 && fabs(dTrailerWeight - dDBTrailerWeight) > (dDBTrailerWeight * 0.05) )
+							{	// trailer tare changed by more than 5%
+								// TODO: move this into config
+								LogMessage( E_MSG_WARN, "Trailer '%s' Tare for card %s changed from %.1f to %.1f", szThisRego, szCardNumber, dDBTrailerWeight, dTrailerWeight );
+								bProblem = true;
+							}
+
+							if ( iEspIdx >= 0 )
+							{
+								char szEspResponseMsg[ESP_MSG_SIZE];
+								snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XF%s", szCardNumber );
+								SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+
+								if ( bTruck )
+								{
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XR%s", szTruckRego );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XT%s", szTruckTare );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+
+									// record this weight event
+									myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDWEIGHT, (long)dTruckWeight, "%s", szCardNumber );
+
+									// save the new tare value
+									m_pmyDevices->UpdateTruckTare( myDB, szCardNumber, dTruckWeight );
+								}
+								else if ( strlen(szTrailerRego) == 0 )
+								{	// no trailer rego - error
+									bCardError = true;
+									LogMessage( E_MSG_WARN, "Card '%s' trailer rego not found in the database", m_szComBuffer );
+									myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 4, "Access invalid: UnknownTrailerRego '%s'", szCardNumber );
+
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "YN%s", szCardNumber );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+								}
+								else
+								{	// trailer
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "YR%s", szTrailerRego );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "YT%s", szTrailerTare );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+
+									// record this weight event
+									myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 1, E_ET_CARDWEIGHT, (long)dTrailerWeight, "%s", szCardNumber );
+
+									// save the new tare value
+									m_pmyDevices->UpdateTruckTare( myDB, szCardNumber, dTrailerWeight );
+								}
+
+								// TODO: take camera snapshots
+
+								
+							}
+						}
+						else
+						{
+							LogMessage( E_MSG_WARN, "PT113 LCT not found in devices list" );
+						}
+					}
+					else
+					{	// error reading rego details
+						bCardError = true;
+						LogMessage( E_MSG_WARN, "Card '%s' rego not found in the database", m_szComBuffer );
+						myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 4, "Access invalid: UnknownCardRego '%s'", szCardNumber );
+
+						if ( iEspIdx >= 0 )
+						{
+							char szEspResponseMsg[ESP_MSG_SIZE];
+							snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XN%s", szCardNumber );
+							SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+						}
+					}
+
+				}
+				/*else
 				{	// bad pin
 					bCardError = true;
 					LogMessage( E_MSG_WARN, "Card PIN not matched '%s'", szPin );
@@ -1190,35 +1421,24 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 					{
 						LogMessage( E_MSG_WARN, "Card '%s' disabled, too many PIN failures", m_szComBuffer );
 					}
-				}
+				}*/
 			}
 			else
 			{	// card not found
 				bCardError = true;
 				LogMessage( E_MSG_WARN, "Card '%s' not found in the database", m_szComBuffer );
 				myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 3, "Access invalid: UnknownCard '%s'", m_szComBuffer );
+
+				if ( iEspIdx >= 0 )
+				{
+					char szEspResponseMsg[ESP_MSG_SIZE];
+					snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XN%s", szCardNumber );
+					SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+				}
 			}
 		}
-		else if ( strlen(m_szComBuffer) > 4 )
-		{	// pin only
-			// TODO
-			LogMessage( E_MSG_WARN, "Got PIN only - unhandled" );
-			bCardError = true;
-		}
-		else
-		{	// pin too short
-			LogMessage( E_MSG_WARN, "Got PIN only - too short" );
-			bCardError = true;
-		}
 	}
 
-
-	if ( strlen(m_szComBuffer) != 0 && m_tCardReaderStart != 0 && m_tCardReaderStart + CARD_READER_PIN_TIMEOUT < time(NULL) )
-	{	// pin entry timeout
-		bCardError = true;
-		LogMessage( E_MSG_INFO, "Pin Entry timeout for '%s'", m_szComBuffer );
-		myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 4, "Access invalid: PinTimeout '%s'", m_szComBuffer );
-	}
 
 	if ( bCardError )
 	{	// send beep to reader
@@ -1227,8 +1447,8 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 		// red led on reader, long beep on reader
 
 
-		m_szComBuffer[0] = '\0';
 	}
+	m_szComBuffer[0] = '\0';
 }
 
 void CThread::CheckForTimerOffTime( CMysql& myDB, const int idx )
@@ -1731,7 +1951,7 @@ void CThread::SendEspMessage()
 				{
 					char *ip = inet_ntoa( m_xClientInAddr[fdx] );
 
-					LogMessage( E_MSG_INFO, "Sent msg type %s to %s", CThread::GetTcpipMsgType(replyBuf.msg.eMsgType), (ip == NULL ? "unknown" : ip) );
+					LogMessage( E_MSG_INFO, "Sent msg type %s to %s, %d bytes", CThread::GetTcpipMsgType(replyBuf.msg.eMsgType), (ip == NULL ? "unknown" : ip), rc );
 				}
 
 
@@ -1747,6 +1967,42 @@ void CThread::SendEspMessage()
 
 		szEspResponseMsg[0] = '\0';
 		szEspName[0] = '\0';
+	}
+
+	// send the time to all ESP devices
+	time_t timenow = time(NULL);
+	if ( m_tLastSentEspTime + 30 <= timenow )
+	{	// send every 30 seconds
+		char szTime[20];
+
+		struct tm* tmptr;
+		tmptr = localtime(&timenow);
+		snprintf( szTime, sizeof(szTime), "TM%02d%02d%02d", tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec);
+
+		for ( fdx = 0; fdx < MAX_TCPIP_SOCKETS; fdx++ )
+		{
+			if ( m_iClientFd[fdx] != -1 )
+			{
+				m_tLastSentEspTime = timenow;
+				int rc;
+				size_t uMsgSize = strlen(szTime);
+
+				// TODO: handle write being interrupted
+				rc = SSL_write( m_xClientSSL[fdx], szTime, uMsgSize );
+				if ( rc != (int)uMsgSize )
+				{
+					LogMessage( E_MSG_ERROR, "Failed to send reply to client, errno %d", errno );
+
+					CloseSocket( m_iClientFd[fdx], fdx );
+				}
+				else
+				{
+//						char *ip = inet_ntoa( m_xClientInAddr[fdx] );
+
+//						LogMessage( E_MSG_INFO, "Sent msg type TM to %s", (ip == NULL ? "unknown" : ip) );
+				}
+			}
+		}
 	}
 
 }
@@ -1845,7 +2101,7 @@ void CThread::ReadTcpipMessage( CDeviceList* pmyDevices, CMysql& myDB )
 					else if ( strcmp( msgBuf.msg.esp.szEvent, "TMP" ) == 0 )
 						LogMessage( E_MSG_INFO, "ESP temperature %d %.1f degC from '%s'", msgBuf.msg.esp.iChannel, msgBuf.msg.esp.dTemperature, msgBuf.msg.esp.szEspName );
 					else if ( strcmp( msgBuf.msg.esp.szEvent, "CID" ) == 0 )
-						LogMessage( E_MSG_INFO, "ESP chip id from '%s'", msgBuf.msg.esp.szEspName );
+						LogMessage( E_MSG_INFO, "ESP chip id from '%s' '%s'", msgBuf.msg.esp.szEspName, msgBuf.msg.esp.szChipMac );
 					else
 						LogMessage( E_MSG_INFO, "ESP '%s' message from '%s'", msgBuf.msg.esp.szEvent, msgBuf.msg.esp.szEspName );
 
@@ -3566,8 +3822,8 @@ void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 			{	// give up
 				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
 				{	// device has just failed
-					LogMessage( E_MSG_INFO, "Voltage device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
-					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "Voltage device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+					LogMessage( E_MSG_INFO, "Current device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "Current device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
 				}
 
 				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
@@ -3631,6 +3887,126 @@ void CThread::HandleHDHKDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool
 				double dValNew = m_pmyDevices->CalcCurrent(idx,iChannel,true);
 
 				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
+			}	// end for loop
+
+			// break out of retry loop
+			break;
+		}
+	}
+}
+
+// PT113MB load cell transmitter
+void CThread::HandlePT113Device( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
+{
+	int iChannel;
+	int rc;
+	int err;
+	int addr;
+	int iLoop;
+	int iRetry = 3;
+
+	// count=0&1, status=2 
+	addr = 0x0000;
+	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
+	{
+		rc = modbus_read_registers( ctx, addr, m_pmyDevices->GetNumInputs(idx), m_pmyDevices->GetNewData(idx) );
+		if ( rc == -1 )
+		{	// failed
+			err = errno;
+			if ( iLoop+1 >= iRetry )
+			{	// give up
+				if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_SUSPECT )
+				{	// device has just failed
+					LogMessage( E_MSG_INFO, "Weight device '%s' (0x%x->%d) no longer connected, loop %d", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, iLoop );
+					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_DEVICE_NG, 0, "Weight device '%s' (0x%x->%d) no longer connected", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+				}
+
+				if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_DEAD ) )
+				{
+					m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+					PostToWebSocket( E_ET_DEVICE_NG, idx, 0, 0, true );
+				}
+
+				if ( m_pmyDevices->GetDeviceStatus( idx ) != E_DS_BURIED )
+				{
+					LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+				}
+			}
+			else
+			{	// retry
+				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d retry", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
+
+				usleep( 10000 + (10000*iLoop) );
+
+				if ( modbus_set_slave( ctx, m_pmyDevices->GetAddress(idx) ) == -1 )
+				{
+					LogMessage( E_MSG_ERROR, "modbus_set_slave(%p) %d failed: %s", ctx, idx, modbus_strerror(errno) );
+				}
+
+				usleep( 10000 + (10000*iLoop) );
+			}
+		}
+		else
+		{	// success
+			bAllDead = false;
+			if ( iLoop > 0 )
+			{
+				LogMessage( E_MSG_INFO, "modbus_read_registers() retry successful, loop %d", iLoop );
+			}
+
+			if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+			{
+				LogMessage( E_MSG_INFO, "Device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+			}
+
+			if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+			{
+				m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+				PostToWebSocket( E_ET_DEVICE_OK, idx, 0, 1, true );
+			}
+
+			// always use channel 0
+			for ( iChannel = 0; iChannel < 1 /*m_pmyDevices->GetNumInputs(idx)*/; iChannel++ )
+			{
+				// 10kg change
+				// unloaded bridge weight / 10 ??
+				double dDiff = m_pmyDevices->GetOffset(idx,iChannel) * m_pmyDevices->GetResolution(idx,iChannel) / 100;
+
+				E_EVENT_TYPE eEventType = E_ET_WEIGHT;
+				E_IO_TYPE eIOTypeL = E_IO_WEIGHT_LOW;
+				E_IO_TYPE eIOTypeH = E_IO_WEIGHT_HIGH;
+				E_IO_TYPE eIOTypeHL = E_IO_WEIGHT_HIGHLOW;
+				E_IO_TYPE eIOTypeMon = E_IO_WEIGHT_MONITOR;
+				char szUnits[10] = "Kg";
+				char szDesc[20] = "Weight";
+				char szName[50] = "Weight";
+				double dValOld = m_pmyDevices->CalcPT113Weight(idx,iChannel,false);
+				double dValNew = m_pmyDevices->CalcPT113Weight(idx,iChannel,true);
+
+				//LogMessage( E_MSG_INFO, "Old %u %u %.1f", m_pmyDevices->GetLastData(idx,iChannel), m_pmyDevices->GetLastData(idx,iChannel+1), dValOld);
+
+				HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
+
+				if ( fabs(dValNew - dValOld) >= dDiff )
+				{	// find the display
+					LogMessage(E_MSG_INFO, "WW %.1f %.1f %.1f", dValNew, dValOld, dDiff );
+					for ( int i = 0; i < MAX_DEVICES; i++ )
+					{
+						if ( m_pmyDevices->GetDeviceType(i) == E_DT_CARD_READER )
+						{
+							int iInDeviceNo = m_pmyDevices->GetDeviceNo(i);
+							int iInChannel = 0;
+							int iEspIdx = -1;
+							if ( (iEspIdx = m_pmyIOLinks->FindLinkedDevice( iInDeviceNo, iInChannel, E_DT_ESP_DISPLAY, m_pmyDevices )) >= 0 )
+							{	
+								char szEspResponseMsg[ESP_MSG_SIZE];
+								snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "WW%06d", (int)dValNew );
+								SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+							}
+							break;
+						}
+					}
+				}
 			}	// end for loop
 
 			// break out of retry loop
@@ -3809,6 +4185,10 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 {
 	bool bLogit;
 
+	if ( eEventType == E_ET_WEIGHT )
+	{
+//		LogMessage( E_MSG_INFO, "val %.1f %.1f %.1f", dValNew, dValOld, dDiff );
+	}
 	if ( strlen(m_pmyDevices->GetInIOName(idx,iChannel)) == 0 )
 	{	// no name, assume this channel is unused
 		if ( eEventType == E_ET_TEMPERATURE &&  m_pmyDevices->WasSensorConnected(idx,iChannel) )
@@ -3817,7 +4197,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_DEVICE_NG, 0, "%s sensor %d no longer connected", szName, iChannel+1 );
 		}
 	}
-	else if ( m_pmyDevices->GetNewData( idx, iChannel ) != m_pmyDevices->GetLastData( idx, iChannel ) )
+	else if ( dValNew != dValOld )
 	{	// data has changed
 		if ( eEventType == E_ET_TEMPERATURE && !m_pmyDevices->WasSensorConnected(idx,iChannel) )
 		{
@@ -3825,9 +4205,17 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), iChannel, E_ET_DEVICE_OK, 0, "%s sensor %d is connected", szName, iChannel+1 );
 		}
 
+		bool bWeighBridgeStable = false;
+		if (eEventType == E_ET_WEIGHT && 
+			dValNew == dValOld && dValNew != m_pmyDevices->GetLastLogData(idx,iChannel) )
+		{	// weight is stable
+			bWeighBridgeStable = true;
+		}
+
 		bLogit = false;
 		if ( fabs(dValNew - dValOld) >= dDiff ||
-				m_pmyDevices->GetLastRecorded(idx,iChannel) + MAX_EVENT_PERIOD < time(NULL) )
+			m_pmyDevices->GetLastRecorded(idx,iChannel) + MAX_EVENT_PERIOD < time(NULL) ||
+			bWeighBridgeStable )
 		{	// interesting amount of change
 			bLogit = true;
 
@@ -3835,6 +4223,13 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 
 			m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
 			m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
+			if ( eEventType == E_ET_WEIGHT )
+			{
+				m_pmyDevices->GetLastRecorded(idx,iChannel+1) = time(NULL);
+				m_pmyDevices->GetLastRecorded(idx,iChannel+2) = time(NULL);
+				m_pmyDevices->GetLastLogData(idx,iChannel+1) = m_pmyDevices->GetNewData(idx,iChannel+1);
+				m_pmyDevices->GetLastLogData(idx,iChannel+2) = m_pmyDevices->GetNewData(idx,iChannel+2);
+			}
 
 			// post to the websocket
 			PostToWebSocket( eEventType, idx, iChannel, dValNew, true );
@@ -3848,6 +4243,9 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			else if ( eEventType == E_ET_LEVEL )
 				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int)m_pmyDevices->GetOffset(idx,iChannel) * (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					dValNew, szUnits );
+			else if ( eEventType == E_ET_WEIGHT )
+				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )*65536+m_pmyDevices->GetNewData( idx, iChannel+1 )),
+					dValNew, szUnits );
 			else
 				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					dValNew, szUnits );
@@ -3860,6 +4258,9 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			else if ( eEventType == E_ET_LEVEL )
 				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int)m_pmyDevices->GetOffset(idx,iChannel) * (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					dValNew, szUnits );
+			else if ( eEventType == E_ET_WEIGHT )
+				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )*65536+m_pmyDevices->GetNewData( idx, iChannel+1 )),
+					dValNew, szUnits );
 			else
 				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					dValNew, szUnits );
@@ -3867,7 +4268,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 
 		if ( m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeH || m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeHL )
 		{
-			if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) &&
+			if ( dValNew > dValOld &&
 					dValNew >= m_pmyDevices->GetMonitorValueHi(idx,iChannel) &&
 					dValOld < m_pmyDevices->GetMonitorValueHi(idx,iChannel) )
 			{	// increasing and high trigger reached
@@ -3886,7 +4287,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 														szName, szDesc, m_pmyDevices->GetMonitorValueHi(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
 				}
 			}
-			else if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) &&
+			else if ( dValNew < dValOld &&
 					dValNew < m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
 					dValOld >= m_pmyDevices->GetMonitorValueHi(idx,iChannel) - m_pmyDevices->GetHysteresis(idx,iChannel) &&
 					m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
@@ -3902,7 +4303,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 
 		if ( m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeL || m_pmyDevices->GetInChannelType(idx,iChannel) == eIOTypeHL )
 		{
-			if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) &&
+			if ( dValNew < dValOld &&
 					dValNew <= m_pmyDevices->GetMonitorValueLo(idx,iChannel) &&
 					dValOld > m_pmyDevices->GetMonitorValueLo(idx,iChannel) )
 			{	// decreasing and low trigger reached
@@ -3921,7 +4322,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 														szName, szDesc, m_pmyDevices->GetMonitorValueLo(idx,iChannel), szUnits, m_pmyDevices->GetAddress(idx) );
 				}
 			}
-			else if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) &&
+			else if ( dValNew > dValOld &&
 					dValNew > m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
 					dValOld <= m_pmyDevices->GetMonitorValueLo(idx,iChannel) + m_pmyDevices->GetHysteresis(idx,iChannel) &&
 					m_pmyDevices->GetAlarmTriggered(idx,iChannel) )
@@ -3949,7 +4350,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 			while ( (iFoundIdx = GetConditionValue( iIolIdx, idx, iChannel, dValue, szLinkTest, sizeof(szLinkTest) )) >= 0 )
 			{
 				bTrigger = false;
-				if ( m_pmyDevices->GetNewData(idx,iChannel) > m_pmyDevices->GetLastData(idx,iChannel) )
+				if ( dValNew > dValOld )
 				{	// increasing value
 					if ( strcmp( szLinkTest, "GE" ) == 0 && dValNew >= dValue && dValOld < dValue )
 					{	// increasing and high trigger reached
@@ -3995,7 +4396,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 						}
 					}
 				}
-				else if ( m_pmyDevices->GetNewData(idx,iChannel) < m_pmyDevices->GetLastData(idx,iChannel) )
+				else if ( dValNew < dValOld )
 				{	// decreasing value
 					if ( strcmp( szLinkTest, "GE" ) == 0 && dValNew < dValue && dValOld >= dValue )
 					{	// decreasing and hysteresis reached
@@ -4058,12 +4459,22 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 
 		m_pmyDevices->GetLastRecorded(idx,iChannel) = time(NULL);
 		m_pmyDevices->GetLastLogData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
+		if ( eEventType == E_ET_WEIGHT )
+		{
+			m_pmyDevices->GetLastRecorded(idx,iChannel+1) = time(NULL);
+			m_pmyDevices->GetLastRecorded(idx,iChannel+2) = time(NULL);
+			m_pmyDevices->GetLastLogData(idx,iChannel+1) = m_pmyDevices->GetNewData(idx,iChannel+1);
+			m_pmyDevices->GetLastLogData(idx,iChannel+2) = m_pmyDevices->GetNewData(idx,iChannel+2);
+		}
 
 		if ( eEventType == E_ET_ROTARY_ENC )
 			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 				(int16_t)(m_pmyDevices->GetNewData( idx, iChannel+1 )), dValNew, szUnits );
 		else if ( eEventType == E_ET_LEVEL )
 			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int)m_pmyDevices->GetOffset(idx,iChannel) * (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
+				dValNew, szUnits );
+		else if ( eEventType == E_ET_WEIGHT )
+			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )*65536+m_pmyDevices->GetNewData( idx, iChannel+1 )),
 				dValNew, szUnits );
 		else
 			LogMessage( E_MSG_INFO, "%s %s %d '%s' %d %.1f %s", szName, szDesc, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
@@ -4074,6 +4485,11 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 
 	//LogMessage( E_MSG_INFO, "SetLastData %d %d %.1f", idx, iChannel, m_pmyDevices->GetNewData(idx,iChannel) );
 	m_pmyDevices->GetLastData(idx,iChannel) = m_pmyDevices->GetNewData(idx,iChannel);
+	if ( eEventType == E_ET_WEIGHT )
+	{
+		m_pmyDevices->GetLastData(idx,iChannel+1) = m_pmyDevices->GetNewData(idx,iChannel+1);
+		m_pmyDevices->GetLastData(idx,iChannel+2) = m_pmyDevices->GetNewData(idx,iChannel+2);
+	}
 }
 
 // device can be used more than once
@@ -4158,6 +4574,7 @@ void CThread::PostToWebSocket( const enum E_EVENT_TYPE& eEventType, const int id
 		snprintf( szType, sizeof(szType), "TT%s", (bInput ? "I" : "O"));
 		break;
 	case E_ET_LEVEL:
+	case E_ET_WEIGHT:
 		snprintf( szType, sizeof(szType), "LL%s", (bInput ? "I" : "O"));
 		break;
 	case E_ET_DEVICE_OK:
@@ -4257,8 +4674,6 @@ bool CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 
 				if ( m_szEspResponseMsg[0] != '\0' && !IsTcpipThread() )
 				{	// send msg to esp device via the tcpip thread
-					LogMessage( E_MSG_INFO, "ESP msg '%s'", m_szEspResponseMsg );
-
 					pthread_mutex_lock( &mutexLock[E_LT_NODEESP] );
 
 					m_pmyDevices->SetEspResponseMsg( szOutDeviceName, m_szEspResponseMsg );
@@ -4278,6 +4693,17 @@ bool CThread::ChangeOutput( CMysql& myDB, const int iInAddress, const int iInCha
 	}
 
 	return bRc;
+}
+
+void CThread::SetEspResponse( const char* szOutDeviceName, const char* szEspResponseMsg )
+{
+	LogMessage( E_MSG_INFO, "set ESP msg '%s'", szEspResponseMsg );
+
+	pthread_mutex_lock( &mutexLock[E_LT_NODEESP] );
+
+	m_pmyDevices->SetEspResponseMsg( szOutDeviceName, szEspResponseMsg );
+
+	pthread_mutex_unlock( &mutexLock[E_LT_NODEESP] );
 }
 
 void CThread::ChangeOutputState( CMysql& myDB, const int iInIdx, const int iInAddress, const int iInChannel, const int iOutIdx, const int iOutAddress, const int iOutChannel,
@@ -4678,7 +5104,7 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 				fputs( "chmod 0666 ", fp );
 				fputs( szOutput, fp );
 				fputs( "\n", fp );
-				snprintf( szCmd, sizeof(szCmd), "find %s -mtime 0 -name \"MDalarm*.mkv\" | wc -l > %s\n", CameraList.GetSnapshotCamera().GetDirectory(), szOutput2 );
+				snprintf( szCmd, sizeof(szCmd), "find %s -daystart -mtime 0 -name \"MDalarm*.mkv\" | wc -l > %s\n", CameraList.GetSnapshotCamera().GetDirectory(), szOutput2 );
 				fputs( szCmd, fp );
 
 				fclose( fp );
