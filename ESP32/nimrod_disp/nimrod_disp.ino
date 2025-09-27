@@ -258,7 +258,7 @@ void drawMatrix()
   switch ( giDisplayState ) {
   default:
   case 0:
-    if ( giHours >= 7 || giHours < 6 ) {
+    if ( giHours >= 19 || giHours < 6 ) {
       sLine1 = "";
       sLine2 = "";
       sprintf( gszCurrentTime, "%02d:%02d:%02d", giHours, giMinutes, giSeconds );

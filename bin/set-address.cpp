@@ -620,6 +620,7 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 			// must power cycle the device when changing the address of baud rate
 			if ( newAddr != oldAddr || newBaud != oldBaud )
 			{
+				printf( "\nXY-MD02 device does NOT listen to broadcast address 0x00, default addr is 0x01\n" );
 				printf( "\nPower cycle the device to set the new address / baud rate\nPress enter when done\n");
 				getc(stdin);
 			}
