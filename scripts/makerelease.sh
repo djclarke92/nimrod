@@ -120,6 +120,11 @@ if [[ "$DEST" != 0 ]]; then
 			if [ $? != 0 ]; then
 				echo "-> Error: failed to copy new package to ${PI}"
 			fi
+		elif [ ${CC} == "geotechwb" ]; then
+			scp -P 2223 ${SRCFILE} ${PI}:/var/www/html
+			if [ $? != 0 ]; then
+				echo "-> Error: failed to copy new package to ${PI}"
+			fi
 		elif [ ${CC} == "192.168.0.126" ]; then
 			scp ${SRCFILE} ${PI}:/var/www/html
 			if [ $? != 0 ]; then

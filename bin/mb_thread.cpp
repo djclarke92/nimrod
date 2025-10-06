@@ -12,6 +12,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <time.h>
+#include <string>
 #include <math.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -588,7 +589,8 @@ void CThread::Worker()
 					}
 				}
 
-				GetCameraSnapshots( myDB, m_CameraList );
+				std::string sAttachments;
+				GetCameraSnapshots( myDB, m_CameraList, NULL, sAttachments );
 			}
 
 			if ( tLastCurlCheckTime + 300 <= time(NULL) )
@@ -1123,7 +1125,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 	//char szPin[7] = "";
 	char szPinDB[7] = "";
 	unsigned char szByte[2] = "";
-	unsigned char szCard[11] = "";
+	unsigned char szCard[17] = "";
 
 
 	// success
@@ -1141,7 +1143,8 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 	while ( (n = read( m_pmyDevices->GetComHandle(idx), szByte, 1 )) > 0 )
 	{	// read 1 byte at a time
 		szByte[0] &= 0xff;
-		LogMessage( E_MSG_INFO, "Data: 0x%02x", szByte[0] );
+		LogMessage( E_MSG_INFO, "Data: 0x%02x 0b%d%d%d%d%d%d%d%d", szByte[0], (szByte[0]&0x80 ? 1:0), (szByte[0]&0x40 ? 1:0), (szByte[0]&0x20 ? 1:0), (szByte[0]&0x10 ? 1:0),
+				(szByte[0]&0x08 ? 1:0), (szByte[0]&0x04 ? 1:0), (szByte[0]&0x02 ? 1:0), (szByte[0]&0x01 ? 1:0) );
 
 		// pretend its a card read
 		szCard[iCount] = szByte[0];
@@ -1187,14 +1190,25 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 	{	// card number 3 or more bytes
 		m_szComBuffer[0] = 0;
 
-		int iShift = iCount-1;
 		unsigned long uVal = 0;
-		for ( int i = 0; i < iCount; i++ )
+		if ( iCount == 16 ) 
 		{
-			uVal += (szCard[i] << (8 * iShift));
-			iShift -= 1;
+			int iShift = 2;
+			for ( int i = 6; i < 9; i++ )
+			{
+				uVal += (szCard[i] << (8 * iShift));
+				iShift -= 1;
+			}
 		}
-
+		else
+		{
+			int iShift = iCount-1;
+			for ( int i = 0; i < iCount; i++ )
+			{
+				uVal += (szCard[i] << (8 * iShift));
+				iShift -= 1;
+			}
+		}
 		m_tCardReaderStart = time(NULL);
 		snprintf( m_szComBuffer, sizeof(m_szComBuffer), "%lu;", uVal );
 
@@ -1255,12 +1269,10 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 
 					char szThisRego[7] = "";
 					char szTruckRego[7] = "";
-					char szTrailerRego[7] = "";
 					char szTruckTare[11] = "";
-					char szTrailerTare[11] = "";
-					if ( m_pmyDevices->SelectCardNumberRego( myDB, szCardNumber, szTruckRego, sizeof(szTruckRego), szTrailerRego, sizeof(szTrailerRego), szTruckTare, sizeof(szTruckTare), szTrailerTare, sizeof(szTrailerTare) ) )
+					if ( m_pmyDevices->SelectCardNumberRego( myDB, szCardNumber, szTruckRego, sizeof(szTruckRego), szTruckTare, sizeof(szTruckTare) ) )
 					{	// rego details found
-						LogMessage( E_MSG_INFO, "Card '%s': Truck rego '%s' %s Kg, Trailer '%s' %s Kg", szCardNumber, szTruckRego, szTruckTare, szTrailerRego, szTrailerTare );
+						LogMessage( E_MSG_INFO, "Card '%s': Truck rego '%s' %s Kg", szCardNumber, szTruckRego, szTruckTare );
 
 						int iWbIdx = -1;
 						for ( int i = 0; i < MAX_DEVICES; i++ )
@@ -1283,59 +1295,45 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 							{	// 2 minutes
 								// TODO: move this into config
 								bTruck = false;
-								snprintf( szThisRego, sizeof(szThisRego), "%s", szTrailerRego );
 							}
 							else 
 							{
 								snprintf( szThisRego, sizeof(szThisRego), "%s", szTruckRego );
 							}
-							LogMessage( E_MSG_INFO, "Last swipe for '%s' was %d minutes ago, weight %.1f kg, assume this is the %s", szCardNumber, (time(NULL)-tLastCardSwipe)/60, dLastWeight, (bTruck ? "Truck" : "Trailer") );
+							LogMessage( E_MSG_INFO, "Last swipe for '%s' was %d minutes ago, weight %.1f kg", szCardNumber, (time(NULL)-tLastCardSwipe)/60, dLastWeight );
 
 
-							bool bProblem = false;
+							bool bEmpty = false;
 							double dTruckWeight = 0.0;
-							double dTrailerWeight = 0.0;
 							double dBridgeTare = 0.0;
-							double dThisWeight = 0.0;
-							double dDBTruckWeight = (double)atol( szTruckTare );
-							double dDBTrailerWeight = (double)atol(szTrailerTare);
+							double dDBTruckTare = (double)atol( szTruckTare );
 
 							// read the bridge tare weight
 							dBridgeTare = m_pmyDevices->GetCalcFactor(iWbIdx,0);
 
 							// read the current weight
-							dThisWeight = m_pmyDevices->CalcPT113Weight(iWbIdx, 0, true );
-							dThisWeight -= dBridgeTare;
-							if ( dThisWeight < 0.0 )
+							dTruckWeight = m_pmyDevices->CalcPT113Weight(iWbIdx, 0, true );
+							dTruckWeight -= dBridgeTare;
+							LogMessage( E_MSG_INFO, "Bridge Tare %.1f, Truck Weight %.1f", dBridgeTare, dTruckWeight );
+							if ( dTruckWeight < 0.0 )
 							{
-								dThisWeight = 0.0;
+								dTruckWeight = 0.0;
+							}
+							if ( fabs(dTruckWeight) < dBridgeTare*0.005 )
+							{	// 0.5% of bridge tare
+								LogMessage( E_MSG_INFO, "Nothing on the weigh bridge: Bridge %.1f, %.1f", dBridgeTare, dTruckWeight );
+								bEmpty = true;
 							}
 
 							if ( bTruck )
 							{
-								dTruckWeight = dThisWeight;
-								LogMessage( E_MSG_INFO, "Truck Tare for '%s' %.1f / %.1f / %.1f / %.1f", szThisRego, dTruckWeight, dDBTruckWeight, dTruckWeight+dBridgeTare, dBridgeTare );
-								snprintf( szTruckTare, sizeof(szTruckTare), "%06ld", (long)dTruckWeight );
-							}
-							else
-							{
-								dTrailerWeight = dThisWeight;
-								LogMessage( E_MSG_INFO, "Trailer Tare for '%s' %.1f / %.1f / %.1f / %.1f", szThisRego, dTrailerWeight, dDBTrailerWeight, dTrailerWeight+dBridgeTare, dBridgeTare );
-								snprintf( szTrailerTare, sizeof(szTrailerTare), "%06ld", (long)dTrailerWeight );
-							}
+								LogMessage( E_MSG_INFO, "Truck Tare for '%s' %.1f / %.1f / %.1f / %.1f", szThisRego, dTruckWeight, dDBTruckTare, dTruckWeight+dBridgeTare, dBridgeTare );
 
-
-							if ( bTruck && dDBTruckWeight > 0 && fabs(dTruckWeight - dDBTruckWeight) > (dDBTruckWeight * 0.05) )
-							{	// truck tare changed by more than 5%
-								// TODO: move this into config
-								LogMessage( E_MSG_WARN, "Truck '%s' Tare for card %s changed from %.1f to %.1f", szThisRego, szCardNumber, dDBTruckWeight, dTruckWeight );
-								bProblem = true;
-							}
-							else if ( !bTruck && dDBTrailerWeight > 0 && fabs(dTrailerWeight - dDBTrailerWeight) > (dDBTrailerWeight * 0.05) )
-							{	// trailer tare changed by more than 5%
-								// TODO: move this into config
-								LogMessage( E_MSG_WARN, "Trailer '%s' Tare for card %s changed from %.1f to %.1f", szThisRego, szCardNumber, dDBTrailerWeight, dTrailerWeight );
-								bProblem = true;
+								if ( dDBTruckTare > 0 && fabs(dTruckWeight-dDBTruckTare) < dDBTruckTare * 0.05 )
+								{	// empty truck
+									LogMessage( E_MSG_INFO, "Truck '%s' is empty: Tare %.1f, Weight %.1f", szCardNumber, dDBTruckTare, dTruckWeight );
+									bEmpty = true;
+								}
 							}
 
 							if ( iEspIdx >= 0 )
@@ -1344,7 +1342,18 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 								snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XF%s", szCardNumber );
 								SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
 
-								if ( bTruck )
+								if ( bEmpty )
+								{
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XR%s", szTruckRego );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+
+									if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+										snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XE%06.1f", dTruckWeight );
+									else
+										snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XE%06d", (int)dTruckWeight );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+								}
+								else if ( bTruck )
 								{
 									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XR%s", szTruckRego );
 									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
@@ -1352,39 +1361,131 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XT%s", szTruckTare );
 									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
 
+									if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+										snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XW%06.1f", dTruckWeight );
+									else
+										snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XW%06d", (int)dTruckWeight );
+
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+
 									// record this weight event
 									myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDWEIGHT, (long)dTruckWeight, "%s", szCardNumber );
 
 									// save the new tare value
-									m_pmyDevices->UpdateTruckTare( myDB, szCardNumber, dTruckWeight );
-								}
-								else if ( strlen(szTrailerRego) == 0 )
-								{	// no trailer rego - error
-									bCardError = true;
-									LogMessage( E_MSG_WARN, "Card '%s' trailer rego not found in the database", m_szComBuffer );
-									myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 4, "Access invalid: UnknownTrailerRego '%s'", szCardNumber );
+									// do not save the new tare
+									//m_pmyDevices->UpdateTruckTare( myDB, szCardNumber, dTruckWeight );
 
-									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "YN%s", szCardNumber );
-									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
-								}
-								else
-								{	// trailer
-									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "YR%s", szTrailerRego );
-									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+									time_t timenow = time(NULL);
+									struct tm* tmptr;
+									char szDir[256];
+									char szFile[512];
+									char szBuf[256];
+									char szBillingName[51] = "";
+									char szBillingAddr1[51] = "";
+									char szBillingAddr2[51] = "";
+									char szBillingAddr3[51] = "";
+									char szBillingEmail[51] = "";
+									FILE* pFile = NULL;
+									
+									tmptr = localtime( &timenow );
+									snprintf( szDir, sizeof(szDir), "/var/tmp/nimrod/%d%02d%02d_%02d%02d%02d_%s", tmptr->tm_year+1900, tmptr->tm_mon+1, tmptr->tm_mday,
+										tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec, szCardNumber );
+									mkdir( "/var/tmp/nimrod", 0775 );
+									
+									if ( mkdir( szDir, 0775 ) == 0 )
+									{
+										LogMessage( E_MSG_INFO, "Created dir '%s'", szDir );
 
-									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "YT%s", szTrailerTare );
-									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+										// take camera snapshots
+										std::string sAttachments;
+										ReadCameraRecords( myDB, m_CameraList );
+										for ( int i = 0; i < m_CameraList.GetNumCameras(); i++ )
+										{
+											GetCameraSnapshots( myDB, m_CameraList, szDir, sAttachments );
 
-									// record this weight event
-									myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 1, E_ET_CARDWEIGHT, (long)dTrailerWeight, "%s", szCardNumber );
-
-									// save the new tare value
-									m_pmyDevices->UpdateTruckTare( myDB, szCardNumber, dTrailerWeight );
-								}
-
-								// TODO: take camera snapshots
-
+											m_CameraList.NextSnapshotIdx();
+										}
 								
+										// save invoice details
+										if ( !m_pmyDevices->SelectCardNumberBilling( myDB, szCardNumber, szBillingName, sizeof(szBillingName), szBillingAddr1, sizeof(szBillingAddr1),
+											szBillingAddr2, sizeof(szBillingAddr2), szBillingAddr3, sizeof(szBillingAddr3), szBillingEmail, sizeof(szBillingEmail) ) )
+										{
+											LogMessage( E_MSG_ERROR, "Failed to read billing details for card %s", szCardNumber );
+										}
+
+										snprintf( szFile, sizeof(szFile), "%s/invoice.txt", szDir );
+										pFile = fopen( szFile, "wt" );
+										if ( pFile != NULL )
+										{
+											snprintf( szBuf, sizeof(szBuf), "Weigh Bridge Invoice %02d/%02d/%d %02d:%02d:%02d\n\n", tmptr->tm_mday, tmptr->tm_mon+1, tmptr->tm_year+1900,
+												tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "Card No: %s\nVehicle Rego: %s\n", szCardNumber, szTruckRego );
+											fputs( szBuf, pFile );
+											if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+												snprintf( szBuf, sizeof(szBuf), "Weight: %.1f KG\n", dTruckWeight );
+											else
+												snprintf( szBuf, sizeof(szBuf), "Weight: %d KG\n", (int)dTruckWeight );
+											fputs( szBuf, pFile );
+
+											snprintf( szBuf, sizeof(szBuf), "Billing Name: %s\n", szBillingName );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "Billing Address 1: %s\n", szBillingAddr1 );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "Billing Address 2: %s\n", szBillingAddr2 );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "Billing Address 3: %s\n", szBillingAddr3 );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "Billing Email: %s\n", szBillingEmail );
+											fputs( szBuf, pFile );
+
+											fputs( "\n", pFile );
+
+											fclose( pFile );
+										}
+										else
+										{
+											LogMessage( E_MSG_ERROR, "Failed to open %s for writing, errno %d", szFile, errno );
+										}
+
+										// TODO: send email
+										std::string sEmails;
+										m_pmyDevices->SelectAccountEmails( myDB, sEmails );
+										if ( sEmails.length() > 0 )
+										{
+											std::string sCmd = "mail -s \"Weigh Bridge Invoice\" ";
+											sCmd += sAttachments;
+											sCmd += " ";
+											sCmd += sEmails;
+											sCmd += " <";
+											sCmd += szFile;
+
+											//LogMessage( E_MSG_INFO, "CMD: %s", sCmd.c_str() );
+											int rc = system( sCmd.c_str() );
+											if ( rc != 0 )
+											{
+												LogMessage( E_MSG_WARN, "system returned %d", rc );
+											}
+										}
+										else
+										{
+											LogMessage( E_MSG_WARN, "No account emails exist" );
+										}
+									}
+									else
+									{
+										LogMessage( E_MSG_ERROR, "Failed to create dir '%s', errno %d", szDir, errno );
+									}
+								}
+								else 
+								{	// error
+									bCardError = true;
+									LogMessage( E_MSG_WARN, "Card '%s' for %s already swiped", szCardNumber, szTruckRego);
+									myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 4, "Access invalid: AlreadySwiped '%s'", szCardNumber );
+
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XS%s", szCardNumber );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+								}
 							}
 						}
 						else
@@ -1974,10 +2075,31 @@ void CThread::SendEspMessage()
 	if ( m_tLastSentEspTime + 30 <= timenow )
 	{	// send every 30 seconds
 		char szTime[20];
+		char szWeight[20];
+
+		int iWbIdx = -1;
+		double dWeight = 0.0;
+		double dBridgeTare = 0.0;
+		for ( int i = 0; i < MAX_DEVICES; i++ )
+		{
+			if ( m_pmyDevices->GetDeviceType(i) == E_DT_PT113_LCT )
+			{	// found the weigh bridge
+				iWbIdx = i;
+				dWeight = m_pmyDevices->CalcPT113Weight(iWbIdx, 0, true);
+				dBridgeTare = m_pmyDevices->GetOffset(iWbIdx,0);
+				break;
+			}
+		}
+
+
 
 		struct tm* tmptr;
 		tmptr = localtime(&timenow);
 		snprintf( szTime, sizeof(szTime), "TM%02d%02d%02d", tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec);
+		if ( dBridgeTare < 1000 )
+			snprintf( szWeight, sizeof(szWeight), "WW%06.1f", dWeight );
+		else
+			snprintf( szWeight, sizeof(szWeight), "WW%06d", (int)dBridgeTare );
 
 		for ( fdx = 0; fdx < MAX_TCPIP_SOCKETS; fdx++ )
 		{
@@ -1991,15 +2113,26 @@ void CThread::SendEspMessage()
 				rc = SSL_write( m_xClientSSL[fdx], szTime, uMsgSize );
 				if ( rc != (int)uMsgSize )
 				{
-					LogMessage( E_MSG_ERROR, "Failed to send reply to client, errno %d", errno );
+					LogMessage( E_MSG_ERROR, "Failed to send time to client, errno %d", errno );
 
 					CloseSocket( m_iClientFd[fdx], fdx );
 				}
 				else
 				{
 //						char *ip = inet_ntoa( m_xClientInAddr[fdx] );
-
 //						LogMessage( E_MSG_INFO, "Sent msg type TM to %s", (ip == NULL ? "unknown" : ip) );
+					if ( iWbIdx >= 0 )
+					{
+						uMsgSize = strlen(szWeight);
+
+						rc = SSL_write( m_xClientSSL[fdx], szWeight, uMsgSize );
+						if ( rc != (int)uMsgSize )
+						{
+							LogMessage( E_MSG_ERROR, "Failed to send weight to client, errno %d", errno );
+
+							CloseSocket( m_iClientFd[fdx], fdx );
+						}
+					}
 				}
 			}
 		}
@@ -4000,7 +4133,10 @@ void CThread::HandlePT113Device( CMysql& myDB, modbus_t* ctx, const int idx, boo
 							if ( (iEspIdx = m_pmyIOLinks->FindLinkedDevice( iInDeviceNo, iInChannel, E_DT_ESP_DISPLAY, m_pmyDevices )) >= 0 )
 							{	
 								char szEspResponseMsg[ESP_MSG_SIZE];
-								snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "WW%06d", (int)dValNew );
+								if ( m_pmyDevices->GetOffset(idx,iChannel) < 1000)
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "WW%06.1f", dValNew );
+								else
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "WW%06d", (int)round(dValNew) );
 								SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
 							}
 							break;
@@ -4244,7 +4380,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int)m_pmyDevices->GetOffset(idx,iChannel) * (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					dValNew, szUnits );
 			else if ( eEventType == E_ET_WEIGHT )
-				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )*65536+m_pmyDevices->GetNewData( idx, iChannel+1 )),
+				LogMessage( E_MSG_INFO, "%s %d '%s' %u %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (uint32_t)m_pmyDevices->GetNewData( idx, iChannel )*65536+(uint32_t)m_pmyDevices->GetNewData( idx, iChannel+1 ),
 					dValNew, szUnits );
 			else
 				LogMessage( E_MSG_INFO, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
@@ -4259,7 +4395,7 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int)m_pmyDevices->GetOffset(idx,iChannel) * (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
 					dValNew, szUnits );
 			else if ( eEventType == E_ET_WEIGHT )
-				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )*65536+m_pmyDevices->GetNewData( idx, iChannel+1 )),
+				LogMessage( E_MSG_DEBUG, "%s %d '%s' %u %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (uint32_t)m_pmyDevices->GetNewData( idx, iChannel )*65536+(uint32_t)m_pmyDevices->GetNewData( idx, iChannel+1 ),
 					dValNew, szUnits );
 			else
 				LogMessage( E_MSG_DEBUG, "%s %d '%s' %d %.1f %s", szName, iChannel+1, m_pmyDevices->GetInIOName(idx,iChannel), (int16_t)(m_pmyDevices->GetNewData( idx, iChannel )),
@@ -5066,9 +5202,9 @@ const bool CThread::WebClickExists( CMysql& myDB, const int iDeviceNo, const int
 	return bRc;
 }
 
-void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
+void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList, const char* szSaveDir, std::string& sAttachment )
 {
-	if ( m_tLastCameraSnapshot + CAMERA_SNAPSHOT_PERIOD < time(NULL) )
+	if ( m_tLastCameraSnapshot + CAMERA_SNAPSHOT_PERIOD < time(NULL) || szSaveDir != NULL )
 	{
 		if ( CameraList.GetNumCameras() > 0 )
 		{
@@ -5080,8 +5216,14 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 			char szOutParms[256+20];
 			char szPwd[100];
 			
-			snprintf( szOutput, sizeof(szOutput), "%s/latest_snapshot.jpg", CameraList.GetSnapshotCamera().GetDirectory() );
+			if ( szSaveDir != NULL )
+				snprintf( szOutput, sizeof(szOutput), "%s/%s.jpg", szSaveDir, CameraList.GetSnapshotCamera().GetName() );
+			else
+				snprintf( szOutput, sizeof(szOutput), "%s/latest_snapshot.jpg", CameraList.GetSnapshotCamera().GetDirectory() );
 			snprintf( szOutput2, sizeof(szOutput), "%s/file_count.txt", CameraList.GetSnapshotCamera().GetDirectory() );
+
+			sAttachment += " -A ";
+			sAttachment +=szOutput;
 
 			CameraList.GetSnapshotCamera().GetPassword( szPwd, sizeof(szPwd));
 			snprintf( szParms, sizeof(szParms), "cmd=snapPicture2&usr=%s&pwd=%s", CameraList.GetSnapshotCamera().GetUserId(), szPwd );
@@ -5104,8 +5246,11 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList )
 				fputs( "chmod 0666 ", fp );
 				fputs( szOutput, fp );
 				fputs( "\n", fp );
-				snprintf( szCmd, sizeof(szCmd), "find %s -daystart -mtime 0 -name \"MDalarm*.mkv\" | wc -l > %s\n", CameraList.GetSnapshotCamera().GetDirectory(), szOutput2 );
-				fputs( szCmd, fp );
+				if ( szSaveDir == NULL )
+				{
+					snprintf( szCmd, sizeof(szCmd), "find %s -daystart -mtime 0 -name \"MDalarm*.mkv\" | wc -l > %s\n", CameraList.GetSnapshotCamera().GetDirectory(), szOutput2 );
+					fputs( szCmd, fp );
+				}
 
 				fclose( fp );
 			}

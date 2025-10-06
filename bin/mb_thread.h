@@ -288,7 +288,7 @@ public:
 	void CheckForTimerOffTime( CMysql& myDB, const int idx );
 	void HandleLevelDevice( CMysql& myDB, const int idx, const bool bSendPrompt, bool& bAllDead );
 	void HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDead );
-	void GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList );
+	void GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList, const char* szSaveDir, std::string& sAttachments );
 	void ReadCameraRecords( CMysql& myDB, CCameraList& CameraList );
 	int ReadPlcStatesTableAll( CMysql& myDB, CPlcStates* pmyPlcStates );
 	void ClearPlcActiveState( CMysql& myDB );

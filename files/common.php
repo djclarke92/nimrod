@@ -2185,7 +2185,7 @@ class MySQLDB
 	    if ( $newuser )
 	    {
 	        $query = sprintf( "insert into users (us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
-				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TrcukTare,us_TrailerTare)  
+				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare)  
                 values('%s','%s','%s',%d,'%s','%s','%s','%s',%d,'%s','%s','%s','%s','%s','%s','%s',%d,%d)",
 	            addslashes($username), addslashes($name), $hash, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count,
 				$truck_rego, $trailer_rego, addslashes($billing_name), addslashes($billing_addr1), addslashes($billing_addr2), addslashes($billing_addr3),

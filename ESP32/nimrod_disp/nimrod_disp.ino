@@ -56,7 +56,7 @@ int giSecSinceLastRecv = 0;
 int giLedTimer = 20;
 int giNumDevices = 0;
 int giDisplayState = 0;
-int giWeight = 0;
+double gdWeight = 0;
 int giHours = 0;
 int giMinutes = 0;
 int giSeconds = 0;
@@ -69,7 +69,7 @@ String gsTruckRego = "";
 String gsTrailerRego = "";
 String gsTruckTare = "";
 String gsTrailerTare = "";
-String gsTruckWeight = "";
+double gdTruckWeight = 0.0;
 String gsTrailerWeight = "";
 //WiFiClientSecure client;
 ESP_SSLClient ssl_client;
@@ -246,6 +246,7 @@ void loop()
 
 void drawMatrix()
 {
+  char szLine[20];
   String sLine1;
   String sLine2;
   // Every frame, we clear the background and draw everything anew.
@@ -265,8 +266,11 @@ void drawMatrix()
     } else {
       sLine1 = str1;
       //sLine2 = str2;
-      sLine2 = giWeight;
-      sLine2 += " KG";
+      if ( gdWeight >= 1000 )
+        sprintf( szLine, "%d KG", (int)gdWeight );
+      else
+        sprintf( szLine, "%.1f KG", gdWeight );
+      sLine2 = szLine;
 
       sprintf( gszCurrentTime, "%02d:%02d:%02d", giHours, giMinutes, giSeconds );
     }
@@ -347,7 +351,7 @@ void drawMatrix()
     sLine1 += gsTruckRego;
     sLine2 = "TARE ";
     sLine2 += gsTruckTare.toInt();
-    sLine2 += "KG";
+    sLine2 += " KG";
 
     matrix.setTextColor(0xFFFF);         // White
     matrix.setCursor(text1X, text1Y);
@@ -361,9 +365,11 @@ void drawMatrix()
     // truck weight
     sLine1 = "REGO ";
     sLine1 += gsTruckRego;
-    sLine2 = "WEIGHT ";
-    sLine2 = gsTruckWeight.toInt();
-    sLine2 += "KG";
+    if ( gdTruckWeight >= 1000 )
+      sprintf( szLine, "%d KG WEIGHT", (int)gdTruckWeight );
+    else
+      sprintf( szLine, "%.1f KG WEIGHT", gdTruckWeight );
+    sLine2 = szLine;
 
     matrix.setTextColor(0xFFFF);         // White
     matrix.setCursor(text1X, text1Y);
@@ -426,6 +432,39 @@ void drawMatrix()
     //sLine1 += gsTrailerRego;
     sLine2 = "NO REGO";
     //sLine2 = gsTrailerWeight;
+
+    matrix.setTextColor(0xFFFF);         // White
+    matrix.setCursor(text1X, text1Y);
+    matrix.print(sLine1);
+    matrix.setTextColor(matrix.color565(0xff,0x00,0x00)); 
+    matrix.setCursor(text2X, text2Y);
+    matrix.print(sLine2);
+    break;
+    
+  case 11:
+    // already swiped
+    sLine1 = "REGO ";
+    sLine1 += gsTruckRego;
+    sLine2 = "CARD IGNORED";
+    //sLine2 = gsTrailerWeight;
+
+    matrix.setTextColor(0xFFFF);         // White
+    matrix.setCursor(text1X, text1Y);
+    matrix.print(sLine1);
+    matrix.setTextColor(matrix.color565(0xff,0x00,0x00)); 
+    matrix.setCursor(text2X, text2Y);
+    matrix.print(sLine2);
+    break;
+    
+  case 12:
+    // empty truck
+    sLine1 = "REGO ";
+    sLine1 += gsTruckRego;
+    if ( gdTruckWeight >= 1000 )
+      sprintf( szLine, "EMPTY %d KG", (int)gdTruckWeight );
+    else
+      sprintf( szLine, "EMPTY %.1f KG", gdTruckWeight );
+    sLine2 = szLine;
 
     matrix.setTextColor(0xFFFF);         // White
     matrix.setCursor(text1X, text1Y);
@@ -801,9 +840,11 @@ void HandleMessage( const char* c )
   // NNESPxxx   our new name
   // TMhhmmss   current time
   // XD<cardno> card disabled
+  // XE<weight> empty
   // XN<cardno> card not found
   // XF<cardno> card found
   // XR<rego>   truck rego
+  // XS<cardno> 2nd swipes
   // XT<tare>   truck tare
   // XW<weight> truck weight
   // YR<rego>   trailer rego
@@ -839,7 +880,7 @@ void HandleMessage( const char* c )
     Serial.printf( "New name ESP%s\n", gsPrefEspId.c_str() );
   } 
   else if ( strncmp(c, "WW", 2 ) == 0 ) {
-    giWeight = atoi(&c[2]);
+    gdWeight = atof(&c[2]);
     gbDrawMatrix = true;
   } else if ( c[0] == 'X' ) {
     // card or truck message
@@ -873,7 +914,16 @@ void HandleMessage( const char* c )
     else if ( c[1] == 'W' ) {
       // truck weight
       giDisplayState = 6;
-      gsTruckWeight = &c[2];
+      gdTruckWeight = atof(&c[2]);
+    }
+    else if ( c[1] == 'S' ) {
+      // 2nd swipe
+      giDisplayState = 11;
+    }
+    else if ( c[1] == 'E' ) {
+      // empty truck
+      giDisplayState = 12;
+      gdTruckWeight = atof(&c[2]);
     }
   } else if ( c[0] == 'Y' ) {
     // trailer message

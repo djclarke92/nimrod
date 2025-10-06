@@ -136,6 +136,8 @@ if ( isset( $_POST['us_UF_Upgrade']) )
     $us_array['us_UF_Upgrade'] = "Y";
 if ( isset( $_POST['us_UF_HomeCameras']) )
     $us_array['us_UF_HomeCameras'] = "Y";
+if ( isset( $_POST['us_UF_AccountingUser']) )
+    $us_array['us_UF_AccountingUser'] = "Y";
 if ( isset( $_POST['us_CardNumber']) )
     $us_array['us_CardNumber'] = $_POST['us_CardNumber'];
 if ( isset( $_POST['us_CardPin']) )
@@ -505,37 +507,19 @@ $user_list = $db->ReadUsers();
 
 			printf( "<div class='row'>" ); 
 			printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='us_Name'>Truck Rego: </label>" );
+    		printf( "<label for='us_Name'>Truck/Trailer Rego: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col-sm-3'>" );
+    		printf( "<div class='col-sm-4'>" );
     		printf( "<input type='text' class='form-control' name='us_TruckRego' id='us_TruckRego' size='6' value='%s'> ", $us_array['us_TruckRego'] );
     		printf( "</div>" );
     		printf( "</div>" );
 
 			printf( "<div class='row'>" ); 
 			printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='us_Name'>Truck Tare: </label>" );
+    		printf( "<label for='us_Name'>Truck/Trailer Tare: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col-sm-3'>" );
+    		printf( "<div class='col-sm-4'>" );
     		printf( "<input type='text' class='form-control' name='us_TruckTare' id='us_TruckTare' size='6' value='%s'>  KG", $us_array['us_TruckTare'] );
-    		printf( "</div>" );
-    		printf( "</div>" );
-
-			printf( "<div class='row'>" ); 
-			printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='us_Name'>Trailer Rego: </label>" );
-    		printf( "</div>" );
-    		printf( "<div class='col-sm-3'>" );
-    		printf( "<input type='text' class='form-control' name='us_TrailerRego' id='us_TrailerRego' size='6' value='%s'> ", $us_array['us_TrailerRego'] );
-    		printf( "</div>" );
-    		printf( "</div>" );
-
-			printf( "<div class='row'>" ); 
-			printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='us_Name'>Trailer Tare: </label>" );
-    		printf( "</div>" );
-    		printf( "<div class='col-sm-3'>" );
-    		printf( "<input type='text' class='form-control' name='us_TrailerTare' id='us_TrailerTare' size='6' value='%s'>  KG", $us_array['us_TrailerTare'] );
     		printf( "</div>" );
     		printf( "</div>" );
 

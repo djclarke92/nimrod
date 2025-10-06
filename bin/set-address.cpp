@@ -707,7 +707,7 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 		}
 		else
 		{
-			printf( "Read registers: " );
+			printf( "Read bits: " );
 			for ( int i = 0; i < iLen; i++ )
 			{
 				printf( "%u ", (uint8_t)cData[i] );

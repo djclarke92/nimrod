@@ -10,6 +10,7 @@
 #include <termios.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <string>
 #include <modbus/modbus.h>
 #include "mb_mysql.h"
 #include "mb_main.h"
@@ -2658,33 +2659,81 @@ bool CDeviceList::UpdateTruckTare( CMysql& myDB, const char* szCardNumber, const
 	return bRet;
 }
 
-bool CDeviceList::UpdateTrailerTare( CMysql& myDB, const char* szCardNumber, const double dTrailerWeight )
+bool CDeviceList::SelectAccountEmails(CMysql& myDB, std::string& sEmails )
 {
-	bool bRet = true;
+	bool bRet = false;
+	int iNumFields;
+	MYSQL_ROW row;
 
-	if ( myDB.RunQuery( "update users set us_TrailerTare=%ld where us_CardNumber='%s'", (long)dTrailerWeight, szCardNumber ) != 0 )
+	sEmails = "";
+
+	if ( myDB.RunQuery( "select us_BillingEmail from users where us_Features like '___Y%%'" ) != 0 )
 	{
 		bRet = false;
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	else 
+	{
+		while ( (row = myDB.FetchRow( iNumFields )) )
+		{
+			bRet = true;
+			if ( sEmails.length() > 0 )
+			{	// comma separated list
+				sEmails += ",";
+			}
+			sEmails += (const char*)row[0];
+		}
+		LogMessage( E_MSG_INFO, "Found accounts email details" );
 	}
 	myDB.FreeResult();
 
 	return bRet;
 }
 
-bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTrailerRego, const size_t uLen2, char* szTruckTare, 
-	const size_t uLen3, char* szTrailerTare, const size_t uLen4 )
+bool CDeviceList::SelectCardNumberBilling( CMysql& myDB, const char* szCardNumber, char* szBillingName, const size_t uName, char* szBillingAddr1, const size_t uAddr1,
+	char* szBillingAddr2, const size_t uAddr2, char* szBillingAddr3, const size_t uAddr3, char* szBillingEmail, const size_t uEmail )
+{
+	bool bRet = false;
+	int iNumFields;
+	MYSQL_ROW row;
+
+	szBillingName[0] = '\0';
+	szBillingAddr1[0] = '\0';
+	szBillingAddr2[0] = '\0';
+	szBillingAddr3[0] = '\0';
+	szBillingEmail[0] = '\0';
+
+	if ( myDB.RunQuery( "select us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail from users where us_CardNumber='%s'", szCardNumber ) != 0 )
+	{
+		bRet = false;
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
+	}
+	else if ( (row = myDB.FetchRow( iNumFields )) )
+	{
+		bRet = true;
+		snprintf( szBillingName, uName, "%s", (const char*)row[0] );
+		snprintf( szBillingAddr1, uAddr1, "%s", (const char*)row[1] );
+		snprintf( szBillingAddr2, uAddr2, "%s", (const char*)row[2] );
+		snprintf( szBillingAddr3, uAddr3, "%s", (const char*)row[3] );
+		snprintf( szBillingEmail, uEmail, "%s", (const char*)row[4] );
+
+		LogMessage( E_MSG_INFO, "Found card billing details for '%s'", szCardNumber );
+	}
+	myDB.FreeResult();
+
+	return bRet;
+}
+
+bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTruckTare, const size_t uLen2 )
 {
 	bool bRet = false;
 	int iNumFields;
 	MYSQL_ROW row;
 
 	szTruckRego[0] = '\0';
-	szTrailerRego[0] = '\0';
 	szTruckTare[0] = '\0';
-	szTrailerTare[0] = '\0';
 
-	if ( myDB.RunQuery( "select us_TruckRego,us_TrailerRego,us_TruckTare,us_TrailerTare from users where us_CardNumber='%s'", szCardNumber ) != 0 )
+	if ( myDB.RunQuery( "select us_TruckRego,us_TruckTare from users where us_CardNumber='%s'", szCardNumber ) != 0 )
 	{
 		bRet = false;
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
@@ -2693,9 +2742,7 @@ bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, 
 	{
 		bRet = true;
 		snprintf( szTruckRego, uLen1, "%s", (const char*)row[0] );
-		snprintf( szTrailerRego, uLen2, "%s", (const char*)row[1] );
-		snprintf( szTruckTare, uLen3, "%06ld", atol((const char*)row[2]) );
-		snprintf( szTrailerTare, uLen4, "%06ld", atol((const char*)row[3]) );
+		snprintf( szTruckTare, uLen2, "%06ld", atol((const char*)row[1]) );
 
 		LogMessage( E_MSG_INFO, "Found card rego details for '%s'", szCardNumber );
 	}

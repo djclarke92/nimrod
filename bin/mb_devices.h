@@ -1,6 +1,7 @@
 #ifndef _INC_MB_DEVICES_H
 #define _INC_MB_DEVICES_H
 
+#include <string>
 
 
 #define MAX_EVENT_PERIOD			300		// 5 minutes
@@ -522,10 +523,11 @@ public:
 
 	bool UpdatePinFailCount( CMysql& myDB, const char* szCardNumber, const int iPinFailCount );
 	bool SelectCardNumber( CMysql& myDB, const char* szCardNumber, char* szCardPin, const int iLen, bool& bEnabled, int& iPinFailCount );
-	bool SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTrailerRego, const size_t uLen2, char* szTruckTare, 
-			const size_t uLen3, char* szTrailerTare, const size_t uLen4 );
+	bool SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTruckTare, const size_t uLen2 );
+	bool SelectCardNumberBilling( CMysql& myDB, const char* szCardNumber, char* szBillingName, const size_t uName, char* szBillingAddr1, const size_t uAddr1,
+		char* szBillingAddr2, const size_t uAddr2, char* szBillingAddr3, const size_t uAddr3, char* szBillingEmail, const size_t uEmail );
+	bool SelectAccountEmails(CMysql& myDB, std::string& sEmails );
 	bool UpdateTruckTare( CMysql& myDB, const char* szCardNumber, const double dTruckWeight );
-	bool UpdateTrailerTare( CMysql& myDB, const char* szCardNumber, const double dTrailerWeight );
 	bool GetLastCardSwipeTimestamp( CMysql& myDB, const char* szCardNumber, time_t& tLastCardSwipe, double& dLastWeight );
 	bool UpdateDeviceStatus( CMysql& myDB, const int idx );
 	bool UpdateDeviceOutOnStartTime( CMysql& myDB, const int iOutIdx, const int iOutChannel );
