@@ -1291,7 +1291,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 							time_t tLastCardSwipe = 0;
 							double dLastWeight = 0;
 							m_pmyDevices->GetLastCardSwipeTimestamp( myDB, szCardNumber, tLastCardSwipe, dLastWeight );
-							if ( time(NULL) - tLastCardSwipe < 2*60 )
+							if ( time(NULL) - tLastCardSwipe < 60 )
 							{	// 2 minutes
 								// TODO: move this into config
 								bTruck = false;
@@ -1313,14 +1313,14 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 
 							// read the current weight
 							dTruckWeight = m_pmyDevices->CalcPT113Weight(iWbIdx, 0, true );
-							dTruckWeight -= dBridgeTare;
+							//dTruckWeight -= dBridgeTare;
 							LogMessage( E_MSG_INFO, "Bridge Tare %.1f, Truck Weight %.1f", dBridgeTare, dTruckWeight );
 							if ( dTruckWeight < 0.0 )
 							{
 								dTruckWeight = 0.0;
 							}
-							if ( fabs(dTruckWeight) < dBridgeTare*0.005 )
-							{	// 0.5% of bridge tare
+							if ( fabs(dTruckWeight) < dBridgeTare*0.01 )
+							{	// 1% of bridge tare
 								LogMessage( E_MSG_INFO, "Nothing on the weigh bridge: Bridge %.1f, %.1f", dBridgeTare, dTruckWeight );
 								bEmpty = true;
 							}
@@ -1388,9 +1388,9 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 									FILE* pFile = NULL;
 									
 									tmptr = localtime( &timenow );
-									snprintf( szDir, sizeof(szDir), "/var/tmp/nimrod/%d%02d%02d_%02d%02d%02d_%s", tmptr->tm_year+1900, tmptr->tm_mon+1, tmptr->tm_mday,
+									snprintf( szDir, sizeof(szDir), "/home/nimrod/invoices/%d%02d%02d_%02d%02d%02d_%s", tmptr->tm_year+1900, tmptr->tm_mon+1, tmptr->tm_mday,
 										tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec, szCardNumber );
-									mkdir( "/var/tmp/nimrod", 0775 );
+									mkdir( "/home/nimrod/invoices", 0775 );
 									
 									if ( mkdir( szDir, 0775 ) == 0 )
 									{
@@ -1448,7 +1448,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 											LogMessage( E_MSG_ERROR, "Failed to open %s for writing, errno %d", szFile, errno );
 										}
 
-										// TODO: send email
+										// send email
 										std::string sEmails;
 										m_pmyDevices->SelectAccountEmails( myDB, sEmails );
 										if ( sEmails.length() > 0 )

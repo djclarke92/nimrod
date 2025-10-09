@@ -750,6 +750,7 @@ const double CMyDevice::CalcPT113Weight( const int iChannel, const bool bNew )
 			case 0:		// weight, kg
 				// Offset: load cell rated weight, 25,000kg
 				dVal = (double)dUnit / LOAD_CELL_MAX_COUNT * m_dOffset[0];
+				dVal -= m_dCalcFactor[0];
 				if ( dVal > (m_dOffset[0]*1.5) || dVal < 0.0 )
 				{	// data error out of range
 					dVal = 0.0;
