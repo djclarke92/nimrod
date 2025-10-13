@@ -2099,7 +2099,7 @@ void CThread::SendEspMessage()
 		if ( dBridgeTare < 1000 )
 			snprintf( szWeight, sizeof(szWeight), "WW%06.1f", dWeight );
 		else
-			snprintf( szWeight, sizeof(szWeight), "WW%06d", (int)dBridgeTare );
+			snprintf( szWeight, sizeof(szWeight), "WW%06d", (int)dWeight );
 
 		for ( fdx = 0; fdx < MAX_TCPIP_SOCKETS; fdx++ )
 		{
