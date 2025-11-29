@@ -52,6 +52,7 @@ define( "E_DT_SHT40_TH", 14 );			// SHT40 / XY-MD02 temperature / humidity senso
 define( "E_DT_VIRTUAL_INPUT", 15 );		// virtual inputs
 define( "E_DT_PT113_LCT", 16 );			// PT113MB load cell transmittrer
 define( "E_DT_ESP_DISPLAY", 17 );		// ESP32 matrix display
+define( "E_DT_SYSTEC_IT1", 18 );		// Systec IT1 weighing terminal
 $_SESSION['E_DTD'] = array();
 $_SESSION['E_DTD'][] = "Unused";
 $_SESSION['E_DTD'][] = "Digital IO"; 
@@ -71,6 +72,7 @@ $_SESSION['E_DTD'][] = "SHT40 / XY-MD02 Temp/Humidity";
 $_SESSION['E_DTD'][] = "Virtual Input";
 $_SESSION['E_DTD'][] = "PT113MB Load Cell Transmitter";
 $_SESSION['E_DTD'][] = "ESP32 Matrix Display";
+$_SESSION['E_DTD'][] = "Systec IT1 Weighing Terminal";
 
 define( "E_IO_UNUSED", 0 );
 define( "E_IO_ON_OFF", 1 );			// 1: 	manual on off switch

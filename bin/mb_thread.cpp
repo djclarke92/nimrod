@@ -654,6 +654,10 @@ void CThread::Worker()
 				{
 					HandleCardReaderDevice( myDB, idx, bAllDead );
 				}
+				else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_SYSTEC_IT1 )
+				{
+					HandleSystecIT1Device( myDB, idx, bAllDead );
+				}
 				else if ( m_pmyDevices->GetContext(idx) == NULL && !IsVirtualComPort(m_pmyDevices->GetComPort(idx)) )
 				{	// com port for this context does not exist
 					//LogMessage( E_MSG_INFO, "Bad ctx %s", m_pmyDevices->GetDeviceName(idx));
@@ -1277,7 +1281,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 						int iWbIdx = -1;
 						for ( int i = 0; i < MAX_DEVICES; i++ )
 						{
-							if ( m_pmyDevices->GetDeviceType(i) == E_DT_PT113_LCT )
+							if ( m_pmyDevices->GetDeviceType(i) == E_DT_PT113_LCT || m_pmyDevices->GetDeviceType(i) == E_DT_SYSTEC_IT1)
 							{	// found the weigh bridge
 								iWbIdx = i;
 								break;
@@ -1312,7 +1316,10 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 							dBridgeTare = m_pmyDevices->GetCalcFactor(iWbIdx,0);
 
 							// read the current weight
-							dTruckWeight = m_pmyDevices->CalcPT113Weight(iWbIdx, 0, true );
+							if ( m_pmyDevices->GetDeviceType(iWbIdx) == E_DT_PT113_LCT )
+								dTruckWeight = m_pmyDevices->CalcPT113Weight(iWbIdx, 0, true );
+							else
+								dTruckWeight = m_pmyDevices->CalcSystecIT1Weight(iWbIdx, 0, true );
 							//dTruckWeight -= dBridgeTare;
 							LogMessage( E_MSG_INFO, "Bridge Tare %.1f, Truck Weight %.1f", dBridgeTare, dTruckWeight );
 							if ( dTruckWeight < 0.0 )
@@ -1490,7 +1497,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 						}
 						else
 						{
-							LogMessage( E_MSG_WARN, "PT113 LCT not found in devices list" );
+							LogMessage( E_MSG_WARN, "PT113 LCT or Systec IT1 not found in devices list" );
 						}
 					}
 					else
@@ -1552,6 +1559,117 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 	m_szComBuffer[0] = '\0';
 }
 
+void CThread::HandleSystecIT1Device( CMysql& myDB, const int idx, bool& bAllDead )
+{
+	int n;
+	int iCount = 0;
+	//char* cptr;
+	unsigned char szByte[2] = "";
+	unsigned char szData[17] = "";
+
+
+	// success
+	bAllDead = false;
+	if ( m_pmyDevices->GetDeviceStatus(idx) == E_DS_DEAD || m_pmyDevices->GetDeviceStatus(idx) == E_DS_BURIED )
+	{
+		LogMessage( E_MSG_INFO, "DIO device '%s' (0x%x->%d) is now alive !", m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx );
+	}
+
+	if ( m_pmyDevices->SetDeviceStatus( idx, E_DS_ALIVE ) )
+	{
+		m_pmyDevices->UpdateDeviceStatus( myDB, idx );
+	}
+
+	while ( (n = read( m_pmyDevices->GetComHandle(idx), szByte, 1 )) > 0 )
+	{	// read 1 byte at a time
+		szByte[0] &= 0xff;
+		LogMessage( E_MSG_INFO, "Data: 0x%02x", szByte[0] );
+
+		// pretend its a card read
+		szData[iCount] = szByte[0];
+		szData[iCount+1] = '\0';
+		iCount += 1;
+		if ( iCount >= (int)sizeof(szData) )
+		{	// error
+			LogMessage( E_MSG_ERROR, "Too many bytes, %d", iCount );
+			break;
+		}
+
+		// sleep to get all the bytes
+		usleep(10000);
+	}
+
+	if ( iCount >= 3 )
+	{	// 3 or more bytes
+		m_szComBuffer[0] = 0;
+
+		unsigned long uVal = 0;
+		int iShift = iCount-1;
+		for ( int i = 0; i < iCount; i++ )
+		{
+			uVal += (szData[i] << (8 * iShift));
+			iShift -= 1;
+		}
+		snprintf( m_szComBuffer, sizeof(m_szComBuffer), "%lu;", uVal );
+
+		LogMessage( E_MSG_INFO, "IT1 data: '%s'", m_szComBuffer );
+	}
+
+	if ( m_szComBuffer[strlen(m_szComBuffer)-1] == ';' )
+	{	//
+		// always use channel 0
+		int iChannel;
+		for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
+		{
+			// 10kg change
+			// unloaded bridge weight / 10 ??
+			double dDiff = m_pmyDevices->GetOffset(idx,iChannel) * m_pmyDevices->GetResolution(idx,iChannel) / 100;
+
+			E_EVENT_TYPE eEventType = E_ET_WEIGHT;
+			E_IO_TYPE eIOTypeL = E_IO_WEIGHT_LOW;
+			E_IO_TYPE eIOTypeH = E_IO_WEIGHT_HIGH;
+			E_IO_TYPE eIOTypeHL = E_IO_WEIGHT_HIGHLOW;
+			E_IO_TYPE eIOTypeMon = E_IO_WEIGHT_MONITOR;
+			char szUnits[10] = "Kg";
+			char szDesc[20] = "Weight";
+			char szName[50] = "Weight";
+			double dValOld = m_pmyDevices->CalcSystecIT1Weight(idx,iChannel,false);
+			double dValNew = m_pmyDevices->CalcSystecIT1Weight(idx,iChannel,true);
+
+			//LogMessage( E_MSG_INFO, "Old %u %u %.1f", m_pmyDevices->GetLastData(idx,iChannel), m_pmyDevices->GetLastData(idx,iChannel+1), dValOld);
+
+			HandleChannelThresholds( myDB, idx, iChannel, dDiff, eEventType, eIOTypeL, eIOTypeH, eIOTypeHL, eIOTypeMon, szName, szDesc, szUnits, dValNew, dValOld );
+
+			if ( fabs(dValNew - dValOld) >= dDiff )
+			{	// find the display
+				LogMessage(E_MSG_INFO, "WW %.1f %.1f %.1f", dValNew, dValOld, dDiff );
+				for ( int i = 0; i < MAX_DEVICES; i++ )
+				{
+					if ( m_pmyDevices->GetDeviceType(i) == E_DT_CARD_READER )
+					{
+						int iInDeviceNo = m_pmyDevices->GetDeviceNo(i);
+						int iInChannel = 0;
+						int iEspIdx = -1;
+						if ( (iEspIdx = m_pmyIOLinks->FindLinkedDevice( iInDeviceNo, iInChannel, E_DT_ESP_DISPLAY, m_pmyDevices )) >= 0 )
+						{	
+							char szEspResponseMsg[ESP_MSG_SIZE];
+							if ( m_pmyDevices->GetOffset(idx,iChannel) < 1000)
+								snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "WW%06.1f", dValNew );
+							else
+								snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "WW%06d", (int)round(dValNew) );
+							SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+						}
+						break;
+					}
+				}
+			}
+		}	// end for loop
+
+	}
+
+	m_szComBuffer[0] = '\0';
+}
+
 void CThread::CheckForTimerOffTime( CMysql& myDB, const int idx )
 {
 	bool bError;
@@ -1596,7 +1714,6 @@ void CThread::CheckForTimerOffTime( CMysql& myDB, const int idx )
 			break;
 		}
 	}
-
 }
 
 const char* CThread::GetTcpipMsgType( const enum E_MESSAGE_TYPE eMT )
@@ -2086,6 +2203,13 @@ void CThread::SendEspMessage()
 			{	// found the weigh bridge
 				iWbIdx = i;
 				dWeight = m_pmyDevices->CalcPT113Weight(iWbIdx, 0, true);
+				dBridgeTare = m_pmyDevices->GetOffset(iWbIdx,0);
+				break;
+			}
+			else if ( m_pmyDevices->GetDeviceType(i) == E_DT_SYSTEC_IT1 )
+			{	// found the weigh bridge
+				iWbIdx = i;
+				dWeight = m_pmyDevices->CalcSystecIT1Weight(iWbIdx, 0, true);
 				dBridgeTare = m_pmyDevices->GetOffset(iWbIdx,0);
 				break;
 			}

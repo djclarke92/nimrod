@@ -7,11 +7,12 @@
 Nimrod Release Notes and History
 
 
-Version 0.2.7		July 2025
+Version 0.2.7		December 2025
 1.	Add support for PT113MB load cell transmitter
 2.	Add support for Adafruit ESP Matrix displays
 3.	Add suppoort for weigh bridge including invoicing
-4.	
+4.	Add support for Systec IT1 weighing terminal
+5.	
 
 
 Version 0.2.6		June 2025

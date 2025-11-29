@@ -106,6 +106,11 @@ function func_check_de_array( &$de_array )
 	    $de_array['error_msg'] = "PT113 load cell transmitter devices must only have 3 inputs.";
 	    return false;
 	}
+	else if ( $de_array['de_Type'] == E_DT_SYSTEC_IT1 && ($de_array['de_NumInputs'] != 1 || $de_array['de_NumOutputs'] > 0) )
+	{
+	    $de_array['error_msg'] = "Systec IT1 weighing terminal devices must only have 1 input.";
+	    return false;
+	}
 	
 	return true;
 }

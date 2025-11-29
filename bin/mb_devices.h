@@ -40,7 +40,8 @@ enum E_DEVICE_TYPE {
 	E_DT_SHT40_TH,			// 14: SHT40 / XY-MD02 temperature / humidity sensor
 	E_DT_VIRTUAL_INPUT,		// 15: virtual inputs
 	E_DT_PT113_LCT,			// 16: PT113MB load cell transmitter
-	E_DT_ESP_DISPLAY		// 17: ESP32 matrix display
+	E_DT_ESP_DISPLAY,		// 17: ESP32 matrix display
+	E_DT_SYSTEC_IT1			// 18: Systec IT1 weighing terminal (rs232 interface)
 };
 
 enum E_IO_TYPE {
@@ -300,6 +301,7 @@ public:
 	const double CalcVSDNFlixenValue( const int iChannel, const bool bNew );
 	const double CalcVSDPwrElectValue( const int iChannel, const bool bNew );
 	const double CalcPT113Weight( const int iChannel, const bool bNew );
+	const double CalcSystecIT1Weight( const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int iChannel );
 	const bool WasSensorConnected( const int iChannel );
 	const bool IsTimerEnabledToday( const int iChannel );
@@ -430,6 +432,7 @@ public:
 	const double CalcVSDNFlixenValue( const int idx, const int iChannel, const bool bNew );
 	const double CalcVSDPwrElectValue( const int idx, const int iChannel, const bool bNew );
 	const double CalcPT113Weight( const int idx, const int iChannel, const bool bNew );
+	const double CalcSystecIT1Weight( const int idx, const int iChannel, const bool bNew );
 	const bool IsSensorConnected( const int idx, const int iChannel );
 	const bool WasSensorConnected( const int idx, const int iChannel );
 	const bool IsTimerEnabledToday( const int idx, const int iChannel );

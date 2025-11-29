@@ -763,6 +763,58 @@ const double CMyDevice::CalcPT113Weight( const int iChannel, const bool bNew )
 	return dVal;
 }
 
+const double CMyDevice::CalcSystecIT1Weight( const int iChannel, const bool bNew )
+{
+	double dVal = 0.0;
+	double dUnit;
+
+	if ( iChannel >= 0 && iChannel < MAX_IO_PORTS )
+	{
+		bool bDataOk = false;
+		if ( bNew )
+		{
+			dUnit = (double)(m_uNewData[0]);
+//			if ((m_uNewData[2] & 0x0002) != 0 && (m_uNewData[2] & 0xe000) == 0 )
+			{
+				bDataOk = true;
+			}
+		}
+		else
+		{
+			//LogMessage( E_MSG_INFO, "oldval %u %u", m_uLastData[0], m_uLastData[1] );
+			dUnit = (double)(m_uLastData[0]);
+//			if ((m_uLastData[2] & 0x0002) != 0 && (m_uLastData[2] & 0xe000) == 0 )
+			{
+				bDataOk = true;
+			}
+		}
+
+		if ( strlen(m_szInIOName[iChannel]) == 0 || !bDataOk )
+		{	// sensor is not connected
+
+		}
+		else
+		{
+			switch ( iChannel )
+			{
+			default:
+				break;
+			case 0:		// weight, kg
+				// Offset: load cell rated weight, 25,000kg
+				dVal = (double)dUnit;	// / LOAD_CELL_MAX_COUNT * m_dOffset[0];
+				//dVal -= m_dCalcFactor[0];
+				if ( dVal > (m_dOffset[0]*1.5) || dVal < 0.0 )
+				{	// data error out of range
+					dVal = 0.0;
+				}
+				break;
+			}
+		}
+	}
+
+	return dVal;
+}
+
 const bool CMyDevice::IsSensorConnected( const int iChannel )
 {
 	bool bRc = false;
@@ -2115,6 +2167,16 @@ const double CDeviceList::CalcPT113Weight( const int idx, const int iChannel, co
 	if ( idx >= 0 && idx < MAX_DEVICES )
 	{
 		return m_Device[idx].CalcPT113Weight( iChannel, bNew );
+	}
+
+	return 0.0;
+}
+
+const double CDeviceList::CalcSystecIT1Weight( const int idx, const int iChannel, const bool bNew )
+{
+	if ( idx >= 0 && idx < MAX_DEVICES )
+	{
+		return m_Device[idx].CalcSystecIT1Weight( iChannel, bNew );
 	}
 
 	return 0.0;
