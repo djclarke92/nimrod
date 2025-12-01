@@ -1375,8 +1375,8 @@ bool CDeviceList::InitContext()
 				LogMessage( E_MSG_ERROR, "Failed to open COM port %s, errno %d", m_Device[idx].GetComPort(), errno );
 			}
 		}
-		else if ( m_Device[idx].GetDeviceType() == E_DT_CARD_READER )
-		{	// card reader device
+		else if ( m_Device[idx].GetDeviceType() == E_DT_CARD_READER || m_Device[idx].GetDeviceType() == E_DT_SYSTEC_IT1 )
+		{	// card reader device or Systec IT1 weight 
 			iSuccess += 1;
 			LogMessage( E_MSG_INFO, "Open COM port %s for CardReader DeviceNo %d on '%s'", m_Device[idx].GetComPort(), m_Device[idx].GetDeviceNo(), m_Device[idx].GetDeviceHostname() );
 
