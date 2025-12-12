@@ -1455,6 +1455,68 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 											LogMessage( E_MSG_ERROR, "Failed to open %s for writing, errno %d", szFile, errno );
 										}
 
+										// printout
+										char szPrinter[50] = "";
+										ReadSiteConfig( "WEIGH_BRIDGE_PRINTER", szPrinter, sizeof(szPrinter) );
+										if ( strlen(szPrinter) > 0 )
+										{
+											char szTitle[100] = "";
+											ReadSiteConfig( "WEIGH_BRIDGE_PRINTOUT_TITLE", szTitle, sizeof(szTitle) );
+
+											char szFile[256] = "/tmp/printout.txt";
+											pFile = fopen( szFile, "wt" );
+											if ( pFile != NULL )
+											{
+												char szBuf[256];
+												snprintf( szBuf, sizeof(szBuf), "%s\n", szTitle );
+												fputs( szBuf, pFile );
+												fputs( "Certified Weigh Bridge\n", pFile );
+
+												fputs( "\n", pFile );
+												snprintf( szBuf, sizeof(szBuf), "%02d/%02d/%d %02d:%02d:%02d\n\n", tmptr->tm_mday, tmptr->tm_mon+1, tmptr->tm_year+1900,
+													tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec );
+												fputs( szBuf, pFile );
+												snprintf( szBuf, sizeof(szBuf), "Card No: %s\nVehicle Rego: %s\n", szCardNumber, szTruckRego );
+												fputs( szBuf, pFile );
+												snprintf( szBuf, sizeof(szBuf), "Tare: %s KG\n", szTruckTare );
+												fputs( szBuf, pFile );
+
+												if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+													snprintf( szBuf, sizeof(szBuf), "Weight: %.1f KG\n", dTruckWeight );
+												else
+													snprintf( szBuf, sizeof(szBuf), "Weight: %d KG\n", (int)dTruckWeight );
+												fputs( szBuf, pFile );
+
+												fputs( "\n", pFile );
+												snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingName );
+												fputs( szBuf, pFile );
+												snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr1 );
+												fputs( szBuf, pFile );
+												snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr2 );
+												fputs( szBuf, pFile );
+												snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr3 );
+												fputs( szBuf, pFile );
+
+												fputs( "\n", pFile );
+
+												fclose( pFile );
+
+												char szCmd[512];
+												snprintf( szCmd, sizeof(szCmd), "lpr -P %s %s", szPrinter, szFile );
+												int rc = system( szCmd );
+												LogMessage( E_MSG_INFO, "system print cmd returned %d", rc );
+											}
+											else
+											{
+												LogMessage( E_MSG_ERROR, "Failed to open %s for writing, errno %d", szFile, errno );
+											}
+										}
+										else
+										{
+											LogMessage( E_MSG_INFO, "No printer configured" );
+										}
+
+
 										// send email
 										std::string sEmails;
 										m_pmyDevices->SelectAccountEmails( myDB, sEmails );

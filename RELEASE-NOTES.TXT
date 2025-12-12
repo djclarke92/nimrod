@@ -12,7 +12,8 @@ Version 0.2.7		December 2025
 2.	Add support for Adafruit ESP Matrix displays
 3.	Add suppoort for weigh bridge including invoicing
 4.	Add support for Systec IT1 weighing terminal
-5.	
+5.	Add support for thermal printer for weigh bridge printouts
+6.
 
 
 Version 0.2.6		June 2025

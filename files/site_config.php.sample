@@ -30,5 +30,11 @@ define( 'AUTOLOGIN_USERNAME', '' );
 // use secure web sockets 0/1
 define( 'SECURE_WEBSOCKET', '1' );
 
+// weigh bridge printer
+define( 'WEIGH_BRIDGE_PRINTER', 'POS80' );
+
+// weigh bridge printout title
+define( 'WEIGH_BRIDGE_PRINTOUT_TITLE', 'GEOTECH CHARLESTON' );
+
 ?>
 

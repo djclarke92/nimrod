@@ -2805,7 +2805,7 @@ bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, 
 	{
 		bRet = true;
 		snprintf( szTruckRego, uLen1, "%s", (const char*)row[0] );
-		snprintf( szTruckTare, uLen2, "%06ld", atol((const char*)row[1]) );
+		snprintf( szTruckTare, uLen2, "%ld", atol((const char*)row[1]) );
 
 		LogMessage( E_MSG_INFO, "Found card rego details for '%s'", szCardNumber );
 	}
