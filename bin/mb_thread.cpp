@@ -1637,7 +1637,7 @@ void CThread::HandleSystecIT1Device( CMysql& myDB, const int idx, bool& bAllDead
 	if ( strlen(m_szComBuffer) >= 15 )
 	{	//
 		// always use channel 0
-		int iChannel;
+		int iChannel; 
 		for ( iChannel = 0; iChannel < m_pmyDevices->GetNumInputs(idx); iChannel++ )
 		{
 			// 10kg change
