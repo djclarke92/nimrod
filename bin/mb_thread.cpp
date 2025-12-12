@@ -1502,7 +1502,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 												fclose( pFile );
 
 												char szCmd[512];
-												snprintf( szCmd, sizeof(szCmd), "lpr -P %s %s", szPrinter, szFile );
+												snprintf( szCmd, sizeof(szCmd), "lp -d %s %s", szPrinter, szFile );
 												int rc = system( szCmd );
 												LogMessage( E_MSG_INFO, "system print cmd returned %d", rc );
 											}
@@ -1686,10 +1686,13 @@ void CThread::HandleSystecIT1Device( CMysql& myDB, const int idx, bool& bAllDead
 //		}
 		snprintf( m_szComBuffer, sizeof(m_szComBuffer), "%s", szData );
 
-		if ( atoi((const char*)&szData[4]) != giLastWeight )
+		int weight = atoi((const char*)&szData[4]);
+		if ( weight != giLastWeight && weight >= 0 )
 		{
 			LogMessage( E_MSG_INFO, "IT1 data: '%s'", m_szComBuffer );
 			giLastWeight = atoi((const char*)&szData[4]);
+			if ( giLastWeight < 0 )
+				giLastWeight = 0;
 
 			m_pmyDevices->GetLastData(idx,0) = m_pmyDevices->GetNewData(idx)[0];
 			m_pmyDevices->GetNewData(idx)[0] = giLastWeight;
