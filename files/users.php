@@ -285,7 +285,7 @@ else if ( isset($_POST['NewUser']) || isset($_POST['UpdateUser']) )
 	    $new_user = true;
 	}
 	
-	if ( $new_user && $us_array['us_Password'] == "" )
+	if ( $new_user && $us_array['us_Password'] == "" && $us_array['us_AuthLevel'] > SECURITY_LEVEL_NONE )
 	{
 	    $us_array['error_msg'] = "The password and confirmation must be entered for new users.";
 	}
@@ -441,9 +441,7 @@ $user_list = $db->ReadUsers();
     		printf( "<div class='col-sm-3'>" );
     		printf( "<input type='password' class='form-control' name='us_Password' id='us_Password' size='12' value='%s'> ", $us_array['us_Password'] );
     		printf( "</div>" );
-    		printf( "</div>" );
 
-			printf( "<div class='row'>" ); 
 			printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_Password2'>Confirmation: </label>" );
     		printf( "</div>" );
@@ -464,6 +462,12 @@ $user_list = $db->ReadUsers();
             printf( "<option %s>%d. Admin</option>", ($us_array['us_AuthLevel'] == SECURITY_LEVEL_ADMIN ? "selected" : ""), SECURITY_LEVEL_ADMIN );
             printf( "</select>" );
     		printf( "</div>" );
+			if ( $new_user )
+			{
+	    		printf( "<div class='col-sm-4'>" );
+				printf( "Password is reqd if secuity level > NONE");
+    			printf( "</div>" );
+			}
     		printf( "</div>" );
 
     		printf( "<div class='row'>" );
@@ -472,7 +476,8 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "<div class='col-sm-3'>" );
     		printf( "<input type='text' class='form-control' name='us_CardNumber' id='us_CardNumber' size='8' value='%s'> ", $us_array['us_CardNumber'] );
-    		//printf( "<label class='form-check-label'>" );
+			printf( "</div>");
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<input type='checkbox' class='form-check-input' name='us_CardEnabled' id='us_CardEnabled' %s> ", ($us_array['us_CardEnabled'] == "Y" ? "checked" : "") );
     		printf( "Card Enabled" );
     		printf( "</div>" );
@@ -480,14 +485,12 @@ $user_list = $db->ReadUsers();
     		
     		printf( "<div class='row'>" );
     		printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='us_Password'>PIN: </label>" );
+    		printf( "<label for='us_CardPin'>PIN: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='password' class='form-control' name='us_CardPin' id='us_CardPin' size='6' value='%s'> ", $us_array['us_CardPin'] );
     		printf( "</div>" );
-    		printf( "</div>" );
     		
-    		printf( "<div class='row'>" );
     		printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_CardPin2'>Confirmation: </label>" );
     		printf( "</div>" );
@@ -507,19 +510,22 @@ $user_list = $db->ReadUsers();
 
 			printf( "<div class='row'>" ); 
 			printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='us_Name'>Truck/Trailer Rego: </label>" );
+    		printf( "<label for='us_Name'>Vehicle Rego/Id: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col-sm-4'>" );
-    		printf( "<input type='text' class='form-control' name='us_TruckRego' id='us_TruckRego' size='6' value='%s'> ", $us_array['us_TruckRego'] );
+    		printf( "<div class='col-sm-5'>" );
+    		printf( "<input type='text' class='form-control' name='us_TruckRego' id='us_TruckRego' size='10' value='%s'> ", $us_array['us_TruckRego'] );
+    		printf( "</div>" );
+    		printf( "<div class='col-sm-3'>" );
+    		printf( "15 Characters max" );
     		printf( "</div>" );
     		printf( "</div>" );
 
 			printf( "<div class='row'>" ); 
 			printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='us_Name'>Truck/Trailer Tare: </label>" );
+    		printf( "<label for='us_Name'>Vehicle Tare KG: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-4'>" );
-    		printf( "<input type='text' class='form-control' name='us_TruckTare' id='us_TruckTare' size='6' value='%s'>  KG", $us_array['us_TruckTare'] );
+    		printf( "<input type='text' class='form-control' name='us_TruckTare' id='us_TruckTare' size='6' value='%s'>", $us_array['us_TruckTare'] );
     		printf( "</div>" );
     		printf( "</div>" );
 

@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 127 );
+define( "THIS_DATABASE_VERSION", 128 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -858,6 +858,25 @@ function func_check_database( $db )
 	if ( $version === false || $version < 127 )
     {   // we have some work to do
         $query = "alter table deviceinfo add di_Resolution decimal(10,3) not null default 0.0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table deviceinfo", $db->db_link );
+        }
+        
+        $version = func_update_database_version( $db, 127);
+    }
+
+	if ( $version === false || $version < 128 )
+    {   // we have some work to do
+        $query = "alter table users modify us_TruckRego char(15) not null default ''";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table deviceinfo", $db->db_link );
+        }
+        
+        $query = "alter table users modify us_TrailerRego char(15) not null default ''";
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error

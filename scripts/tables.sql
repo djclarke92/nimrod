@@ -103,8 +103,8 @@ create TABLE IF NOT EXISTS `users` (
 	`us_CardPin` char(6) NOT NULL default '',					# card PIN
 	`us_CardEnabled` char(1) NOT NULL default 'N',				# card is enabled
 	`us_PinFailCount` int(10) NOT NULL default 0,				# consecutive pin failure count
-	`us_TruckRego` char(6) NOT NULL default '',					# truck rego for weigh bridge
-	`us_TrailerRego` char(6) NOT NULL default '',				# trailer rego for weigh bridge
+	`us_TruckRego` char(15) NOT NULL default '',				# truck rego for weigh bridge
+	`us_TrailerRego` char(15) NOT NULL default '',				# trailer rego for weigh bridge
 	`us_BillingName` char(50) NOT NULL default '',				# send the invoice to this company
 	`us_BillingAddr1` char(50) NOT NULL default '',				# send the invoice to this address
 	`us_BillingAddr2` char(50) NOT NULL default '',				# address line 2

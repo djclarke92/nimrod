@@ -122,6 +122,8 @@ void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... )
 		fputs( "\n", pFile );
 
 		fclose( pFile );
+
+		chmod( szLogFile, 0644);		
 	}
 
 	// check max file size
@@ -142,6 +144,7 @@ void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... )
 					snprintf( szLogFile1, sizeof(szLogFile1), "%s.%d", szLogFile, i-1 );
 
 				rename( szLogFile1, szLogFile2 );
+				chmod( szLogFile2, 0644);		
 			}
 		}
 	}

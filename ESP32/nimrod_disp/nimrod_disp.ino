@@ -363,12 +363,15 @@ void drawMatrix()
     
   case 6:
     // truck weight
-    sLine1 = "REGO ";
-    sLine1 += gsTruckRego;
     if ( gdTruckWeight >= 1000 )
-      sprintf( szLine, "%d KG WEIGHT", (int)gdTruckWeight );
+      sprintf( szLine, "%d LOAD", (int)gdTruckWeight - gsTruckTare.toInt() );
     else
-      sprintf( szLine, "%.1f KG WEIGHT", gdTruckWeight );
+      sprintf( szLine, "%.1f LOAD", gdTruckWeight - (double)gsTruckTare.toInt() );
+    sLine1 = szLine;
+    if ( gdTruckWeight >= 1000 )
+      sprintf( szLine, "%d WEIGHT", (int)gdTruckWeight );
+    else
+      sprintf( szLine, "%.1f WEIGHT", gdTruckWeight );
     sLine2 = szLine;
 
     matrix.setTextColor(0xFFFF);         // White

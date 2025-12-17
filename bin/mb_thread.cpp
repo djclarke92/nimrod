@@ -1271,8 +1271,8 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 					LogMessage( E_MSG_INFO, "Card found" );
 					myDB.LogEvent( m_pmyDevices->GetDeviceNo(idx), 0, E_ET_CARDREADER, 0, "Access valid: Card '%s'", szCardNumber );
 
-					char szThisRego[7] = "";
-					char szTruckRego[7] = "";
+					char szThisRego[16] = "";
+					char szTruckRego[16] = "";
 					char szTruckTare[11] = "";
 					if ( m_pmyDevices->SelectCardNumberRego( myDB, szCardNumber, szTruckRego, sizeof(szTruckRego), szTruckTare, sizeof(szTruckTare) ) )
 					{	// rego details found
@@ -1292,6 +1292,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 						{
 							// are we weighting truck or trailer ?
 							bool bTruck = true;
+							bool bAlreadySwiped = false;
 							time_t tLastCardSwipe = 0;
 							double dLastWeight = 0;
 							m_pmyDevices->GetLastCardSwipeTimestamp( myDB, szCardNumber, tLastCardSwipe, dLastWeight );
@@ -1299,6 +1300,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 							{	// 2 minutes
 								// TODO: move this into config
 								bTruck = false;
+								bAlreadySwiped = true;
 							}
 							else 
 							{
@@ -1351,7 +1353,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 
 								if ( bEmpty )
 								{
-									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XR%s", szTruckRego );
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XR%-6s", szTruckRego );
 									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
 
 									if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
@@ -1360,12 +1362,12 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 										snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XE%06d", (int)dTruckWeight );
 									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
 								}
-								else if ( bTruck )
+								else if ( bTruck || bAlreadySwiped )
 								{
-									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XR%s", szTruckRego );
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XR%-6s", szTruckRego );
 									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
 
-									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XT%s", szTruckTare );
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XT%-6s", szTruckTare );
 									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
 
 									if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
@@ -1393,94 +1395,47 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 									char szBillingAddr3[51] = "";
 									char szBillingEmail[51] = "";
 									FILE* pFile = NULL;
+									std::string sAttachments;
 									
-									tmptr = localtime( &timenow );
-									snprintf( szDir, sizeof(szDir), "/home/nimrod/invoices/%d%02d%02d_%02d%02d%02d_%s", tmptr->tm_year+1900, tmptr->tm_mon+1, tmptr->tm_mday,
-										tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec, szCardNumber );
-									mkdir( "/home/nimrod/invoices", 0775 );
-									
-									if ( mkdir( szDir, 0775 ) == 0 )
+									if ( !m_pmyDevices->SelectCardNumberBilling( myDB, szCardNumber, szBillingName, sizeof(szBillingName), szBillingAddr1, sizeof(szBillingAddr1),
+										szBillingAddr2, sizeof(szBillingAddr2), szBillingAddr3, sizeof(szBillingAddr3), szBillingEmail, sizeof(szBillingEmail) ) )
 									{
-										LogMessage( E_MSG_INFO, "Created dir '%s'", szDir );
+										LogMessage( E_MSG_ERROR, "Failed to read billing details for card %s", szCardNumber );
+									}
 
-										// take camera snapshots
-										std::string sAttachments;
-										ReadCameraRecords( myDB, m_CameraList );
-										for ( int i = 0; i < m_CameraList.GetNumCameras(); i++ )
+									tmptr = localtime( &timenow );
+									if ( !bAlreadySwiped )
+									{
+										snprintf( szDir, sizeof(szDir), "/home/nimrod/invoices/%d%02d%02d_%02d%02d%02d_%s", tmptr->tm_year+1900, tmptr->tm_mon+1, tmptr->tm_mday,
+											tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec, szCardNumber );
+										mkdir( "/home/nimrod/invoices", 0775 );
+										
+										if ( mkdir( szDir, 0775 ) == 0 )
 										{
-											GetCameraSnapshots( myDB, m_CameraList, szDir, sAttachments );
+											LogMessage( E_MSG_INFO, "Created dir '%s'", szDir );
 
-											m_CameraList.NextSnapshotIdx();
-										}
-								
-										// save invoice details
-										if ( !m_pmyDevices->SelectCardNumberBilling( myDB, szCardNumber, szBillingName, sizeof(szBillingName), szBillingAddr1, sizeof(szBillingAddr1),
-											szBillingAddr2, sizeof(szBillingAddr2), szBillingAddr3, sizeof(szBillingAddr3), szBillingEmail, sizeof(szBillingEmail) ) )
-										{
-											LogMessage( E_MSG_ERROR, "Failed to read billing details for card %s", szCardNumber );
-										}
-
-										snprintf( szFile, sizeof(szFile), "%s/invoice.txt", szDir );
-										pFile = fopen( szFile, "wt" );
-										if ( pFile != NULL )
-										{
-											snprintf( szBuf, sizeof(szBuf), "Weigh Bridge Invoice %02d/%02d/%d %02d:%02d:%02d\n\n", tmptr->tm_mday, tmptr->tm_mon+1, tmptr->tm_year+1900,
-												tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec );
-											fputs( szBuf, pFile );
-											snprintf( szBuf, sizeof(szBuf), "Card No: %s\nVehicle Rego: %s\n", szCardNumber, szTruckRego );
-											fputs( szBuf, pFile );
-											if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
-												snprintf( szBuf, sizeof(szBuf), "Weight: %.1f KG\n", dTruckWeight );
-											else
-												snprintf( szBuf, sizeof(szBuf), "Weight: %d KG\n", (int)dTruckWeight );
-											fputs( szBuf, pFile );
-
-											snprintf( szBuf, sizeof(szBuf), "Billing Name: %s\n", szBillingName );
-											fputs( szBuf, pFile );
-											snprintf( szBuf, sizeof(szBuf), "Billing Address 1: %s\n", szBillingAddr1 );
-											fputs( szBuf, pFile );
-											snprintf( szBuf, sizeof(szBuf), "Billing Address 2: %s\n", szBillingAddr2 );
-											fputs( szBuf, pFile );
-											snprintf( szBuf, sizeof(szBuf), "Billing Address 3: %s\n", szBillingAddr3 );
-											fputs( szBuf, pFile );
-											snprintf( szBuf, sizeof(szBuf), "Billing Email: %s\n", szBillingEmail );
-											fputs( szBuf, pFile );
-
-											fputs( "\n", pFile );
-
-											fclose( pFile );
-										}
-										else
-										{
-											LogMessage( E_MSG_ERROR, "Failed to open %s for writing, errno %d", szFile, errno );
-										}
-
-										// printout
-										char szPrinter[50] = "";
-										ReadSiteConfig( "WEIGH_BRIDGE_PRINTER", szPrinter, sizeof(szPrinter) );
-										if ( strlen(szPrinter) > 0 )
-										{
-											char szTitle[100] = "";
-											ReadSiteConfig( "WEIGH_BRIDGE_PRINTOUT_TITLE", szTitle, sizeof(szTitle) );
-
-											char szFile[256] = "/tmp/printout.txt";
+											// take camera snapshots
+											ReadCameraRecords( myDB, m_CameraList );
+											for ( int i = 0; i < m_CameraList.GetNumCameras(); i++ )
+											{
+												GetCameraSnapshots( myDB, m_CameraList, szDir, sAttachments );
+											}
+									
+											// save invoice details
+											snprintf( szFile, sizeof(szFile), "%s/invoice.txt", szDir );
 											pFile = fopen( szFile, "wt" );
 											if ( pFile != NULL )
 											{
-												char szBuf[256];
-												snprintf( szBuf, sizeof(szBuf), "%s\n", szTitle );
-												fputs( szBuf, pFile );
-												fputs( "Certified Weigh Bridge\n", pFile );
-
-												fputs( "\n", pFile );
-												snprintf( szBuf, sizeof(szBuf), "%02d/%02d/%d %02d:%02d:%02d\n\n", tmptr->tm_mday, tmptr->tm_mon+1, tmptr->tm_year+1900,
+												snprintf( szBuf, sizeof(szBuf), "Weigh Bridge Invoice %02d/%02d/%d %02d:%02d:%02d\n\n", tmptr->tm_mday, tmptr->tm_mon+1, tmptr->tm_year+1900,
 													tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec );
 												fputs( szBuf, pFile );
-												snprintf( szBuf, sizeof(szBuf), "Card No: %s\nVehicle Rego: %s\n", szCardNumber, szTruckRego );
+												snprintf( szBuf, sizeof(szBuf), "Card No: %s\nVehicle: %s\n", szCardNumber, szTruckRego );
 												fputs( szBuf, pFile );
-												snprintf( szBuf, sizeof(szBuf), "Tare: %s KG\n", szTruckTare );
+												if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+													snprintf( szBuf, sizeof(szBuf), "Tare:   %.1f KG\n", dDBTruckTare );
+												else
+													snprintf( szBuf, sizeof(szBuf), "Tare:   %d KG\n", (int)dDBTruckTare );
 												fputs( szBuf, pFile );
-
 												if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
 													snprintf( szBuf, sizeof(szBuf), "Weight: %.1f KG\n", dTruckWeight );
 												else
@@ -1488,23 +1443,29 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 												fputs( szBuf, pFile );
 
 												fputs( "\n", pFile );
-												snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingName );
+												if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+													snprintf( szBuf, sizeof(szBuf), "Load:   %.1f KG\n", dTruckWeight-dDBTruckTare );
+												else
+													snprintf( szBuf, sizeof(szBuf), "Load:   %d KG\n", (int)dTruckWeight-(int)dDBTruckTare );
 												fputs( szBuf, pFile );
-												snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr1 );
+
+												fputs( "\n", pFile );
+												snprintf( szBuf, sizeof(szBuf), "Billing Name: %s\n", szBillingName );
 												fputs( szBuf, pFile );
-												snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr2 );
+												snprintf( szBuf, sizeof(szBuf), "Billing Address 1: %s\n", szBillingAddr1 );
 												fputs( szBuf, pFile );
-												snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr3 );
+												snprintf( szBuf, sizeof(szBuf), "Billing Address 2: %s\n", szBillingAddr2 );
+												fputs( szBuf, pFile );
+												snprintf( szBuf, sizeof(szBuf), "Billing Address 3: %s\n", szBillingAddr3 );
+												fputs( szBuf, pFile );
+												snprintf( szBuf, sizeof(szBuf), "Billing Email: %s\n", szBillingEmail );
 												fputs( szBuf, pFile );
 
 												fputs( "\n", pFile );
 
 												fclose( pFile );
 
-												char szCmd[512];
-												snprintf( szCmd, sizeof(szCmd), "lp -d %s %s", szPrinter, szFile );
-												int rc = system( szCmd );
-												LogMessage( E_MSG_INFO, "system print cmd returned %d", rc );
+												LogMessage( E_MSG_INFO, "Saved invoice to %s", szFile );
 											}
 											else
 											{
@@ -1513,15 +1474,87 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 										}
 										else
 										{
-											LogMessage( E_MSG_INFO, "No printer configured" );
+											LogMessage( E_MSG_ERROR, "Failed to create dir '%s', errno %d", szDir, errno );
 										}
+									}
 
+									// printout - print again if already swiped
+									char szPrinter[50] = "";
+									ReadSiteConfig( "WEIGH_BRIDGE_PRINTER", szPrinter, sizeof(szPrinter) );
+									if ( strlen(szPrinter) > 0 )
+									{
+										char szTitle[100] = "";
+										ReadSiteConfig( "WEIGH_BRIDGE_PRINTOUT_TITLE", szTitle, sizeof(szTitle) );
 
+										char szFile[256] = "/tmp/printout.txt";
+										pFile = fopen( szFile, "wt" );
+										if ( pFile != NULL )
+										{
+											char szBuf[256];
+											snprintf( szBuf, sizeof(szBuf), "%s\n", szTitle );
+											fputs( szBuf, pFile );
+											fputs( "Certified Weigh Bridge\n", pFile );
+
+											fputs( "\n", pFile );
+											snprintf( szBuf, sizeof(szBuf), "%02d/%02d/%d %02d:%02d:%02d\n\n", tmptr->tm_mday, tmptr->tm_mon+1, tmptr->tm_year+1900,
+												tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "Card No: %s\nVehicle: %s\n", szCardNumber, szTruckRego );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "Tare:   %s KG\n", szTruckTare );
+											fputs( szBuf, pFile );
+
+											if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+												snprintf( szBuf, sizeof(szBuf), "Weight: %.1f KG\n", dTruckWeight );
+											else
+												snprintf( szBuf, sizeof(szBuf), "Weight: %d KG\n", (int)dTruckWeight );
+											fputs( szBuf, pFile );
+
+											fputs( "\n", pFile );
+											if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+												snprintf( szBuf, sizeof(szBuf), "Load:   %.1f KG\n", dTruckWeight - dDBTruckTare);
+											else
+												snprintf( szBuf, sizeof(szBuf), "Load:   %d KG\n", (int)dTruckWeight - (int)dDBTruckTare );
+											fputs( szBuf, pFile );
+
+											fputs( "\n", pFile );
+											snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingName );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr1 );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr2 );
+											fputs( szBuf, pFile );
+											snprintf( szBuf, sizeof(szBuf), "%s\n", szBillingAddr3 );
+											fputs( szBuf, pFile );
+
+											fputs( "\n", pFile );
+
+											fclose( pFile );
+
+											char szCmd[512];
+											snprintf( szCmd, sizeof(szCmd), "lp -d %s %s", szPrinter, szFile );
+											int rc = system( szCmd );
+											LogMessage( E_MSG_INFO, "system print cmd returned %d", rc );
+										}
+										else
+										{
+											LogMessage( E_MSG_ERROR, "Failed to open %s for writing, errno %d", szFile, errno );
+										}
+									}
+									else
+									{
+										LogMessage( E_MSG_INFO, "No printer configured" );
+									}
+
+									if ( !bAlreadySwiped )
+									{
 										// send email
 										std::string sEmails;
 										m_pmyDevices->SelectAccountEmails( myDB, sEmails );
 										if ( sEmails.length() > 0 )
 										{
+											LogMessage( E_MSG_INFO, "Sendind invoice email to %s", sEmails.c_str() );
+
 											std::string sCmd = "mail -s \"Weigh Bridge Invoice\" ";
 											sCmd += sAttachments;
 											sCmd += " ";
@@ -1540,10 +1573,6 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 										{
 											LogMessage( E_MSG_WARN, "No account emails exist" );
 										}
-									}
-									else
-									{
-										LogMessage( E_MSG_ERROR, "Failed to create dir '%s', errno %d", szDir, errno );
 									}
 								}
 								else 
@@ -5423,6 +5452,8 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList, const c
 			char szOutput2[256];
 			char szOutParms[256+20];
 			char szPwd[100];
+
+			LogMessage( E_MSG_INFO, "Camera snapshot for %s", CameraList.GetSnapshotCamera().GetName() );
 			
 			if ( szSaveDir != NULL )
 				snprintf( szOutput, sizeof(szOutput), "%s/%s.jpg", szSaveDir, CameraList.GetSnapshotCamera().GetName() );
