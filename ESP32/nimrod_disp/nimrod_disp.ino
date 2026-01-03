@@ -69,6 +69,7 @@ String gsTruckRego = "";
 String gsTrailerRego = "";
 String gsTruckTare = "";
 String gsTrailerTare = "";
+String gsTruckLoad = "";
 double gdTruckWeight = 0.0;
 String gsTrailerWeight = "";
 //WiFiClientSecure client;
@@ -374,10 +375,17 @@ void drawMatrix()
       sprintf( szLine, "%.1f WEIGHT", gdTruckWeight );
     sLine2 = szLine;
 
-    matrix.setTextColor(0xFFFF);         // White
+    if ( (double)gsTruckTare.toInt() + (double)gsTruckLoad.toInt() < gdTruckWeight)
+      matrix.setTextColor(matrix.color565(0xff,0x00,0x00));   // red - overloaded
+    else
+      matrix.setTextColor(0xFFFF);         // White
     matrix.setCursor(text1X, text1Y);
     matrix.print(sLine1);
-    matrix.setTextColor(matrix.color565(0x00,0x00,0xff));   // green
+
+    if ( (double)gsTruckTare.toInt() + (double)gsTruckLoad.toInt() < gdTruckWeight)
+      matrix.setTextColor(matrix.color565(0xff,0x00,0x00));   // red - overloaded
+    else
+      matrix.setTextColor(matrix.color565(0x00,0x00,0xff));   // green
     matrix.setCursor(text2X, text2Y);
     matrix.print(sLine2);
     break;
@@ -850,6 +858,7 @@ void HandleMessage( const char* c )
   // XS<cardno> 2nd swipes
   // XT<tare>   truck tare
   // XW<weight> truck weight
+  // XL<load>   truck load
   // YR<rego>   trailer rego
   // YT<tare>   trailer tare
   // YW<weight> trailer weight
@@ -927,6 +936,10 @@ void HandleMessage( const char* c )
       // empty truck
       giDisplayState = 12;
       gdTruckWeight = atof(&c[2]);
+    }
+    else if ( c[1] == 'L' ) {
+      // truck load
+      gsTruckLoad = &c[2];
     }
   } else if ( c[0] == 'Y' ) {
     // trailer message

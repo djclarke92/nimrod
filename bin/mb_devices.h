@@ -526,7 +526,7 @@ public:
 
 	bool UpdatePinFailCount( CMysql& myDB, const char* szCardNumber, const int iPinFailCount );
 	bool SelectCardNumber( CMysql& myDB, const char* szCardNumber, char* szCardPin, const int iLen, bool& bEnabled, int& iPinFailCount );
-	bool SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTruckTare, const size_t uLen2 );
+	bool SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTruckTare, const size_t uLen2, char* szTruckLoad, size_t uLen3 );
 	bool SelectCardNumberBilling( CMysql& myDB, const char* szCardNumber, char* szBillingName, const size_t uName, char* szBillingAddr1, const size_t uAddr1,
 		char* szBillingAddr2, const size_t uAddr2, char* szBillingAddr3, const size_t uAddr3, char* szBillingEmail, const size_t uEmail );
 	bool SelectAccountEmails(CMysql& myDB, std::string& sEmails );

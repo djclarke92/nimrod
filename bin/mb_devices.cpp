@@ -2787,7 +2787,7 @@ bool CDeviceList::SelectCardNumberBilling( CMysql& myDB, const char* szCardNumbe
 	return bRet;
 }
 
-bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTruckTare, const size_t uLen2 )
+bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, char* szTruckRego, const size_t uLen1, char* szTruckTare, const size_t uLen2, char* szTruckLoad, size_t uLen3 )
 {
 	bool bRet = false;
 	int iNumFields;
@@ -2795,8 +2795,9 @@ bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, 
 
 	szTruckRego[0] = '\0';
 	szTruckTare[0] = '\0';
+	szTruckLoad[0] = '\0';
 
-	if ( myDB.RunQuery( "select us_TruckRego,us_TruckTare from users where us_CardNumber='%s'", szCardNumber ) != 0 )
+	if ( myDB.RunQuery( "select us_TruckRego,us_TruckTare,us_TruckLoad from users where us_CardNumber='%s'", szCardNumber ) != 0 )
 	{
 		bRet = false;
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
@@ -2806,6 +2807,7 @@ bool CDeviceList::SelectCardNumberRego( CMysql& myDB, const char* szCardNumber, 
 		bRet = true;
 		snprintf( szTruckRego, uLen1, "%s", (const char*)row[0] );
 		snprintf( szTruckTare, uLen2, "%ld", atol((const char*)row[1]) );
+		snprintf( szTruckLoad, uLen3, "%ld", atol((const char*)row[2]) );
 
 		LogMessage( E_MSG_INFO, "Found card rego details for '%s'", szCardNumber );
 	}

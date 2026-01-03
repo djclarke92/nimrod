@@ -1274,9 +1274,10 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 					char szThisRego[16] = "";
 					char szTruckRego[16] = "";
 					char szTruckTare[11] = "";
-					if ( m_pmyDevices->SelectCardNumberRego( myDB, szCardNumber, szTruckRego, sizeof(szTruckRego), szTruckTare, sizeof(szTruckTare) ) )
+					char szTruckLoad[11] = "";
+					if ( m_pmyDevices->SelectCardNumberRego( myDB, szCardNumber, szTruckRego, sizeof(szTruckRego), szTruckTare, sizeof(szTruckTare), szTruckLoad, sizeof(szTruckLoad) ) )
 					{	// rego details found
-						LogMessage( E_MSG_INFO, "Card '%s': Truck rego '%s' %s Kg", szCardNumber, szTruckRego, szTruckTare );
+						LogMessage( E_MSG_INFO, "Card '%s': Truck rego '%s', Tare %s Kg, Load %s kg", szCardNumber, szTruckRego, szTruckTare, szTruckLoad );
 
 						int iWbIdx = -1;
 						for ( int i = 0; i < MAX_DEVICES; i++ )
@@ -1370,6 +1371,9 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XT%-6s", szTruckTare );
 									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
 
+									snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XL%-6s", szTruckLoad );
+									SetEspResponse( m_pmyDevices->GetDeviceName(iEspIdx), szEspResponseMsg );
+
 									if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
 										snprintf( szEspResponseMsg, sizeof(szEspResponseMsg), "XW%06.1f", dTruckWeight );
 									else
@@ -1450,6 +1454,13 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 												fputs( szBuf, pFile );
 
 												fputs( "\n", pFile );
+												if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+													snprintf( szBuf, sizeof(szBuf), "Rated Load:   %.1f KG\n", atof(szTruckLoad) );
+												else
+													snprintf( szBuf, sizeof(szBuf), "Rated Load:   %d KG\n", (int)atol(szTruckLoad) );
+												fputs( szBuf, pFile );
+
+												fputs( "\n", pFile );
 												snprintf( szBuf, sizeof(szBuf), "Billing Name: %s\n", szBillingName );
 												fputs( szBuf, pFile );
 												snprintf( szBuf, sizeof(szBuf), "Billing Address 1: %s\n", szBillingAddr1 );
@@ -1515,6 +1526,13 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 												snprintf( szBuf, sizeof(szBuf), "Load:   %.1f KG\n", dTruckWeight - dDBTruckTare);
 											else
 												snprintf( szBuf, sizeof(szBuf), "Load:   %d KG\n", (int)dTruckWeight - (int)dDBTruckTare );
+											fputs( szBuf, pFile );
+
+											fputs( "\n", pFile );
+											if ( m_pmyDevices->GetOffset(iWbIdx,0) < 1000)
+												snprintf( szBuf, sizeof(szBuf), "Rated Load: %.1f KG\n", atof(szTruckLoad) );
+											else
+												snprintf( szBuf, sizeof(szBuf), "Rated Load: %d KG\n", atoi(szTruckLoad) );
 											fputs( szBuf, pFile );
 
 											fputs( "\n", pFile );

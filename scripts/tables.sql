@@ -112,6 +112,8 @@ create TABLE IF NOT EXISTS `users` (
 	`us_BillingEmail` char(50) NOT NULL default '',				# send the invoice to this email
 	`us_TruckTare` int(10) NOT NULL default 0,					# truck tare in kg
 	`us_TrailerTare` int(10) NOT NULL default 0,				# trailer tare in kg
+	`us_TruckLoad` int(10) NOT NULL default 0,					# truck max load in kg
+	`us_TrailerLoad` int(10) NOT NULL default 0,				# trailer max load in kg
 	PRIMARY KEY (`us_Username`),
 	KEY `us_name_index` (`us_Name`),
 	KEY `us_cardnumber_index` (`us_CardNumber`)

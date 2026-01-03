@@ -13,7 +13,7 @@ if ( !include_once( "site_config.php" ) )
 	die("Configuration file 'files/site_config.php' not found !");
 }
 
-define( "THIS_DATABASE_VERSION", 128 );
+define( "THIS_DATABASE_VERSION", 129 );
 define( "MAX_IO_PORTS", 16 );   // see mb_devices.h
 define( "MAX_CONDITIONS", 10 ); // see mb_devices.h
 
@@ -873,17 +873,36 @@ function func_check_database( $db )
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
-            ReportDBError("Failed to alter table deviceinfo", $db->db_link );
+            ReportDBError("Failed to alter table users", $db->db_link );
         }
         
         $query = "alter table users modify us_TrailerRego char(15) not null default ''";
         $result = $db->RunQuery( $query );
         if ( func_db_warning_count($db) != 0 )
         {   // error
-            ReportDBError("Failed to alter table deviceinfo", $db->db_link );
+            ReportDBError("Failed to alter table users", $db->db_link );
         }
         
-        $version = func_update_database_version( $db, 127);
+        $version = func_update_database_version( $db, 128);
+    }
+
+	if ( $version === false || $version < 129 )
+    {   // we have some work to do
+        $query = "alter table users add us_TruckLoad int(10) not null default 0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+
+        $query = "alter table users add us_TrailerLoad int(10) not null default 0";
+        $result = $db->RunQuery( $query );
+        if ( func_db_warning_count($db) != 0 )
+        {   // error
+            ReportDBError("Failed to alter table users", $db->db_link );
+        }
+
+		$version = func_update_database_version( $db, 129);
     }
 }
 
@@ -2155,14 +2174,16 @@ class MySQLDB
 	{
 	    $info = array();
 	    $query = sprintf( "Select us_Username,us_name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
-			us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare from users" );
+			us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare,
+			us_TruckLoad,us_TrailerLoad from users" );
 	    $result = $this->RunQuery( $query );
 	    while ( $line = mysqli_fetch_row($result) )
 	    {
 	        $info[] = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
 	            'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8],
 				'us_TruckRego'=>$line[9], 'us_TrailerRego'=>$line[10], 'us_BillingName'=>$line[11], 'us_BillingAddr1'=>$line[12], 'us_BillingAddr2'=>$line[13],
-				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[16], 'us_TrailerTare'=>$line[17] );
+				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[16], 'us_TrailerTare'=>$line[17], 'us_TruckLoad'=>$line[18],
+				'us_TrailerLoad'=>$line[19] );
 	    }
 	    
 	    $this->FreeQuery($result);
@@ -2199,27 +2220,28 @@ class MySQLDB
 	}
 	
 	function UpdateUserTable( $newuser, $username, $name, $password, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count,
-			$truck_rego, $trailer_rego, $billing_name, $billing_addr1, $billing_addr2, $billing_addr3, $billing_email, $truck_tare, $trailer_tare )
+			$truck_rego, $trailer_rego, $billing_name, $billing_addr1, $billing_addr2, $billing_addr3, $billing_email, $truck_tare, $trailer_tare, $truck_load, $trailer_load )
 	{
 	    $hash = hash( "sha256", $password, FALSE );
 	    
 	    if ( $newuser )
 	    {
 	        $query = sprintf( "insert into users (us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
-				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare)  
-                values('%s','%s','%s',%d,'%s','%s','%s','%s',%d,'%s','%s','%s','%s','%s','%s','%s',%d,%d)",
+				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare,
+				us_TruckLoad,us_TrailerLoad)  
+                values('%s','%s','%s',%d,'%s','%s','%s','%s',%d,'%s','%s','%s','%s','%s','%s','%s',%d,%d,%d,%d)",
 	            addslashes($username), addslashes($name), $hash, $auth_level, $features, $card_number, $card_pin, $card_enabled, $pin_fail_count,
 				$truck_rego, $trailer_rego, addslashes($billing_name), addslashes($billing_addr1), addslashes($billing_addr2), addslashes($billing_addr3),
-				addslashes($billing_email), $truck_tare, $trailer_tare );
+				addslashes($billing_email), $truck_tare, $trailer_tare, $truck_load, $trailer_load );
 	    }
 	    else
 	    {
 	        $query = sprintf( "update users set us_Name='%s',us_AuthLevel=%d,us_Features='%s',us_CardNumber='%s',us_CardEnabled='%s',us_PinFailCount=%d,
 				us_TruckRego='%s',us_TrailerRego='%s',us_BillingName='%s',us_BillingAddr1='%s',us_BillingAddr2='%s',us_BillingAddr3='%s',us_BillingEmail='%s',
-				us_TruckTare=%d,us_TrailerTare=%d",
+				us_TruckTare=%d,us_TrailerTare=%d, us_TruckLoad=%d,us_TrailerLoad=%d",
 	            addslashes($name), $auth_level, $features, $card_number, $card_enabled, $pin_fail_count,
 				$truck_rego, $trailer_rego, addslashes($billing_name), addslashes($billing_addr1), addslashes($billing_addr2), addslashes($billing_addr3), addslashes($billing_email),
-				$truck_tare, $trailer_tare );
+				$truck_tare, $trailer_tare, $truck_load, $trailer_load );
 	        
 	        if ( $password != "" )
 	            $query .= sprintf( ",us_Password='%s'", $hash );
@@ -2244,7 +2266,8 @@ class MySQLDB
 	    $info = false;
 	    
         $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
-			us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare
+			us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare,
+			us_TruckLoad,us_TrailerLoad 
 			from users where us_Username='%s'", addslashes($username) );
         $result = $this->RunQuery( $query );
         if ( $line = mysqli_fetch_row($result) )
@@ -2252,7 +2275,8 @@ class MySQLDB
            $info = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
                	'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8],
 				'us_TruckRego'=>$line[9], 'us_TrailerRego'=>$line[10], 'us_BillingName'=>$line[11], 'us_BillingAddr1'=>$line[12], 'us_BillingAddr2'=>$line[13],
-				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[15], 'us_TrailerTare'=>$line[17] ); 
+				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[15], 'us_TrailerTare'=>$line[17], 'us_TruckLoad'=>$line[18],
+				'us_TrailerLoad'=>$line[19] ); 
         }
         
         $this->FreeQuery($result);
@@ -2266,11 +2290,13 @@ class MySQLDB
 	    
 	    if ( $username == "" )
     	    $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
-				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare 
+				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare,
+				us_TruckLoad,us_TrailerLoad  
 				from users where us_CardNumber='%s'", $card_number );
 	    else
 	        $query = sprintf( "select us_Username,us_Name,us_Password,us_AuthLevel,us_Features,us_CardNumber,us_CardPin,us_CardEnabled,us_PinFailCount,
-				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare 
+				us_TruckRego,us_TrailerRego,us_BillingName,us_BillingAddr1,us_BillingAddr2,us_BillingAddr3,us_BillingEmail,us_TruckTare,us_TrailerTare,
+				us_TruckLoad,us_TrailerLoad 
 				from users where us_CardNumber='%s' and us_Username!='%s'", $card_number, addslashes($username) );
 	    $result = $this->RunQuery( $query );
 	    if ( $line = mysqli_fetch_row($result) )
@@ -2278,7 +2304,8 @@ class MySQLDB
 	        $info = array( 'us_Username'=>stripslashes($line[0]), 'us_Name'=>stripslashes($line[1]), 'us_Password'=>$line[2], 'us_AuthLevel'=>$line[3],
 	            'us_Features'=>$line[4], 'us_CardNumber'=>$line[5], 'us_CardPin'=>$line[6], 'us_CardEnabled'=>$line[7], 'us_PinFailCount'=>$line[8],
 				'us_TruckRego'=>$line[9], 'us_TrailerRego'=>$line[10], 'us_BillingName'=>$line[11], 'us_BillingAddr1'=>$line[12], 'us_BillingAddr2'=>$line[13],
-				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[15], 'us_TrailerTare'=>$line[17] );
+				'us_BillingAddr3'=>$line[14], 'us_BillingEmail'=>$line[15], 'us_TruckTare'=>$line[15], 'us_TrailerTare'=>$line[17], 'us_TruckLoad'=>$line[18],
+				'us_TrailerLoad'=>$line[19] );
 	    }
 	    
 	    $this->FreeQuery($result);
