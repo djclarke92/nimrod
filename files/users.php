@@ -542,11 +542,11 @@ $user_list = $db->ReadUsers();
 			printf( "<div class='col-sm-3'>" );
     		printf( "<label for='us_TruckLoad'>Vehicle Load KG: </label>" );
     		printf( "</div>" );
-    		printf( "<div class='col-sm-4'>" );
+    		printf( "<div class='col-sm-3'>" );
     		printf( "<input type='text' class='form-control' name='us_TruckLoad' id='us_TruckLoad' size='6' value='%s'>", $us_array['us_TruckLoad'] );
     		printf( "</div>" );
-			printf( "<div class='col-sm-3'>" );
-    		printf( "Max Weight %d KG", $us_array['us_TruckTare'] + $us_array['us_TruckLoad'] );
+			printf( "<div class='col-sm-4'>" );
+    		printf( "Max Weight %d KG", intval($us_array['us_TruckTare']) + intval($us_array['us_TruckLoad']) );
     		printf( "</div>" );
     		printf( "</div>" );
 
@@ -650,13 +650,13 @@ $user_list = $db->ReadUsers();
         		
     		printf( "<div class='row mb-2 mt-2'>" ); 
 			printf( "<div class='col'>" );
-            printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateUser' id='UpdateUser' value='Update' %s>Update</button>", ($us_array['us_Username'] == "" ? "disabled" : "") );
+            printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateUser' id='UpdateUser' value='Update' %s>Update</button>", ($us_array['us_Username'] == "" || $new_user == true ? "disabled" : "") );
             printf( "&nbsp;&nbsp;&nbsp;" );
-            printf( "<button type='submit' class='btn btn-outline-dark' name='NewUser' id='NewUser' value='New' %s>New</button>", ($us_array['us_Username'] != "" || func_disabled_non_admin() ? "disabled" : "") );
+            printf( "<button type='submit' class='btn btn-outline-dark' name='NewUser' id='NewUser' value='New' %s>New</button>", (($us_array['us_Username'] != "" && $new_user == false) || func_disabled_non_admin() ? "disabled" : "") );
             printf( "&nbsp;&nbsp;&nbsp;" );
             $onclick = sprintf( "return confirm(\"Are you sure you want to delete user with username %s ?\")", $us_array['us_Username'] );
             printf( "<button type='submit' class='btn btn-outline-dark' name='DeleteUser' id='DeleteUser' value='Delete' onclick='%s' %s>Delete</button>", $onclick, 
-                ($us_array['us_Username'] == "" || func_disabled_non_admin() != "" || $us_array['us_Username'] == $_SESSION['us_Username'] ? "disabled" : "") );
+                ($us_array['us_Username'] == "" || func_disabled_non_admin() != "" || $us_array['us_Username'] == $_SESSION['us_Username'] || $new_user ? "disabled" : "") );
             printf( "&nbsp;&nbsp;&nbsp;" );
             printf( "<button type='submit' class='btn btn-outline-dark' name='ClearUser' id='ClearUser' value='Clear'>Clear</button>" );
             if ( $us_array['us_UF_Upgrade'] == "Y" )
