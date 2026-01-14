@@ -2730,7 +2730,7 @@ bool CDeviceList::SelectAccountEmails(CMysql& myDB, std::string& sEmails )
 
 	sEmails = "";
 
-	if ( myDB.RunQuery( "select us_BillingEmail from users where us_Features like '___Y%%'" ) != 0 )
+	if ( myDB.RunQuery( "select us_Username from users where us_Features like '___Y%%'" ) != 0 )
 	{
 		bRet = false;
 		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", myDB.GetQuery(), myDB.GetError() );
@@ -2739,6 +2739,7 @@ bool CDeviceList::SelectAccountEmails(CMysql& myDB, std::string& sEmails )
 	{
 		while ( (row = myDB.FetchRow( iNumFields )) )
 		{
+			LogMessage( E_MSG_INFO, "email '%s'", (const char*)row[0] );
 			bRet = true;
 			if ( sEmails.length() > 0 )
 			{	// comma separated list

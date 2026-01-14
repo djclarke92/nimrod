@@ -1552,7 +1552,7 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 											char szCmd[512];
 											snprintf( szCmd, sizeof(szCmd), "lp -d %s %s", szPrinter, szFile );
 											int rc = system( szCmd );
-											LogMessage( E_MSG_INFO, "system print cmd returned %d", rc );
+											LogMessage( E_MSG_INFO, "system print cmd returned %d for '%s'", rc, szCmd );
 										}
 										else
 										{
@@ -1571,7 +1571,12 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 										m_pmyDevices->SelectAccountEmails( myDB, sEmails );
 										if ( sEmails.length() > 0 )
 										{
-											LogMessage( E_MSG_INFO, "Sendind invoice email to %s", sEmails.c_str() );
+											if ( sEmails.length() > 0 && szBillingEmail[0] != '\0' && strstr( sEmails.c_str(), szBillingEmail ) == NULL )
+											{
+												sEmails += ",";
+												sEmails += szBillingEmail;
+											}
+											LogMessage( E_MSG_INFO, "Sending invoice email to %s", sEmails.c_str() );
 
 											std::string sCmd = "mail -s \"Weigh Bridge Invoice\" ";
 											sCmd += sAttachments;
@@ -1580,11 +1585,11 @@ void CThread::HandleCardReaderDevice( CMysql& myDB, const int idx, bool& bAllDea
 											sCmd += " <";
 											sCmd += szFile;
 
-											//LogMessage( E_MSG_INFO, "CMD: %s", sCmd.c_str() );
+											LogMessage( E_MSG_INFO, "CMD: %s", sCmd.c_str() );
 											int rc = system( sCmd.c_str() );
 											if ( rc != 0 )
 											{
-												LogMessage( E_MSG_WARN, "system returned %d", rc );
+												LogMessage( E_MSG_WARN, "system email returned %d", rc );
 											}
 										}
 										else
@@ -5479,9 +5484,6 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList, const c
 				snprintf( szOutput, sizeof(szOutput), "%s/latest_snapshot.jpg", CameraList.GetSnapshotCamera().GetDirectory() );
 			snprintf( szOutput2, sizeof(szOutput), "%s/file_count.txt", CameraList.GetSnapshotCamera().GetDirectory() );
 
-			sAttachment += " -A ";
-			sAttachment +=szOutput;
-
 			CameraList.GetSnapshotCamera().GetPassword( szPwd, sizeof(szPwd));
 			snprintf( szParms, sizeof(szParms), "cmd=snapPicture2&usr=%s&pwd=%s", CameraList.GetSnapshotCamera().GetUserId(), szPwd );
 
@@ -5521,7 +5523,18 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList, const c
 			rc = system( szCmd );
 			if ( rc != 0 )
 			{
-				LogMessage( E_MSG_WARN, "system returned %d", rc );
+				LogMessage( E_MSG_WARN, "system returned %d for '%s'", rc , szCmd);
+			}
+
+			struct stat statbuf;
+			if ( stat( szOutput, &statbuf ) == 0 )
+			{	// snapshot exists
+				sAttachment += " -A ";
+				sAttachment += szOutput;
+			}
+			else
+			{
+				LogMessage( E_MSG_INFO, "snapshot '%s' does not exist", szOutput );
 			}
 
 			CameraList.NextSnapshotIdx();
