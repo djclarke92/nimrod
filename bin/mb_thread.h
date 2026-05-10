@@ -145,6 +145,8 @@ public:
 class CCamera {
 private:
 	int m_iCameraNo;
+	time_t m_tLastSetTime;
+	time_t m_tLastRebootTime;
 	char m_szName[51];
 	char m_szIPAddress[16];
 	char m_szPTZ[2];
@@ -159,8 +161,10 @@ public:
 	CCamera();
 	~CCamera();
 
-	void Init();
+	void Init(bool bCtor);
 
+	void SetLastSetTime( const time_t timenow );
+	void SetLastRebootTime( const time_t timenow );
 	void SetCameraNo( const int iCameraNo );
 	void SetName( const char* szName );
 	void SetIPAddress( const char* szIPAddress );
@@ -172,6 +176,8 @@ public:
 	void SetModel( const char* szModel );
 	void SetMJpeg( const char* szMJpeg );
 
+	const time_t GetLastSetTime();
+	const time_t GetLastRebootTime();
 	const int GetCameraNo();
 	const char* GetName();
 	const char* GetIPAddress();

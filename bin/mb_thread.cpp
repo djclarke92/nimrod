@@ -5470,11 +5470,15 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList, const c
 		{
 			int rc;
 			char szParms[256];
-			char szCmd[1024];
+			char szCmd[1024] = "";
+			char szCmd1[1024] = "";
+			char szCmd2[1024] = "";
 			char szOutput[256];
 			char szOutput2[256];
 			char szOutParms[256+20];
 			char szPwd[100];
+			struct tm* tmptr;
+			time_t timenow;
 
 			LogMessage( E_MSG_INFO, "Camera snapshot for %s", CameraList.GetSnapshotCamera().GetName() );
 			
@@ -5491,8 +5495,40 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList, const c
 			//LogMessage( E_MSG_INFO, "Params [%s]", szOutParms );
 			snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\" -o %s",
 					CameraList.GetSnapshotCamera().GetIPAddress(), szOutParms, szOutput );
-
 			//LogMessage( E_MSG_INFO, "cmd [%s]", szCmd );
+
+			timenow = time(NULL);
+			tmptr = localtime( &timenow );
+			if ( CameraList.GetSnapshotCamera().GetLastSetTime() + 20*60 < timenow )
+			{	// set the time every 20 minutes
+				snprintf( szParms, sizeof(szParms), "cmd=setSystemTime&timeSource=1&year=%d&mon=%d&day=%d&hour=%d&minute=%d&sec=%d&usr=%s&pwd=%s", tmptr->tm_year+1900, tmptr->tm_mon+1, tmptr->tm_mday,
+					tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec, CameraList.GetSnapshotCamera().GetUserId(), szPwd ); 
+				urlEncode( szParms, szOutParms );
+				snprintf( szCmd1, sizeof(szCmd1), "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\"", CameraList.GetSnapshotCamera().GetIPAddress(), szOutParms );
+				
+				//LogMessage( E_MSG_INFO, "cmd [%s]", szCmd1 );
+				LogMessage( E_MSG_INFO, "Set camera time for %s", CameraList.GetSnapshotCamera().GetName() );
+				CameraList.GetSnapshotCamera().SetLastSetTime(timenow);
+			}
+			else
+			{
+				szCmd1[0] = '\0';
+			}
+
+			if ( CameraList.GetSnapshotCamera().GetLastRebootTime() + 86400 < timenow && tmptr->tm_hour >= 1 && tmptr->tm_hour < 3 )
+			{	// reboot the camera every 24 hours between 1am - 3am
+				snprintf( szParms, sizeof(szParms), "cmd=rebootSystem&format=1&usr=%s&pwd=%s", CameraList.GetSnapshotCamera().GetUserId(), szPwd ); 
+				urlEncode( szParms, szOutParms );
+				snprintf( szCmd1, sizeof(szCmd2), "curl --silent --connect-timeout 2 --max-time 2 \"http://%s:88/cgi-bin/CGIProxy.fcgi?%s\"", CameraList.GetSnapshotCamera().GetIPAddress(), szOutParms );
+
+				LogMessage( E_MSG_INFO, "Set camera reboot time for %s", CameraList.GetSnapshotCamera().GetName() );
+				CameraList.GetSnapshotCamera().SetLastRebootTime(timenow);
+			}
+			else
+			{
+				szCmd2[0] = '\0';
+			}
+
 			char szFile[100];
 
 			snprintf( szFile, sizeof(szFile), "/tmp/cam%d.sh", CameraList.GetSnapshotCamera().GetCameraNo() );
@@ -5500,10 +5536,14 @@ void CThread::GetCameraSnapshots( CMysql& myDB, CCameraList& CameraList, const c
 			if ( fp != NULL )
 			{
 				fputs( "#!/bin/bash\n", fp );
+				fputs( szCmd1, fp );
+				fputs( "\n", fp );
 				fputs( szCmd, fp );
 				fputs( "\n", fp );
 				fputs( "chmod 0666 ", fp );
 				fputs( szOutput, fp );
+				fputs( "\n", fp );
+				fputs( szCmd2, fp );
 				fputs( "\n", fp );
 				if ( szSaveDir == NULL )
 				{

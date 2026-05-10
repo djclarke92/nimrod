@@ -55,7 +55,7 @@ void CCameraList::Init()
 
 	for ( int i = 0; i < MAX_CAMERAS; i++ )
 	{
-		m_List[i].Init();
+		m_List[i].Init(false);
 	}
 }
 
@@ -112,7 +112,7 @@ CCamera& CCameraList::GetCamera( const int idx )
 
 CCamera::CCamera()
 {
-	Init();
+	Init(true);
 }
 
 CCamera::~CCamera()
@@ -120,9 +120,13 @@ CCamera::~CCamera()
 
 }
 
-void CCamera::Init()
+void CCamera::Init(bool bCtor)
 {
 	m_iCameraNo = 0;
+	if ( bCtor ) {
+		m_tLastSetTime = 0;
+		m_tLastRebootTime = 0;
+	}
 	m_szName[0] = '\0';
 	m_szIPAddress[0] = '\0';
 	m_szPTZ[0] = '\0';
@@ -137,6 +141,16 @@ void CCamera::Init()
 void CCamera::SetCameraNo( const int iCameraNo )
 {
 	m_iCameraNo = iCameraNo;
+}
+
+void CCamera::SetLastSetTime( const time_t timenow )
+{
+	m_tLastSetTime = timenow;
+}
+
+void CCamera::SetLastRebootTime( const time_t timenow )
+{
+	m_tLastRebootTime = timenow;
 }
 
 void CCamera::SetName( const char* szName )
@@ -187,6 +201,16 @@ void CCamera::SetMJpeg( const char* szMJpeg )
 const int CCamera::GetCameraNo()
 {
 	return m_iCameraNo;
+}
+
+const time_t CCamera::GetLastSetTime()
+{
+	return m_tLastSetTime;
+}
+
+const time_t CCamera::GetLastRebootTime()
+{
+	return m_tLastRebootTime;
 }
 
 const char* CCamera::GetName()

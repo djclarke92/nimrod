@@ -13,7 +13,8 @@ Version 0.2.7		December 2025
 3.	Add suppoort for weigh bridge including invoicing
 4.	Add support for Systec IT1 weighing terminal
 5.	Add support for thermal printer for weigh bridge printouts
-6.
+6.	ssh -p 2223 -X -L 8443:localhost:443 <hostname>
+7.
 
 
 Version 0.2.6		June 2025
@@ -23,7 +24,7 @@ Version 0.2.6		June 2025
  	sudo apt install snapd
  	sudo snap install core
  	sudo snap install certbot --classic
- 	sudo certbot -d www.<domain_name>.co.nz --manual --preferred-challenges dns certonly
+ 	sudo certbot -d <domain_name>.co.nz --manual --preferred-challenges dns certonly
  	sudo setfacl -R -m u:nimrod:rX /etc/letsencrypt/{live,archive}/<domain_name>.co.nz
  	sudo setfacl -m u:nimrod:rX /etc/letsencrypt/{live,archive}
  	sudo systemctl restart nimrod
