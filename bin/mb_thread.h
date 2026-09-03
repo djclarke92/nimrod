@@ -235,6 +235,7 @@ private:
 	time_t m_tCardReaderStart;
 	time_t m_tLastCertificateCheck;
 	time_t m_tLastSentEspTime;
+	time_t m_tLastEventsEmailTime;
 	struct in_addr m_xClientInAddr[MAX_TCPIP_SOCKETS];
 	SSL* m_xClientSSL[MAX_TCPIP_SOCKETS];
 	CDeviceList* m_pmyDevices;

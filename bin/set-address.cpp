@@ -125,6 +125,8 @@ int main( int argc, char** argv )
 		printf( "                       9 HDHK 8Ch Current Meter\n" );
 		printf( "                      10 SHT40 / XY-MD02 Temperature/Humidity sensor\n" );
 		printf( "                      11 PT113MB Load Cell Transmitter\n" );
+		printf( "                      12 HPT604 level sensor\n" );
+		printf( "                      13 HRS10 rain sensor\n" );
 		printf( "    optional   vsd_op: 1 forward\n");
 		printf( "                       2 backward\n");
 		printf( "                       3 forward jog\n");
@@ -234,6 +236,22 @@ int main( int argc, char** argv )
 // register 0x0010 - 0x0017 r/o - channel A-H frequency, unsigned, 0.1Hz
 // register 0x0018 - 0x001F r/w - channel A-H current transformer ratio, unsigned 
 
+// HPT604 level sensor
+// register 0x0000 2 bytes, sensor type 0-65535
+// register 0x0001 2 bytes, address 1-255
+// register 0x0002 2 bytes, baud rate 0=19200, 1=9600, 2=4800, 3=2400, 4=1200
+// register 0x0003 2 bytes, parity, 0=O, 1=N, 2=E
+// register 0x0004 2 bytes, density of medium 1000=water
+// register 0x0007 2 bytes, display level unit 16=m, 17=cm, 18=mm
+// register 0x0013 4 bytes, level value
+// register 0x0015 2 bytes, decimal points of level display
+
+// HRS10 rain sensor - default address 0x01, default baud 4800
+// register 0x0000 2 bytes, 10 actual value in mm
+// register 0x0000 2 bytes, clear rainfall data semd 0x00 ox5A
+// register 0x07D0 2 bytes, modbus address
+// retuster 0x07D1 2 bytes, baud rate (0=2400, 1=4800, 2=9600, 3=19200, 4=38400, 5=57600, 6=115200, 7=1200) 
+
 void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int newBaud, int type, int vsdOperation )
 {
 	bool bBaudOk = true;
@@ -243,6 +261,8 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 	int modBaud4 = 0;
 	int modBaud5 = 0;
 	int modBaudHDHK = 0;
+	int modBaudHPT604 = 0;
+	int modBaudHRS10 = 0;
 	int reg;
 
 	// check the baud rate
@@ -256,6 +276,8 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 		modBaud2 = 3;
 		modBaud4 = 2;
 		modBaudHDHK = 3;
+		modBaudHPT604 = 2;
+		modBaudHRS10 = 1;
 		break;
 	case 9600:		// no baud rate change
 		modBaud = 2;
@@ -263,6 +285,8 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 		modBaud4 = 3;
 		modBaud5 = 1;
 		modBaudHDHK = 0;
+		modBaudHPT604 = 1;
+		modBaudHRS10 = 2;
 		break;
 	case 19200:
 		modBaud = 3;
@@ -270,6 +294,8 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 		modBaud4 = 4;
 		modBaud5 = 2;
 		modBaudHDHK = 5;
+		modBaudHPT604 = 0;
+		modBaudHRS10 = 3;
 		break;
 	}
 
@@ -628,6 +654,92 @@ void SetNewAddress( modbus_t *ctx, int oldAddr, int newAddr, int oldBaud, int ne
 		else if ( type == 11 )
 		{
 			printf( "skip baud/address setting for PT113MB\n" );
+		}
+		else if ( type == 12 )
+		{	// HPT602 level sensor
+
+			if ( newAddr != oldAddr )
+			{
+				printf( "Setting new address 0x%02x -> 0x%02x\n", oldAddr, newAddr );
+
+				// HPT604 modbus address is in register 0x0001
+				reg = 0x01;
+				if ( modbus_write_register( ctx, reg, newAddr ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New slave address 0x%02x set\n", newAddr );
+
+					if ( modbus_set_slave( ctx, newAddr ) == -1 )
+					{
+						printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+					}
+				}
+			}
+			else
+			{
+				printf( "Warning: skip setting module address\n" );
+			}
+
+			if ( newBaud != oldBaud )
+			{
+				printf( "Setting new baud rate %d -> %d (%d)\n", oldBaud, newBaud, modBaudHPT604 );
+
+				reg = 0x02;
+				if ( modbus_write_register( ctx, reg, modBaudHPT604 ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New baud rate %d set\n", newBaud );
+				}
+			}
+		}
+		else if ( type == 13 )
+		{	// HRS10 rain sensor sensor
+
+			if ( newAddr != oldAddr )
+			{
+				printf( "Setting new address 0x%02x -> 0x%02x\n", oldAddr, newAddr );
+
+				// HPT604 modbus address is in register 0x0001
+				reg = 0x07D0;
+				if ( modbus_write_register( ctx, reg, newAddr ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New slave address 0x%02x set\n", newAddr );
+
+					if ( modbus_set_slave( ctx, newAddr ) == -1 )
+					{
+						printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+					}
+				}
+			}
+			else
+			{
+				printf( "Warning: skip setting module address\n" );
+			}
+
+			if ( newBaud != oldBaud )
+			{
+				printf( "Setting new baud rate %d -> %d (%d)\n", oldBaud, newBaud, modBaudHRS10 );
+
+				reg = 0x07D1;
+				if ( modbus_write_register( ctx, reg, modBaudHRS10 ) == -1 )
+				{
+					printf( "Error: modbus_write_register(0x%x) failed: %s\n", reg, modbus_strerror(errno) );
+				}
+				else
+				{
+					printf( "New baud rate %d set\n", newBaud );
+				}
+			}
 		}
 		else
 		{
@@ -1301,6 +1413,109 @@ void ReadData( modbus_t *ctx, int newAddr, int newBaud, int type, int vsdOperati
 			printf( "Digital Filter %u\n", ulInputs[0] );
 		}	
 	}
-}
+	else if ( type == 12 )
+	{	// HPT604 water level
+		printf( "Setting slave addr to %d\n", newAddr );
+		if ( modbus_set_slave( ctx, newAddr ) == -1 )
+		{
+			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+		}
 
+		iLen = 4;
+		uint16_t ulInputs[iLen];
+
+		int iFactor = 1;
+
+		iLen = 1;
+		addr = 0x15;	// decimal points
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: 0x%02x (decimal)\n", ulInputs[0] );
+			
+			// TODO: iFactor needs to change depending on what units are being read.
+			// check decimal point
+			switch ( ulInputs[0] )
+			{
+			default:
+				break;
+			case 0:	// xxxx
+				iFactor = 1;
+				break;
+			case 1:	// xxx.x
+				iFactor = 10;
+				break;
+			case 2:	// xx.xx
+				iFactor = 100;
+				break;
+			case 3:	// x.xxx
+				iFactor = 1000;
+				break;
+			}
+		}
+
+		iLen = 1;
+		addr = 0x07;	// display level units
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Range units %u (16=m, 17=cm, 18=mm)\n", ulInputs[0] );
+		}
+
+		iLen = 2;
+		addr = 0x13;
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: " );
+			for ( int i = 0; i < iLen; i++ )
+			{
+				printf( "%u ", ulInputs[i] );
+			}
+			printf ( "\n" );
+			printf( "Depth = %d mm (factor %d)\n", ((ulInputs[0] >> 16) + ulInputs[1]), iFactor );
+		}
+
+		usleep( 50000 );
+
+	}
+	else if ( type == 13 )
+	{	// HRS10 rain sensor
+		printf( "Setting slave addr to %d\n", newAddr );
+		if ( modbus_set_slave( ctx, newAddr ) == -1 )
+		{
+			printf( "Error: modbus_set_slave(%d) failed: %s\n", newAddr, modbus_strerror(errno) );
+		}
+
+		iLen = 2;
+		uint16_t ulInputs[iLen];
+
+		iLen = 1;
+		addr = 0x0000;	// rain in mm x 10
+		rc = modbus_read_registers( ctx, addr, iLen, ulInputs );
+		if ( rc == -1 )
+		{
+			printf( "Error: modbus_read_registers() failed: %s\n", modbus_strerror(errno) );
+		}
+		else
+		{
+			printf( "Read registers: 0x%02x (decimal)\n", ulInputs[0] );
+
+			printf( "Rain level %.1f mm\n", (double)ulInputs[0] / 10 );
+		}
+
+	}
+}
 

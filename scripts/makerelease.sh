@@ -45,15 +45,15 @@ if [[ $COPY = 0 ]]; then
 		exit 1
 	fi
 
-	if [ $HOSTTYPE != "arm" ]; then
-		echo ""
-		echo "-> Cross compiling nimrod for armv7"
-		make -f Makefile.arm all
-		if [ $? != 0 ]; then
-			echo "-> Error: cross compile failed"
-			exit 1
-		fi
-	fi
+#	if [ $HOSTTYPE != "arm" ]; then
+#		echo ""
+#		echo "-> Cross compiling nimrod for armv7"
+#		make -f Makefile.arm all
+#		if [ $? != 0 ]; then
+#			echo "-> Error: cross compile failed"
+#			exit 1
+#		fi
+#	fi
 
 	echo ""
 	echo "-> Compiling on arm64"

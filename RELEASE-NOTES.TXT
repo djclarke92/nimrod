@@ -7,6 +7,12 @@
 Nimrod Release Notes and History
 
 
+Version 0.2.8		August 2026
+1.	Add support for Holykell HPT604 liquid level sensor
+2.	Add support for Holykell HRS10 tipping rain sensor
+3.
+
+
 Version 0.2.7		December 2025
 1.	Add support for PT113MB load cell transmitter
 2.	Add support for Adafruit ESP Matrix displays
@@ -14,7 +20,6 @@ Version 0.2.7		December 2025
 4.	Add support for Systec IT1 weighing terminal
 5.	Add support for thermal printer for weigh bridge printouts
 6.	ssh -p 2223 -X -L 8443:localhost:443 <hostname>
-7.
 
 
 Version 0.2.6		June 2025

@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <time.h>
+#include <map>
 
 #include <modbus/modbus.h>
 #include <mariadb/errmsg.h>
@@ -365,3 +366,61 @@ bool CMysql::WebClickEvent( const int iDeviceNo, const int iIOChannel )
 	return bRet;
 }
 
+#define MAX_DEVICE_NO	100	// hack
+bool CMysql::GenerateEventsFile( const char* szFilename )
+{
+	bool bRet = false;
+	int iNumFields;
+	MYSQL_ROW row;
+	char szBuf[256];
+	FILE* pFile = NULL;
+	std::map<int,time_t> mapLast;
+	std::map<int,time_t>::iterator it;
+
+	pFile = fopen( szFilename, "wt" );
+	if ( pFile != NULL )
+	{
+		snprintf( szBuf, sizeof(szBuf), "select unix_timestamp(ev_Timestamp),ev_Timestamp,ev_Value,di_IOName,di_DeviceNo from events,deviceinfo where ev_DeviceNo=di_DeviceNo and ev_IOChannel=di_IOChannel \
+			and ev_Timestamp>=date_sub(now(), interval 24 hour) order by ev_Timestamp, di_IOName" );
+		if ( RunQuery( szBuf ) != 0 )
+		{	// error
+			LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+		}
+		else 
+		{
+			time_t tLast;
+			int iDeviceNo;
+			int iCount = 0;
+			while ( (row = FetchRow( iNumFields )) )
+			{
+				tLast = 0;
+				iDeviceNo = atoi((const char*)row[4]);
+				if ( mapLast.find(iDeviceNo) != mapLast.end() )
+					tLast = mapLast[iDeviceNo];
+
+				if ( tLast + 15*60 < atol(row[0]) )
+				{	// 15 minutes or more
+					iCount += 1;
+					mapLast[iDeviceNo] = (time_t)atol(row[0]);
+
+					snprintf( szBuf, sizeof(szBuf), "%s,%s,%s,%s\n", (const char*)row[0], (const char*)row[1], (const char*)row[2], (const char*)row[3] );
+					fputs( szBuf, pFile );
+				}
+			}
+
+			LogMessage( E_MSG_INFO, "Saved %d records to %s", iCount, szFilename );
+			bRet = true;
+		}
+
+		FreeResult();
+
+		fclose( pFile );
+		pFile = NULL;
+	}
+	else
+	{
+		LogMessage( E_MSG_ERROR, "Failed to open %s for writing", szFilename, errno );
+	}
+
+	return bRet;
+}

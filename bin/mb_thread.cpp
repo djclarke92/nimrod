@@ -64,6 +64,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_iLevelMessage = 0;
 	m_bSecureWebSocket = true;
 	m_tLastSentEspTime = 0;
+	m_tLastEventsEmailTime = 0;
 
 	m_sslServerCtx = NULL;
 	m_sslClientCtx = NULL;
@@ -469,6 +470,49 @@ void CThread::Worker()
 		}
 		else if ( IsTimerThread() )
 		{
+			// email events check
+			if ( tm.tm_hour == 0 && tm.tm_min == 0 && m_tLastEventsEmailTime + 86400 < tTimenow )
+			{
+				m_tLastEventsEmailTime = tTimenow;
+				LogMessage( E_MSG_INFO, "calling GenerateEventsFile()" );
+
+				char szFilename[256];
+				struct tm tm;
+				time_t timenow = time(NULL);
+
+				localtime_r( &timenow, &tm );
+				snprintf( szFilename, sizeof(szFilename), "/home/nimrod/log/events_%04d%02d%02d.txt", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday );
+
+				char szEventsEmail[100] = "";
+				ReadSiteConfig( "EVENTS_EMAIL", szEventsEmail, sizeof(szEventsEmail) );
+
+				if ( szEventsEmail[0] == '\0' )
+				{
+					LogMessage( E_MSG_WARN, "No EVENTS_EMAIL setup in site_config.php");
+				}
+				else if ( myDB.GenerateEventsFile( szFilename ) )
+				{	// file is generated
+					std::string sCmd = "zip -u ";
+					sCmd += szFilename;
+					sCmd += ".zip ";
+					sCmd += szFilename;
+					sCmd += "; ";
+					sCmd += "echo \"Events records from ";
+					sCmd += gszHostname;
+					sCmd += "\" | mailx -s \"Events Records\" -A ";
+					sCmd += szFilename;
+					sCmd += ".zip ";
+					sCmd += szEventsEmail;
+
+					LogMessage( E_MSG_INFO, "CMD: %s", sCmd.c_str() );
+					int rc = system( sCmd.c_str() );
+					if ( rc != 0 )
+					{
+						LogMessage( E_MSG_WARN, "Events system email returned %d", rc );
+					}
+				}
+			}
+
 			if ( m_tLastCertificateCheck + 10 < tTimenow )
 			{
 				if ( gbCertificateError )
@@ -728,7 +772,7 @@ void CThread::Worker()
 							HandleVoltageDevice( myDB, ctx, idx, bAllDead );
 						}
 					}
-					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HDL )
+					else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HDL || m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HPT || m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HRS10 )
 					{
 						if ( m_pmyDevices->GetLastCheckedTimeMS(idx) + LEVEL_CHECK_PERIOD <= TimeNowMS() )
 						{	// only check level devices every 5 seconds
@@ -3223,17 +3267,58 @@ void CThread::HandleSwitchDevice( CMysql& myDB, modbus_t* ctx, const int idx, bo
 
 void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, bool& bAllDead )
 {
-	int iChannel;
+	int iChannel = 0;
 	int rc;
 	int err;
 	int addr;
 	int iLoop;
 	int iRetry = 3;
+	int iNB = 1;
+	time_t timenow;
+	struct tm tmd;
 
-	addr = 0x04;
+	// clear rain sensor data at midnight each day
+	timenow = time(NULL);
+	localtime_r( &timenow, &tmd );
+	if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HRS10 && tmd.tm_hour == 0 && tmd.tm_min == 0 && tmd.tm_sec <= 5 )
+	{
+		double dVal = m_pmyDevices->CalcLevel(idx,iChannel,false);
+		if ( dVal > 0 )
+		{
+			LogMessage( E_MSG_INFO, "HRS10 rain sensor, clear rainfall data, %.1f mm for yesterday", dVal );
+
+			addr = 0x0000;
+			uint16_t oData = 0x005A;	// clear command
+			rc = modbus_write_register( ctx, addr, oData );
+			if ( rc == -1 )
+			{	// failed
+				err = errno;
+				LogMessage( E_MSG_ERROR, "HRS10 rain sensor, failed to clear data, rc %d, errno %d", rc, errno );
+			}
+			else
+			{	// success
+				LogMessage( E_MSG_INFO, "HRS10 rain sensor, data cleared" );
+				usleep( 20000 );
+			}
+		}
+	}
+
+	if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HDL )	
+	{
+		addr = 0x04;
+	}
+	else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HPT )
+	{	// HPT604 2 registers
+		addr = 0x13;
+		iNB = 2;
+	}
+	else
+	{	// HRS10 rain sensor
+		addr = 0x0000;
+	}
 	for ( iLoop = 0; iLoop < iRetry; iLoop++ )
 	{
-		rc = modbus_read_registers( ctx, addr, m_pmyDevices->GetNumInputs(idx), m_pmyDevices->GetNewData(idx) );
+		rc = modbus_read_registers( ctx, addr, iNB, m_pmyDevices->GetNewData(idx) );
 		if ( rc == -1 )
 		{	// failed
 			err = errno;
@@ -3302,6 +3387,18 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 				char szUnits[10] = "%";
 				char szDesc[20] = "Level";
 				char szName[50] = "HDL Level";
+				if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HPT )
+				{
+					dDiff = 1;	// mm
+					strcpy( szUnits, "mm" );
+					strcpy( szName, "HPT Level");
+				}
+				else if ( m_pmyDevices->GetDeviceType(idx) == E_DT_LEVEL_HRS10 )
+				{
+					dDiff = 0.5;	// mm
+					strcpy( szUnits, "mm" );
+					strcpy( szName, "HRS Level");
+				}
 				double dValOld = m_pmyDevices->CalcLevel(idx,iChannel,false);
 				double dValNew = m_pmyDevices->CalcLevel(idx,iChannel,true);
 
@@ -4885,6 +4982,10 @@ void CThread::HandleChannelThresholds( CMysql& myDB, const int idx, const int iC
 	{
 		m_pmyDevices->GetLastData(idx,iChannel+1) = m_pmyDevices->GetNewData(idx,iChannel+1);
 		m_pmyDevices->GetLastData(idx,iChannel+2) = m_pmyDevices->GetNewData(idx,iChannel+2);
+	}
+	else if ( eEventType == E_ET_LEVEL )
+	{
+		m_pmyDevices->GetLastData(idx,iChannel+1) = m_pmyDevices->GetNewData(idx,iChannel+1);
 	}
 }
 

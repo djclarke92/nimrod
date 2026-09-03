@@ -438,7 +438,7 @@ const double CMyDevice::CalcCurrent( const int iChannel, const bool bNew )
 // data from K02 is in mm
 // water height = <max_water_height> - (<measured_value> - <offset_above_max_level>)
 // CalcFactor is the max water level height in mm
-// Offset if the sensor height above the max level in mm
+// Offset is the sensor height above the max level in mm
 const double CMyDevice::CalcLevel( const int iChannel, const bool bNew )
 {
 	double dVal = 0.0;
@@ -472,9 +472,25 @@ const double CMyDevice::CalcLevel( const int iChannel, const bool bNew )
 
 				dVal = 100 * ((dMaxHeight - dUnit) / dMaxHeight);
 			}
-			else
+			else if ( GetDeviceType() == E_DT_LEVEL_HDL )
 			{
 				dVal = 100 * ((dUnit * dOffset) / dMaxHeight);
+			}
+			else if ( GetDeviceType() == E_DT_LEVEL_HPT )
+			{	// HPT604, m with 3 decimal places
+				if ( bNew )
+					dVal = (m_uNewData[iChannel] >> 16) + m_uNewData[iChannel+1];
+				else
+					dVal = (m_uLastData[iChannel] >> 16) + m_uLastData[iChannel+1];
+
+				if ( dVal > 65500 ) 
+				{	// not in water
+					dVal = 0;
+				}
+			}
+			else
+			{	// HRS10 rain sensor
+				dVal = dUnit / 10;
 			}
 		}
 	}

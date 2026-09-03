@@ -36,5 +36,8 @@ define( 'WEIGH_BRIDGE_PRINTER', 'POS80' );
 // weigh bridge printout title
 define( 'WEIGH_BRIDGE_PRINTOUT_TITLE', 'GEOTECH CHARLESTON' );
 
+// events daily email
+define( 'EVENTS_EMAIL', 'someone@somewhere.com' );
+
 ?>
 

@@ -41,7 +41,9 @@ enum E_DEVICE_TYPE {
 	E_DT_VIRTUAL_INPUT,		// 15: virtual inputs
 	E_DT_PT113_LCT,			// 16: PT113MB load cell transmitter
 	E_DT_ESP_DISPLAY,		// 17: ESP32 matrix display
-	E_DT_SYSTEC_IT1			// 18: Systec IT1 weighing terminal (rs232 interface)
+	E_DT_SYSTEC_IT1,		// 18: Systec IT1 weighing terminal (rs232 interface)
+	E_DT_LEVEL_HPT,			// 19: HPT604 level sensor
+	E_DT_LEVEL_HRS10,		// 20: HRS10 Rain sensor
 };
 
 enum E_IO_TYPE {

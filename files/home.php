@@ -652,7 +652,14 @@ foreach ( $camera_list as $camera )
                     $class = "table-danger";
                 printf( "<tr class='%s'>", $class );
             	printf( "<td><div class='text-nowrap'><a href='?GraphDeviceNo=%d&GraphIOChannel=%d'>%s</a></div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $tt['di_IOName'] );
-            	printf( "<td><span id='LLI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, "%" );
+                $type = $db->GetDeviceType($tt['di_DeviceNo']);
+                if ( $type == E_DT_LEVEL_HPT )
+                   	printf( "<td><span id='LLI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], (int)$val, "mm" );
+                else if ( $type == E_DT_LEVEL_HRS10 )
+                   	printf( "<td><span id='LLI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, "mm" );
+                else
+                   	printf( "<td><span id='LLI_%02d_%02d'>%s</span>%s</td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], $val, "%" );
+                
             	if ( count($tt['data']) > 0 )
                 	printf( "<td><div class='timestamp text-nowrap' id='LLI_%02d_%02d_DT'>%s</div></td>", $tt['di_DeviceNo'], $tt['di_IOChannel'], func_convert_timestamp( $tt['data'][count($tt['data'])-1]['ev_Timestamp'] ) );
             	else

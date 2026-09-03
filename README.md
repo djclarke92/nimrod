@@ -433,6 +433,10 @@ the ssh keys for all nimrod hosts
 
 See the log in /home/nimrod/nimrod.log.  Point your browser to https://nimrod/index.php
 	
+11. Add a crontab entry for the nimrod user to archive old cctv files
+
+> 20 4 * * * /home/nimrod/bin/archive_cctv.sh 2>&1
+
 	
 #Installing a signed ssl cert for apache2
 

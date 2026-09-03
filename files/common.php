@@ -53,6 +53,8 @@ define( "E_DT_VIRTUAL_INPUT", 15 );		// virtual inputs
 define( "E_DT_PT113_LCT", 16 );			// PT113MB load cell transmittrer
 define( "E_DT_ESP_DISPLAY", 17 );		// ESP32 matrix display
 define( "E_DT_SYSTEC_IT1", 18 );		// Systec IT1 weighing terminal
+define( "E_DT_LEVEL_HPT", 19 );			// level HPT604 sensor
+define( "E_DT_LEVEL_HRS10", 20 );		// level HRS10 rain sensor
 $_SESSION['E_DTD'] = array();
 $_SESSION['E_DTD'][] = "Unused";
 $_SESSION['E_DTD'][] = "Digital IO"; 
@@ -73,6 +75,8 @@ $_SESSION['E_DTD'][] = "Virtual Input";
 $_SESSION['E_DTD'][] = "PT113MB Load Cell Transmitter";
 $_SESSION['E_DTD'][] = "ESP32 Matrix Display";
 $_SESSION['E_DTD'][] = "Systec IT1 Weighing Terminal";
+$_SESSION['E_DTD'][] = "Level HPT sensor";
+$_SESSION['E_DTD'][] = "Level HRS10 rain sensor";
 
 define( "E_IO_UNUSED", 0 );
 define( "E_IO_ON_OFF", 1 );			// 1: 	manual on off switch
@@ -1150,6 +1154,19 @@ class MySQLDB
 		return false;
 	}
 
+	function GetDeviceType( $de_no )
+	{
+		$query = sprintf( "select de_Type from devices where de_DeviceNo=%d", $de_no );
+		$result = $this->RunQuery($query);
+		if ( $line = mysqli_fetch_row($result) )
+		{
+			$this->FreeQuery($result);
+
+			return $line[0];
+		}
+
+		return false;
+	}
 
 	function UpdateDevicesTable( $de_no, $com_port, $addr, $num_inputs, $num_outputs, $type, $name, $hostname, $baud, $apo )
 	{
