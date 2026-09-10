@@ -1772,6 +1772,17 @@ class MySQLDB
 	    }
 	}
 
+	function NotifyEmailLogFileEvent()
+	{
+        $query = sprintf( "insert into events (ev_DeviceNo,ev_Timestamp,ev_Description) values(-8,now(),'%s')", addslashes($_SESSION['us_Username']) );
+
+        $result = $this->RunQuery( $query );
+        //echo $query;
+        if ( mysqli_affected_rows($this->db_link) < 1 )
+        {  // failed
+        }
+	}
+	
 	function NotifyPlcStatesTableChange( $de_no )
 	{
 	    $found = false;

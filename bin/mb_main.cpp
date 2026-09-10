@@ -113,7 +113,6 @@ int main( int argc, char *argv[] )
 		}
     }
 
-
 	ReadSiteConfig( "NIMROD_LOG_DIR", gszLogDir, sizeof(gszLogDir) );
 
 	// redirect stdout and stderr to a log file
@@ -129,6 +128,8 @@ int main( int argc, char *argv[] )
 	SetMyHostname();
 
 	snprintf( gszProgName, sizeof(gszProgName), "%s", basename(argv[0]) );
+
+	CheckSiteConfig();
 
 
 	if ( CheckForUpgrade() )
@@ -256,7 +257,7 @@ int main( int argc, char *argv[] )
 
 		if ( bRun )
 		{
-
+			LogMessage( E_MSG_INFO, "Starting threads" );
 			iThreads = iTotalComPorts + 3;
 
 			int iPort = 0;

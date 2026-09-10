@@ -10,7 +10,9 @@ Nimrod Release Notes and History
 Version 0.2.8		August 2026
 1.	Add support for Holykell HPT604 liquid level sensor
 2.	Add support for Holykell HRS10 tipping rain sensor
-3.
+3.	Admin users can request the Nimrod service email the current log file to theie email address.	
+4.	A remote nimrod service can now download an update package from a central server.	
+5.	
 
 
 Version 0.2.7		December 2025

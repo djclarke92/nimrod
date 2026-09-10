@@ -29,7 +29,10 @@ extern char gszTarFileName[512];
 
 const double TimeNowMS();
 void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... );
+void CheckSiteConfig();
+void AddToSiteConfig( const char* szName, const char* szValue );
 bool ReadSiteConfig( const char* szName, char* szValue, size_t uLen );
+bool ReadSiteConfig( const char* szName, std::string& sValue );
 time_t ReadDeviceConfig( CMysql& myDB, CDeviceList* pDeviceList, CInOutLinks* pIOLinks, bool bInit );
 pid_t CreateSSHTunnel();
 bool CheckForUpgrade();

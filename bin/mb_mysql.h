@@ -35,6 +35,7 @@ public:
 	time_t ReadPlcStatesUpdateTimeAll();
 	time_t ReadPlcStatesUpdateTimeDelayTime();
 	int ReadPlcStatesScreenButton();
+	bool ReadEmailLogFileEvent( std::string& sEmail);
 	int SetNextPlcState( const char* szOperation, const char* szNextStateName, const char* szStateName, const time_t tTimenow );
 	bool WebClickEvent( const int iDeviceNo, const int iIOChannel );
 	void CleanupEventsTable();

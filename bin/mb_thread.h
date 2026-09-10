@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <openssl/ssl.h>
 #include <libwebsockets.h>
+#include <curl/curl.h>
 
 #include "mb_socket.h"
 
@@ -236,6 +237,8 @@ private:
 	time_t m_tLastCertificateCheck;
 	time_t m_tLastSentEspTime;
 	time_t m_tLastEventsEmailTime;
+	time_t m_tLastEmailLogFileTime;
+	time_t m_tEmailLogFileRequestTime;
 	struct in_addr m_xClientInAddr[MAX_TCPIP_SOCKETS];
 	SSL* m_xClientSSL[MAX_TCPIP_SOCKETS];
 	CDeviceList* m_pmyDevices;
@@ -246,6 +249,8 @@ private:
 	SSL_CTX *m_sslClientCtx;
 	struct lws_context *m_WSContext;
 	CThread* m_pWSThread;
+	CURL* m_pCurl;
+	std::string m_sWebUpdateFilename; 
 
 public:
 	CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyIOLinks, CPlcStates* pmyPlcStates, const enum E_THREAD_TYPE eThreadType, bool* pbThreadRunning, bool* pbAllDevicesDead );
@@ -316,6 +321,9 @@ public:
 	void websocket_cancel_service();
 	lws_context* GetWSContext() { return m_WSContext; };
 	void SetWebsocketThread( CThread* pWSThread ){ m_pWSThread = pWSThread; };
+
+	bool curlCheckToDo();
+	bool curlWebUpdate();
 
 	static const char* GetThreadType( const enum E_THREAD_TYPE eTT );
 	static const char* GetTcpipMsgType( const enum E_MESSAGE_TYPE eMT );

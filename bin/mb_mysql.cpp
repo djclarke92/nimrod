@@ -335,6 +335,32 @@ bool CMysql::UpdatePlcStateRuntimeValue( const char* szOperation, const char* sz
 	return rc;
 }
 
+bool CMysql::ReadEmailLogFileEvent( std::string& sEmail )
+{
+	bool bRc = false;
+	int iNumFields;
+	MYSQL_ROW row;
+
+	if ( RunQuery( "select ev_Description from events where ev_DeviceNo=-8" ) != 0 )
+	{	// error
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+	else if ( (row = FetchRow( iNumFields )) )
+	{
+		sEmail = (const char*)row[0];
+		bRc = true;
+	}
+
+	FreeResult();
+
+	if ( RunQuery( "delete from events where ev_DeviceNo=-8" ) != 0 )
+	{	// error
+		LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
+	}
+
+	return bRc;
+}
+
 bool CMysql::WebClickEvent( const int iDeviceNo, const int iIOChannel )
 {
 	bool bRet = false;

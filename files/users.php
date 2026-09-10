@@ -171,7 +171,7 @@ if ( isset( $_POST['us_TruckLoad']) )
 if ( isset( $_POST['us_TrailerLoad']) )
 	$us_array['us_TrailerLoad'] = $_POST['us_TrailerLoad'];
         
-if ( isset( $_FILES['us_FileName']) )        
+if ( isset($_POST['UploadFile']) && isset( $_FILES['us_FileName']) )        
 {
     $us_array['info_msg'] = "set";
     if ( isset($_FILES['us_FileName']['error']) )
@@ -285,6 +285,11 @@ else if ( isset($_GET['AddNewUser']) )
 else if ( isset($_POST['UploadFile']) )
 {
     $us_array['info_msg'] .= sprintf( "UploadFile" );   
+}
+else if ( isset($_POST['EmailLogFile']) )
+{
+	$db->NotifyEmailLogFileEvent();
+	$us_array['info_msg'] = sprintf( "The Nimrod log file will be emailed to %s", $_SESSION['us_Username'] );
 }
 else if ( isset($_POST['NewUser']) || isset($_POST['UpdateUser']) )
 {
@@ -636,18 +641,6 @@ $user_list = $db->ReadUsers();
     		printf( "</div>" );
     		printf( "</div>" );
     		
-    		if ( $us_array['us_UF_Upgrade'] == 'Y' )
-    		{
-        		printf( "<div class='row'>" );
-        		printf( "<div class='col-sm-3'>" );
-        		printf( "</div>" );
-        		printf( "<div class='col'>" );
-        		printf( "<input type='hidden' name='MAX_FILE_SIZE' value='4096000'>" );
-        		printf( "<input type='file' class='form-control-file border' name='us_FileName' id='us_FileName'>" );
-        		printf( "</div>" );
-        		printf( "</div>" );
-    		}
-        		
     		printf( "<div class='row mb-2 mt-2'>" ); 
 			printf( "<div class='col'>" );
             printf( "<button type='submit' class='btn btn-outline-dark' name='UpdateUser' id='UpdateUser' value='Update' %s>Update</button>", ($us_array['us_Username'] == "" || $new_user == true ? "disabled" : "") );
@@ -659,14 +652,36 @@ $user_list = $db->ReadUsers();
                 ($us_array['us_Username'] == "" || func_disabled_non_admin() != "" || $us_array['us_Username'] == $_SESSION['us_Username'] || $new_user ? "disabled" : "") );
             printf( "&nbsp;&nbsp;&nbsp;" );
             printf( "<button type='submit' class='btn btn-outline-dark' name='ClearUser' id='ClearUser' value='Clear'>Clear</button>" );
-            if ( $us_array['us_UF_Upgrade'] == "Y" )
-            {
-                printf( "&nbsp;&nbsp;&nbsp;" );
-                printf( "<button type='submit' class='btn btn-outline-dark' name='UploadFile' id='UploadFile' value='Upload File'>Upload File</button>" );
-            }
             printf( "</div>" );
     		printf( "</div>" );
-            ?>
+
+    		if ( $us_array['us_UF_Upgrade'] == 'Y' )
+    		{
+	    		printf( "<div class='row mb-2 mt-2'>" ); 
+
+        		printf( "<div class='col-sm-5'>" );
+        		printf( "<input type='hidden' name='MAX_FILE_SIZE' value='4096000'>" );
+				printf( "<label for='us_FileName' class='form-label'>Select Update File</label>" );
+        		printf( "<input type='file' class='form-control' type='file' name='us_FileName' id='us_FileName'>" );
+        		printf( "</div>" );
+        		printf( "<div class='col-sm-3'>" );
+                printf( "<button type='submit' class='btn btn-outline-dark' name='UploadFile' id='UploadFile' value='Upload File'>Upload File</button>" );
+        		printf( "</div>" );
+        		
+	    		printf( "</div>" );
+            }
+
+		    if ( $_SESSION['us_AuthLevel'] == SECURITY_LEVEL_ADMIN )
+			{
+	    		printf( "<div class='row mb-2 mt-2'>" ); 
+
+        		printf( "<div class='col-sm-4'>" );
+                printf( "<button type='submit' class='btn btn-outline-dark' name='EmailLogFile' id='EmailLogFile' value='Email Log File'>Email Log File</button>" );
+        		printf( "</div>" );
+
+				printf( "</div>" );
+			}
+			?>
 
 		</div>
 	</div>	<!-- end of row -->

@@ -13,6 +13,10 @@
 #include <stdint.h>
 #include <time.h>
 #include <string>
+#include <iostream>
+#include <sstream>
+#include <iomanip>
+#include <ctime>
 #include <math.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -38,6 +42,7 @@
 extern bool gbPlcIsActive;
 extern CThreadMsg gThreadMsgToWS;
 extern CThreadMsg gThreadMsgFromWS;
+extern int NIMROD_BUILD_NUMBER;
 
 pthread_mutex_t mutexLock[E_LT_MAX_LOCKS];
 
@@ -65,6 +70,8 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_bSecureWebSocket = true;
 	m_tLastSentEspTime = 0;
 	m_tLastEventsEmailTime = 0;
+	m_tLastEmailLogFileTime = 0;
+	m_tEmailLogFileRequestTime = 0;
 
 	m_sslServerCtx = NULL;
 	m_sslClientCtx = NULL;
@@ -72,6 +79,7 @@ CThread::CThread( const char* szPort, CDeviceList* pmyDevices, CInOutLinks* pmyI
 	m_szEspResponseMsg[0] = '\0';
 
 	m_WSContext = NULL;
+	m_pCurl = NULL;
 
 	m_szComBuffer[0] = '\0';
 
@@ -410,6 +418,12 @@ void CThread::Worker()
 
 	if ( IsTimerThread() )
 	{
+		m_pCurl = curl_easy_init();
+		if ( m_pCurl != NULL )
+			LogMessage( E_MSG_INFO, "curl_easy_init() succeeded" );
+		else
+			LogMessage( E_MSG_ERROR, "curl_easy_init() failed" );
+
 		ReadCameraRecords( myDB, m_CameraList );
 	}
 
@@ -510,6 +524,53 @@ void CThread::Worker()
 					{
 						LogMessage( E_MSG_WARN, "Events system email returned %d", rc );
 					}
+				}
+			}
+
+			std::string sEmail;
+			if ( (tm.tm_sec % 10) == 0 && (myDB.ReadEmailLogFileEvent(sEmail) || m_tEmailLogFileRequestTime > m_tLastEmailLogFileTime) )
+			{
+				if ( sEmail.length() == 0 ) {
+					// use web todo email
+					if ( !ReadSiteConfig( "WEB_TODO_EMAIL", sEmail ) ) {
+						LogMessage( E_MSG_WARN, "WEB_TODO_EMAIL missing from site_config.php" );
+					} 
+				}
+				if ( sEmail.length() > 0 )
+				{
+					LogMessage( E_MSG_INFO, "EmailLogFile event for '%s'", sEmail.c_str() );
+
+					std::string sFilename = gszLogDir;
+					sFilename += "/nimrod.log";
+					std::string sZipFilename = sFilename;
+					sZipFilename += ".zip";
+
+					std::string sCmd = "zip -u ";
+					sCmd += sZipFilename;
+					sCmd += " ";
+					sCmd += sFilename;
+					sCmd += "; ";
+					sCmd += "echo \"Nimrod log file from ";
+					sCmd += gszHostname;
+					sCmd += "\" | mailx -s \"Nimrod Log\" -A ";
+					sCmd += sZipFilename;
+					sCmd += " ";
+					sCmd += sEmail;
+
+					LogMessage( E_MSG_INFO, "CMD: %s", sCmd.c_str() );
+					int rc = system( sCmd.c_str() );
+					if ( rc != 0 )
+					{
+						LogMessage( E_MSG_WARN, "EmailLogFile system email returned %d", rc );
+					}
+
+					unlink( sZipFilename.c_str() );
+
+					m_tLastEmailLogFileTime = time(NULL);
+				}
+				else
+				{
+					LogMessage( E_MSG_WARN, "EmailLogFile event without email address" );
 				}
 			}
 
@@ -637,18 +698,12 @@ void CThread::Worker()
 				GetCameraSnapshots( myDB, m_CameraList, NULL, sAttachments );
 			}
 
-			if ( tLastCurlCheckTime + 300 <= time(NULL) )
-			{	// every 5 minutes
-				// ping back to flatcatit.co.nz for those hosts where flatcatit is managing their DNS records
-				char szCmd[256];
-				char szHostname[50] = "";
-				gethostname( szHostname, sizeof(szHostname) );
-				snprintf( szCmd, sizeof(szCmd), "curl --silent --connect-timeout 2 \"http://flatcatit.co.nz/helo-nimrod/%s\" > /dev/null &", szHostname );
-				//LogMessage( E_MSG_INFO, "Running '%s'", szCmd );
-				int rc = system( szCmd );
-				if ( rc != 0 )
-				{
-					LogMessage( E_MSG_INFO, "curl helo-nimrod returned %d", rc );
+			if ( tLastCurlCheckTime + 60 <= time(NULL) )
+			{	// every 1 minutes
+				// ping back to update server for those hosts where the update server is managing their DNS records
+				curlCheckToDo();
+				if ( m_sWebUpdateFilename.length() > 0 ) {
+					curlWebUpdate();
 				}
 
 				tLastCurlCheckTime = time(NULL);
@@ -919,6 +974,12 @@ void CThread::Worker()
 		}
 	}	// end of while
 
+	if ( IsTimerThread() )
+	{
+    	curl_easy_cleanup(m_pCurl); 
+		curl_global_cleanup();
+	}
+
 	if ( IsWebsocketThread() )
 	{
 		LogMessage( E_MSG_INFO, "websocket lws destroy");
@@ -940,6 +1001,213 @@ void CThread::Worker()
 	LogMessage( E_MSG_INFO, "Thread terminating: type %s", CThread::GetThreadType(m_eThreadType) );
 
 	*m_pbThreadRunning = false;
+}
+
+std::time_t string_to_time_t(const std::string& datetime_str, const std::string& format = "%Y-%m-%d %H:%M:%S") {
+    std::tm tm_struct = {};
+    std::istringstream ss(datetime_str);
+    
+    // Parse the string into the tm structure using the given format
+    ss >> std::get_time(&tm_struct, format.c_str());
+    
+    // Check if the parsing succeeded
+    if (ss.fail()) {
+        return 0;
+    }
+    
+    // Convert tm struct to time_t (assumes local time)
+    std::time_t time = std::mktime(&tm_struct);
+    
+    return time;
+}
+
+// Callback function to capture data stream into a C++ std::string
+static size_t CurlWriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    size_t totalSize = size * nmemb;
+    std::string* response = static_cast<std::string*>(userp);
+    response->append(static_cast<char*>(contents), totalSize);
+    return totalSize;
+}
+
+bool CThread::curlWebUpdate() {
+	bool bRc = false;
+	std::string sBuffer;
+	std::string sUrl;
+
+	if ( !ReadSiteConfig("UPDATE_SERVER_URL", sUrl ) ) {
+		LogMessage( E_MSG_WARN, "UPDATE_SERVER_URL missing from site_config.php" );
+	}
+
+	if ( sUrl.length() > 0 ) {
+		sUrl += "/helo-nimrod/";
+		sUrl += gszHostname;
+		sUrl += "/";
+		sUrl += m_sWebUpdateFilename;
+
+		LogMessage( E_MSG_INFO, "Downloading %s", sUrl.c_str() );
+
+		curl_easy_setopt(m_pCurl, CURLOPT_URL, sUrl.c_str() ); 
+			
+		// Custom headers are often required by APIs (e.g., User-Agent for GitHub)
+		struct curl_slist* headers = nullptr;
+		headers = curl_slist_append(headers, "User-Agent: Nimrod-Cpp-App");
+		curl_easy_setopt( m_pCurl, CURLOPT_HTTPHEADER, headers);
+
+		// Set the callback functions to handle incoming data
+		curl_easy_setopt( m_pCurl, CURLOPT_WRITEFUNCTION, CurlWriteCallback); 
+		curl_easy_setopt( m_pCurl, CURLOPT_WRITEDATA, &sBuffer); 
+
+		// Execute the network transfer (this blocks synchronously)
+		CURLcode res = curl_easy_perform(m_pCurl); 
+
+		long responseCode;
+				
+		// Extract the response code from the curl handle
+		curl_easy_getinfo( m_pCurl, CURLINFO_RESPONSE_CODE, &responseCode);
+
+		// Check for success/errors
+		if(res != CURLE_OK) { 
+			LogMessage( E_MSG_ERROR, "curl_easy_perform() failed: %s", curl_easy_strerror(res) ); 
+		} else if ( responseCode == 200 ) {
+			LogMessage( E_MSG_INFO, "Downloaded %d bytes", sBuffer.length() );
+
+			FILE* pFile = NULL;
+			std::string sFilename;
+			struct stat statbuf;
+
+			// find where nimrod apache is running from
+			if ( stat( "/var/www/nimrod/nimrod-upgrade.sh", &statbuf ) == 0 ) {
+				sFilename = "/var/www/nimrod/";
+			} else if ( stat( "/var/www/html/nimrod/nimrod-upgrade.sh", &statbuf ) == 0 ) {
+				sFilename = "/var/www/html/nimrod/";
+			} else if ( stat( "/var/www/html/nimrod-upgrade.sh", &statbuf ) == 0 ) {
+				sFilename = "/var/www/html/";
+			} else {
+				LogMessage( E_MSG_ERROR, "Don't know where nimrod apache is running from" );
+			}
+
+			if ( sFilename.length() > 0 ) {
+				sFilename += m_sWebUpdateFilename; 
+
+				LogMessage( E_MSG_INFO, "Saving tgz file to %s", sFilename.c_str() );
+
+				pFile = fopen( sFilename.c_str(), "wb" );
+				if ( pFile != NULL ) {
+					size_t uBytes = fwrite( reinterpret_cast<const unsigned char*>(sBuffer.c_str()), sizeof(unsigned char), sBuffer.length(), pFile );
+					if ( uBytes == sBuffer.length() ) {
+						LogMessage( E_MSG_INFO, "Success, wrote %lu bytes to %s", uBytes, sFilename.c_str() );
+					} else {
+						LogMessage( E_MSG_ERROR, "Failed, only write %lu of %lu bytes to %s", uBytes, sBuffer.length(), sFilename.c_str() );
+
+						if ( unlink( sFilename.c_str() ) == 0 ) {
+							LogMessage( E_MSG_INFO, "Delete file %s", sFilename.c_str() );
+						} else {
+							LogMessage( E_MSG_ERROR, "Failed to delete %s, errno %d", sFilename.c_str(), errno );
+						}
+					}
+
+					fclose( pFile );
+				} else {
+					LogMessage( E_MSG_ERROR, "Filed to open %s for writing, errno %d", sFilename.c_str(), errno );
+				}
+			}
+		} else {
+			LogMessage( E_MSG_ERROR, "Failed to download file, response %ld", responseCode );
+		}
+	}
+
+	return bRc;
+}
+
+bool CThread::curlCheckToDo()
+{
+	bool bRc = false;
+	std::string sBuffer;
+	std::string sUrl;
+
+	if ( !ReadSiteConfig( "UPDATE_SERVER_URL", sUrl ) ) {
+		LogMessage( E_MSG_WARN, "UPDATE_SERVER_URL missing from site_config.php" );
+	}
+
+	if ( sUrl.length() > 0 ) {
+		sUrl += "/helo-nimrod/";
+		sUrl += gszHostname;
+		sUrl += "/todo";
+
+		LogMessage( E_MSG_INFO, "Checking %s", sUrl.c_str() );
+
+		curl_easy_setopt(m_pCurl, CURLOPT_URL, sUrl.c_str() ); 
+			
+		// Custom headers are often required by APIs (e.g., User-Agent for GitHub)
+		struct curl_slist* headers = nullptr;
+		headers = curl_slist_append(headers, "User-Agent: Nimrod-Cpp-App");
+		curl_easy_setopt( m_pCurl, CURLOPT_HTTPHEADER, headers);
+
+		// Set the callback functions to handle incoming data
+		curl_easy_setopt( m_pCurl, CURLOPT_WRITEFUNCTION, CurlWriteCallback); 
+		curl_easy_setopt( m_pCurl, CURLOPT_WRITEDATA, &sBuffer); 
+
+		// Execute the network transfer (this blocks synchronously)
+		CURLcode res = curl_easy_perform(m_pCurl); 
+
+		long responseCode;
+				
+		// Extract the response code from the curl handle
+		curl_easy_getinfo( m_pCurl, CURLINFO_RESPONSE_CODE, &responseCode);
+
+		// Check for success/errors
+		if(res != CURLE_OK) { 
+			LogMessage( E_MSG_ERROR, "curl_easy_perform() failed: %s", curl_easy_strerror(res) ); 
+		} else {
+			if ( sBuffer[sBuffer.length()-1] == '\n' ) {
+				sBuffer = sBuffer.substr(0,sBuffer.length()-1);
+			}
+
+			LogMessage( E_MSG_INFO, "Curl Response %d: '%s'", responseCode, sBuffer.c_str() );
+
+			if ( strstr( sBuffer.c_str(), "EmailLogFile" ) != NULL ) {
+				bRc = true;
+
+				// read request time from string
+				time_t rTime = string_to_time_t( sBuffer );
+				if ( rTime != 0 ) {
+					m_tEmailLogFileRequestTime = rTime;
+				} else {
+					LogMessage( E_MSG_WARN, "Curl todo file has no request time" );
+				}
+			} else if ( strstr( sBuffer.c_str(), "SoftwareUpdate" ) != NULL ) {
+				bRc = true;
+				// buildNo nimrod-x.x.x.tgz SoftwareUpdate
+
+				int iBuildNo = atoi( sBuffer.c_str() );
+
+				if ( iBuildNo > NIMROD_BUILD_NUMBER ) {
+					// time to update
+					m_sWebUpdateFilename = "";
+					for ( int i = 0; i < (int)sBuffer.length(); i++ ) {
+						if ( sBuffer[i] == ' ' ) {
+							m_sWebUpdateFilename = sBuffer.substr(i+1);
+							break;
+						}
+					}
+					for ( int i = 0; i < (int)m_sWebUpdateFilename.length(); i++ ) {
+						if ( m_sWebUpdateFilename[i] == ' ' ) {
+							m_sWebUpdateFilename.erase(i,m_sWebUpdateFilename.length());
+							break;
+						}
+					}
+					LogMessage( E_MSG_INFO, "Web update to build '%s'", m_sWebUpdateFilename.c_str() );
+				} else {
+					LogMessage( E_MSG_INFO, "Running build %d, not upgrading to build %d", NIMROD_BUILD_NUMBER, iBuildNo );
+				}
+			}
+		}
+
+		// Cleanup session and memory resources
+		curl_slist_free_all(headers);
+	}
+
+	return bRc;
 }
 
 // ultrasonic level device

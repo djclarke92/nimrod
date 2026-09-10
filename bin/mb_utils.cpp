@@ -16,6 +16,7 @@
 #include <dirent.h>
 #include <memory.h>
 #include <string>
+#include <list>
 
 #include <modbus/modbus.h>
 #include "mb_devices.h"
@@ -150,6 +151,83 @@ void LogMessage( enum E_MSG_CLASS msgClass, const char* fmt, ... )
 	}
 
 	pthread_mutex_unlock( &mutexLock[E_LT_LOGGING] );
+}
+
+void CheckSiteConfig() {
+	std::string sValue;
+
+	LogMessage( E_MSG_INFO, "CheckSiteConfig called" );
+
+	if ( !ReadSiteConfig( "EVENTS_EMAIL", sValue ) ) {
+		AddToSiteConfig( "EVENTS_EMAIL", "djclarke@flatcatit.co.nz" );
+	}
+	if ( !ReadSiteConfig( "WEB_TODO_EMAIL", sValue ) ) {
+		AddToSiteConfig( "WEB_TODO_EMAIL", "djclarke@flatcatit.co.nz" );
+	}
+	if ( !ReadSiteConfig( "UPDATE_SERVER_URL", sValue ) ) {
+		AddToSiteConfig( "UPDATE_SERVER_URL", "https://flatcatit.co.nz" );
+	}
+}
+
+void AddToSiteConfig( const char* szName, const char* szValue ) {
+	char* cptr;
+	char szBuf[256];
+	char szFile[256];
+	FILE* pFile = NULL;
+	std::list<std::string> sContents;
+	std::list<std::string>::iterator it;
+
+	LogMessage( E_MSG_INFO, "Try to add %s %s to site_config.php", szName, szValue );
+
+	// read in the current file
+	snprintf( szFile, sizeof(szFile), "./files/site_config.php" );
+	pFile = fopen( szFile, "rt" );
+	if ( pFile != NULL ) {
+		while ( (cptr = fgets( szBuf, sizeof(szBuf), pFile )) != NULL ) {
+			sContents.push_back( szBuf );
+		}
+
+		fclose( pFile );
+
+		pFile = fopen( szFile, "wt" );
+		if ( pFile != NULL ) {
+			for ( it = sContents.begin(); it != sContents.end(); it++ ) {
+				if ( strncmp( it->c_str(), "?>", 2 ) == 0 ) {
+					// add new item here
+					snprintf( szBuf, sizeof(szBuf), "// %s\n", szName );
+					fputs( szBuf, pFile );
+					snprintf( szBuf, sizeof(szBuf), "define( '%s', '%s' );\n", szName, szValue );
+					fputs( szBuf, pFile );
+					snprintf( szBuf, sizeof(szBuf), "\n" );
+					fputs( szBuf, pFile );
+					LogMessage( E_MSG_INFO, "Added define(%s,%s) to site_config.php", szName, szValue );
+				}
+
+				if ( fputs( it->c_str(), pFile ) < 0 )
+					LogMessage( E_MSG_ERROR, "fputs() failed with errno %d", errno );
+			}
+
+			fclose( pFile );
+
+			LogMessage( E_MSG_INFO, "AddToSiteConfig done" );
+		} else {
+			LogMessage( E_MSG_ERROR, "Cannot open site_config.php for writing, ernro %d", errno );
+		}
+
+	} else {
+		LogMessage( E_MSG_ERROR, "Cannot open site_config for reading, errno %d", errno );
+	}
+}
+
+bool ReadSiteConfig( const char* szName, std::string& sValue ) {
+	bool bRet ;
+	char szValue[256] = "";
+
+	bRet = ReadSiteConfig( szName, szValue, sizeof(szValue) );
+
+	sValue = szValue;
+
+	return bRet;
 }
 
 bool ReadSiteConfig( const char* szName, char* szValue, size_t uLen )
