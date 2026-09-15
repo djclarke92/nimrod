@@ -39,6 +39,9 @@ define( 'WEIGH_BRIDGE_PRINTOUT_TITLE', 'GEOTECH CHARLESTON' );
 // events daily email
 define( 'EVENTS_EMAIL', 'someone@somewhere.com' );
 
+// events weekly email
+define( 'EVENTS_EMAIL_WEEKLY', 'someonelese@somewhere.com' );
+
 // web todo email
 define( 'WEB_TODO_EMAIL', 'admin@somewhere.com' );
 

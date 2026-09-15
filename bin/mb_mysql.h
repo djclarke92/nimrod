@@ -40,7 +40,7 @@ public:
 	bool WebClickEvent( const int iDeviceNo, const int iIOChannel );
 	void CleanupEventsTable();
 	bool UpdatePlcStateRuntimeValue( const char* szOperation, const char* szStateName, const int iDeviceNo, const int iIOChannel, const double dNewVal );
-	bool GenerateEventsFile( const char* szFilename );
+	bool GenerateEventsFile( const char* szFilename, const int iHours );
 };
 
 

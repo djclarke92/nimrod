@@ -490,21 +490,25 @@ void CThread::Worker()
 				m_tLastEventsEmailTime = tTimenow;
 				LogMessage( E_MSG_INFO, "calling GenerateEventsFile()" );
 
-				char szFilename[256];
+				char szFilename[256] = "";
+				char szFilenameWeekly[256] = "";
 				struct tm tm;
 				time_t timenow = time(NULL);
 
 				localtime_r( &timenow, &tm );
 				snprintf( szFilename, sizeof(szFilename), "/home/nimrod/log/events_%04d%02d%02d.txt", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday );
+				snprintf( szFilenameWeekly, sizeof(szFilenameWeekly), "/home/nimrod/log/events_weekly_%04d%02d%02d.txt", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday );
 
-				char szEventsEmail[100] = "";
-				ReadSiteConfig( "EVENTS_EMAIL", szEventsEmail, sizeof(szEventsEmail) );
+				std::string sEventsEmail = "";
+				std::string sEventsEmailWeekly = "";
+				ReadSiteConfig( "EVENTS_EMAIL", sEventsEmail );
+				ReadSiteConfig( "EVENTS_EMAIL_WEEKLY", sEventsEmailWeekly );
 
-				if ( szEventsEmail[0] == '\0' )
+				if ( sEventsEmail.length() == 0 )
 				{
 					LogMessage( E_MSG_WARN, "No EVENTS_EMAIL setup in site_config.php");
 				}
-				else if ( myDB.GenerateEventsFile( szFilename ) )
+				else if ( myDB.GenerateEventsFile( szFilename, 24 ) )
 				{	// file is generated
 					std::string sCmd = "zip -u ";
 					sCmd += szFilename;
@@ -513,10 +517,40 @@ void CThread::Worker()
 					sCmd += "; ";
 					sCmd += "echo \"Events records from ";
 					sCmd += gszHostname;
-					sCmd += "\" | mailx -s \"Events Records\" -A ";
+					sCmd += "\" | mailx -s \"Events Records Daily\" -A ";
 					sCmd += szFilename;
 					sCmd += ".zip ";
-					sCmd += szEventsEmail;
+					sCmd += sEventsEmail;
+
+					LogMessage( E_MSG_INFO, "CMD: %s", sCmd.c_str() );
+					int rc = system( sCmd.c_str() );
+					if ( rc != 0 )
+					{
+						LogMessage( E_MSG_WARN, "Events system email returned %d", rc );
+					}
+				}
+
+				if ( sEventsEmailWeekly.length() == 0 )
+				{
+					LogMessage( E_MSG_WARN, "No EVENTS_EMAIL_WEEKLY setup in site_config.php");
+				}
+				else if ( tm.tm_wday != 1 ) {
+					// not monday
+					LogMessage( E_MSG_INFO, "Skipping weekly email" );
+				}
+				else if ( myDB.GenerateEventsFile( szFilenameWeekly, 24*7 ) )
+				{	// file is generated
+					std::string sCmd = "zip -u ";
+					sCmd += szFilenameWeekly;
+					sCmd += ".zip ";
+					sCmd += szFilenameWeekly;
+					sCmd += "; ";
+					sCmd += "echo \"Events records from ";
+					sCmd += gszHostname;
+					sCmd += "\" | mailx -s \"Events Records Weekly\" -A ";
+					sCmd += szFilenameWeekly;
+					sCmd += ".zip ";
+					sCmd += sEventsEmailWeekly;
 
 					LogMessage( E_MSG_INFO, "CMD: %s", sCmd.c_str() );
 					int rc = system( sCmd.c_str() );

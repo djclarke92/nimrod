@@ -393,7 +393,7 @@ bool CMysql::WebClickEvent( const int iDeviceNo, const int iIOChannel )
 }
 
 #define MAX_DEVICE_NO	100	// hack
-bool CMysql::GenerateEventsFile( const char* szFilename )
+bool CMysql::GenerateEventsFile( const char* szFilename, const int iHours )
 {
 	bool bRet = false;
 	int iNumFields;
@@ -407,7 +407,7 @@ bool CMysql::GenerateEventsFile( const char* szFilename )
 	if ( pFile != NULL )
 	{
 		snprintf( szBuf, sizeof(szBuf), "select unix_timestamp(ev_Timestamp),ev_Timestamp,ev_Value,di_IOName,di_DeviceNo from events,deviceinfo where ev_DeviceNo=di_DeviceNo and ev_IOChannel=di_IOChannel \
-			and ev_Timestamp>=date_sub(now(), interval 24 hour) order by ev_Timestamp, di_IOName" );
+			and ev_Timestamp>=date_sub(now(), interval %d hour) order by ev_Timestamp, di_IOName", iHours );
 		if ( RunQuery( szBuf ) != 0 )
 		{	// error
 			LogMessage( E_MSG_ERROR, "RunQuery(%s) error: %s", GetQuery(), GetError() );
@@ -424,8 +424,8 @@ bool CMysql::GenerateEventsFile( const char* szFilename )
 				if ( mapLast.find(iDeviceNo) != mapLast.end() )
 					tLast = mapLast[iDeviceNo];
 
-				if ( tLast + 15*60 < atol(row[0]) )
-				{	// 15 minutes or more
+				if ( tLast + 60*60 < atol(row[0]) )
+				{	// 60 minutes or more
 					iCount += 1;
 					mapLast[iDeviceNo] = (time_t)atol(row[0]);
 

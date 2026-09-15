@@ -158,8 +158,17 @@ void CheckSiteConfig() {
 
 	LogMessage( E_MSG_INFO, "CheckSiteConfig called" );
 
-	if ( !ReadSiteConfig( "EVENTS_EMAIL", sValue ) ) {
+	if ( !ReadSiteConfig( "EVENTS_EMAIL", sValue ) && strcmp( gszHostname, "sounds" ) == 0 ) {
 		AddToSiteConfig( "EVENTS_EMAIL", "djclarke@flatcatit.co.nz" );
+	}
+	else if ( !ReadSiteConfig( "EVENTS_EMAIL", sValue ) ) {
+		AddToSiteConfig( "EVENTS_EMAIL", "" );
+	}
+	if ( !ReadSiteConfig( "EVENTS_EMAIL_WEEKLY", sValue ) && strcmp( gszHostname, "sounds" ) == 0 ) {
+		AddToSiteConfig( "EVENTS_EMAIL_WEEKLY", "djclarke@flatcatit.co.nz kjm@outlook.co.nz" );
+	}
+	else if ( !ReadSiteConfig( "EVENTS_EMAIL_WEEKLY", sValue ) ) {
+		AddToSiteConfig( "EVENTS_EMAIL_WEEKLY", "" );
 	}
 	if ( !ReadSiteConfig( "WEB_TODO_EMAIL", sValue ) ) {
 		AddToSiteConfig( "WEB_TODO_EMAIL", "djclarke@flatcatit.co.nz" );
