@@ -267,18 +267,18 @@ bool ReadSiteConfig( const char* szName, char* szValue, size_t uLen )
 				{
 					// strip leading crap
 					cptr += strlen( szName ) + 1;
-					while ( *cptr != '\0' && (*cptr == ' ' || *cptr == '\'' || *cptr == ',') )
+					while ( *cptr != '\0' && (*cptr == ' ' || *cptr == '\'' || *cptr == ',' || * cptr == ')' || *cptr == ';') )
 						cptr += 1;
 
 					// strip trailing crap
-					cptr2 = cptr;
-					while ( *cptr2 != '\0' && *cptr2 != '\'' )
-						cptr2 += 1;
-					*cptr2 = '\0';
+					cptr2 = strrchr( cptr, '\'' );
+					if ( cptr2 != NULL )
+						*cptr2 = '\0';
 
 					snprintf( szValue, uLen, "%s", cptr );
 
 					bRc = true;
+					break;
 				}
 			}
 		}

@@ -54,24 +54,30 @@ if [[ $COPY = 0 ]]; then
 #			exit 1
 #		fi
 #	fi
+	REMOTE=gateway
+	#REMOTE=192.168.0.135
 
 	echo ""
-	echo "-> Compiling on arm64"
-	scp *.cpp gateway:~/build/bin/.
-	scp *.h gateway:~/build/bin/.
-	scp Makefile gateway:~/build/bin
-	ssh gateway "cd build/bin; make -f Makefile"
-	scp gateway:~/build/bin/nimrod ./nimrod-arm64
+	echo "-> Compiling on arm64$REMOTE"
+	scp *.cpp $REMOTE:~/build/bin/.
+	scp *.h $REMOTE:~/build/bin/.
+	scp Makefile $REMOTE:~/build/bin
+	ssh $REMOTE "cd build/bin; make -f Makefile"
+	if [ $? != 0 ]; then
+		echo "remote make on $REMOTE failed"
+		exit 1
+	fi
+	scp $REMOTE:~/build/bin/nimrod ./nimrod-arm64
 	if [ $? != 0 ]; then
 		echo "-> Error: arm64 build failed"
 		exit 1
 	fi
-	scp gateway:~/build/bin/nimrod-msg ./nimrod-msg-arm64
+	scp $REMOTE:~/build/bin/nimrod-msg ./nimrod-msg-arm64
 	if [ $? != 0 ]; then
 		echo "-> Error: arm64 build failed"
 		exit 1
 	fi
-	scp gateway:~/build/bin/set-address ./set-address-arm64
+	scp $REMOTE:~/build/bin/set-address ./set-address-arm64
 	if [ $? != 0 ]; then
 		echo "-> Error: arm64 build failed"
 		exit 1
