@@ -67,17 +67,21 @@ if [[ $COPY = 0 ]]; then
 		echo "remote make on $REMOTE failed"
 		exit 1
 	fi
-	scp $REMOTE:~/build/bin/nimrod ./nimrod-arm64
+	ssh $REMOTE "cd build/bin; mv nimrod nimrod-arm64; mv nimrod-msg nimrod-msg-arm64; mv set-address set-address-arm64"
+	if [ $? != 0 ]; then
+		echo "failed to rename exe files"
+	fi
+	scp $REMOTE:~/build/bin/nimrod-arm64 ./nimrod-arm64
 	if [ $? != 0 ]; then
 		echo "-> Error: arm64 build failed"
 		exit 1
 	fi
-	scp $REMOTE:~/build/bin/nimrod-msg ./nimrod-msg-arm64
+	scp $REMOTE:~/build/bin/nimrod-msg-arm64 ./nimrod-msg-arm64
 	if [ $? != 0 ]; then
 		echo "-> Error: arm64 build failed"
 		exit 1
 	fi
-	scp $REMOTE:~/build/bin/set-address ./set-address-arm64
+	scp $REMOTE:~/build/bin/set-address-arm64 ./set-address-arm64
 	if [ $? != 0 ]; then
 		echo "-> Error: arm64 build failed"
 		exit 1
