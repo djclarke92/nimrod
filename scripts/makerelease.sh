@@ -55,7 +55,7 @@ if [[ $COPY = 0 ]]; then
 #		fi
 #	fi
 	REMOTE=gateway
-	#REMOTE=192.168.0.135
+	#REMOTE=192.168.1.131
 
 	echo ""
 	echo "-> Compiling on arm64$REMOTE"

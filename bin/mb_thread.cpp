@@ -977,7 +977,9 @@ void CThread::Worker()
 
 					if ( m_pmyDevices->IsSharedWithNext(idx) )
 					{
-						usleep( 20000 );	// was 30000
+						usleep( 50000 );	// was 30000
+					} else {
+						usleep( 50000 );
 					}
 				}
 			}	// end of for
@@ -3647,14 +3649,14 @@ void CThread::HandleHdlLevelDevice( CMysql& myDB, modbus_t* ctx, const int idx, 
 			{	// retry
 				LogMessage( E_MSG_WARN, "modbus_read_registers(%p) '%s' (0x%x->%d) failed: %s, loop %d retry", ctx, m_pmyDevices->GetDeviceName(idx), m_pmyDevices->GetAddress(idx), idx, modbus_strerror(err), iLoop );
 
-				usleep( 10000 + (10000*iLoop) );
+				usleep( 20000 + (10000*iLoop) );
 
 				if ( modbus_set_slave( ctx, m_pmyDevices->GetAddress(idx) ) == -1 )
 				{
 					LogMessage( E_MSG_ERROR, "modbus_set_slave(%p) %d failed: %s", ctx, idx, modbus_strerror(errno) );
 				}
 
-				usleep( 10000 + (10000*iLoop) );
+				usleep( 20000 + (10000*iLoop) );
 			}
 		}
 		else

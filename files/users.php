@@ -203,7 +203,7 @@ if ( isset($_POST['UploadFile']) && isset( $_FILES['us_FileName']) )
             $type = mime_content_type($_FILES['us_FileName']['tmp_name']);
             $us_array['info_msg'] = sprintf( "File uploaded: '%s', %d bytes, type '%s'", $_FILES['us_FileName']['tmp_name'], $_FILES['us_FileName']['size'], $type );
             
-            if ( $type == "application/x-gzip" && strstr($name,"nimrod") !== false )
+            if ( ($type == "application/x-gzip" || $type == "application/gzip") && strstr($name,"nimrod") !== false )
             {
                 if ( move_uploaded_file( $_FILES['us_FileName']['tmp_name'], $dest ) )
                 {   // success
