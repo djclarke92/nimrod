@@ -188,7 +188,7 @@ commands have options for this.
 	- apt-get install curl
 
 Raspbian buster
-- apache2 libapache2-mod-php php php-mysql php-gd
+- apache2 php.8.x-fpm php php-mysql php-gd
 - libmodbus5 libmodbus-dev
 - libssl-dev libusb-dev ntpddate
 - mariadb-server

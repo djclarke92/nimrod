@@ -176,7 +176,8 @@ create table IF NOT EXISTS `plcstates` (
 # add default table records:
 # 
 insert into users (us_Username,us_Name,us_Password,us_AuthLevel) values ('nimrod@nimrod.co.nz','Nimrod Admin User','258497f62679c89a7ac952b27c2d2c6040cf8da412b8dd044d11156db0986b55',9);
-insert into events (ev_DeviceNo,ev_Value) values(-2,108);
+# database structure version
+insert into events (ev_DeviceNo,ev_Value) values(-2,129);
 
 # nimrod and nimrod_user are changed to 
 GRANT insert,select,update,delete,create,drop,alter,lock tables on nimrod.* to nimrod_user@'localhost' identified by 'passw0rd.23';

@@ -58,33 +58,34 @@ if [[ $COPY = 0 ]]; then
 	#REMOTE=192.168.1.131
 
 	echo ""
-	echo "-> Compiling on arm64$REMOTE"
-	scp *.cpp $REMOTE:~/build/bin/.
-	scp *.h $REMOTE:~/build/bin/.
-	scp Makefile $REMOTE:~/build/bin
-	ssh $REMOTE "cd build/bin; make -f Makefile"
+	echo "-> Compiling on arm64 on $REMOTE"
+	scp -o ConnectTimeout=5 *.cpp $REMOTE:~/build/bin/.
+	scp -o ConnectTimeout=5 *.h $REMOTE:~/build/bin/.
+	scp -o ConnectTimeout=5 Makefile $REMOTE:~/build/bin
+	ssh -o ConnectTimeout=5 $REMOTE "cd build/bin; make -f Makefile"
 	if [ $? != 0 ]; then
 		echo "remote make on $REMOTE failed"
-		exit 1
-	fi
-	ssh $REMOTE "cd build/bin; mv nimrod nimrod-arm64; mv nimrod-msg nimrod-msg-arm64; mv set-address set-address-arm64"
-	if [ $? != 0 ]; then
-		echo "failed to rename exe files"
-	fi
-	scp $REMOTE:~/build/bin/nimrod-arm64 ./nimrod-arm64
-	if [ $? != 0 ]; then
-		echo "-> Error: arm64 build failed"
-		exit 1
-	fi
-	scp $REMOTE:~/build/bin/nimrod-msg-arm64 ./nimrod-msg-arm64
-	if [ $? != 0 ]; then
-		echo "-> Error: arm64 build failed"
-		exit 1
-	fi
-	scp $REMOTE:~/build/bin/set-address-arm64 ./set-address-arm64
-	if [ $? != 0 ]; then
-		echo "-> Error: arm64 build failed"
-		exit 1
+		#exit 1
+	else
+		ssh $REMOTE "cd build/bin; mv nimrod nimrod-arm64; mv nimrod-msg nimrod-msg-arm64; mv set-address set-address-arm64"
+		if [ $? != 0 ]; then
+			echo "failed to rename exe files"
+		fi
+		scp $REMOTE:~/build/bin/nimrod-arm64 ./nimrod-arm64
+		if [ $? != 0 ]; then
+			echo "-> Error: arm64 build failed"
+			exit 1
+		fi
+		scp $REMOTE:~/build/bin/nimrod-msg-arm64 ./nimrod-msg-arm64
+		if [ $? != 0 ]; then
+			echo "-> Error: arm64 build failed"
+			exit 1
+		fi
+		scp $REMOTE:~/build/bin/set-address-arm64 ./set-address-arm64
+		if [ $? != 0 ]; then
+			echo "-> Error: arm64 build failed"
+			exit 1
+		fi
 	fi
 
 	cd ..

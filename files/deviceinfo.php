@@ -920,7 +920,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		
     		printf( "<div class='row'>" );
     		printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='di_Weekdays'>Days: </label>" );
+    		printf( "<label for='di_Weekdays_sun'>Days: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col form-check-inline'>" );
     		printf("<label><input type='checkbox' name='di_Weekdays_sun' id='di_Weekdays_sun' %s>Su&nbsp;</label>", (substr($di_array['di_Weekdays'], 0, 1) == "Y" ? "checked" : ""));
@@ -1021,7 +1021,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		
     		printf( "<div class='row'>" );
     		printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='di_MonitorPos'>Monitor Position: </label>" );
+    		printf( "<label for='di_MonitorPos1'>Monitor Position: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
     		$tip = sprintf( "Enter 3 characters:<br>");
@@ -1043,7 +1043,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		
     		printf( "<div class='row'>" );
     		printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='di_MonitorLoHi'>Monitor Alert Range: </label>" );
+    		printf( "<label for='di_MonitorLo'>Monitor Alert Range: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='text' class='form-control' name='di_MonitorLo' id='di_MonitorLo' size='3' value='%s'> ", $di_array['di_MonitorLo'] );
@@ -1058,7 +1058,7 @@ $current_value = $db->GetCurrentValue($di_array['di_DeviceNo'], $di_array['di_IO
     		
     		printf( "<div class='row'>" );
     		printf( "<div class='col-sm-3'>" );
-    		printf( "<label for='di_ValueRangeLoHi'>Graph Y Axis Range: </label>" );
+    		printf( "<label for='di_ValueRangeLo'>Graph Y Axis Range: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col-sm-2'>" );
     		printf( "<input type='text' class='form-control' name='di_ValueRangeLo' id='di_ValueRangeLo' size='3' value='%s'> ", $di_array['di_ValueRangeLo'] );

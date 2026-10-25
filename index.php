@@ -266,6 +266,7 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
     }
 }
                     
+ // 	<script src="./files/popper-2.11.5.min.js"></script>
 
 ?>
 
@@ -275,10 +276,9 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
   	<title>Nimrod Admin Console</title>
   	<meta charset="utf-8">
   	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-  	<script src="./files/jquery-3.6.0.min.js"></script>
-  	<script src="./files/popper-2.11.5.min.js"></script>
-  	<link rel="stylesheet" href="./files/bootstrap-5.1.3.min.css">
-  	<script src="./files/bootstrap-5.1.3.bundle.min.js"></script>
+  	<script src="./files/jquery-4.0.0.min.js"></script>
+  	<link rel="stylesheet" href="./files/bootstrap-5.3.8.min.css">
+  	<script src="./files/bootstrap-5.3.8.bundle.min.js"></script>
   
 	<meta http-equiv="Content-Language" content="en-nz">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -286,8 +286,8 @@ if ( $fs_autologin_username != "" && $_SESSION['us_AuthLevel'] <= SECURITY_LEVEL
 	<meta name="keywords" content="home automation">
 	<link rel="icon" href="favicon.ico" type="image/x-icon">
 	<link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
-	<link rel="stylesheet" src="./files/dygraph-2.1.0.css" />
-	<script type="text/javascript" src="./files/dygraph-2.1.0.min.js"></script>
+	<link rel="stylesheet" src="./files/dygraph-2.2.2.min.css" />
+	<script type="text/javascript" src="./files/dygraph-2.2.2.min.js"></script>
   
   <style>
   <?php
@@ -1006,6 +1006,12 @@ if ( $display_mode == "" )
 
 $db->Close();
 ?>
+
+<script language="javascript">
+    // Initialize all tooltips on the page
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+</script>
 
 </body>
 </html>

@@ -563,7 +563,7 @@ $co_list = $db->ReadConditionsTable( $il_array['il_LinkNo'] );
     		printf( "<label for='co_LinkDeviceNo'>Condition Link: </label>" );
     		printf( "</div>" );
     		printf( "<div class='col'>" );
-    		printf( "<select class='form-control custom-select' name='co_LinkDeviceNo' id='co_LinkDeviceNo size='1'>" );
+    		printf( "<select class='form-control custom-select' name='co_LinkDeviceNo' id='co_LinkDeviceNo' size='1'>" );
     		printf( "<option></option>" );
     		foreach ( $ddic_list as $dd )
     		{
